@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#194a40" />
+    <meta
+      name="description"
+      content="Tu dinero, a tu ritmo. Gastos, cuentas y presupuestos personales en bolivianos."
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="gástalo" />
+    <title>gástalo</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
+    <script src="./app.js?v=3" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Ir al contenido</a>
+    <header class="app-header">
+      <a class="brand" href="./" aria-label="gástalo, inicio"
+        ><span class="brand-mark" aria-hidden="true">g</span>gástalo<span
+          class="brand-dot"
+          >.</span
+        ></a
+      >
+      <div class="header-end">
+        <span id="offline" hidden>Sin conexión</span
+        ><span class="currency-chip">BOB</span
+        ><button id="undo-button" data-action="undo" hidden>Deshacer</button>
+      </div>
+    </header>
+    <nav aria-label="Navegación principal">
+      <button data-view="home" class="active">
+        <span aria-hidden="true">⌂</span>Inicio
+      </button>
+      <button data-view="history">
+        <span aria-hidden="true">≡</span>Historial
+      </button>
+      <button data-view="budgets">
+        <span aria-hidden="true">▤</span>Límites
+      </button>
+      <button data-view="reports">
+        <span aria-hidden="true">▥</span>Reportes
+      </button>
+      <button data-view="settings">
+        <span aria-hidden="true">⚙</span>Datos
+      </button>
+    </nav>
+    <main id="main" tabindex="-1">
+      <p class="empty">Abriendo tu espacio…</p>
+    </main>
+    <noscript
+      >gástalo necesita JavaScript para guardar tus gastos en este
+      dispositivo.</noscript
+    >
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+    <dialog id="dialog" aria-labelledby="dialog-title">
+      <form id="modal-form">
+        <div class="dialog-heading">
+          <h2 id="dialog-title"></h2>
+          <button
+            type="button"
+            data-action="close"
+            aria-label="Cerrar formulario"
+          >
+            ×
+          </button>
+        </div>
+        <div id="dialog-body"></div>
+        <p id="modal-error" role="alert"></p>
+      </form>
+    </dialog>
+  </body>
+</html>

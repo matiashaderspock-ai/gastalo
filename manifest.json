@@ -1,0 +1,26 @@
+{
+  "id": "./",
+  "name": "gástalo",
+  "short_name": "gástalo",
+  "description": "Tu dinero, a tu ritmo. Gastos personales en bolivianos.",
+  "lang": "es-BO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f5ef",
+  "theme_color": "#194a40",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

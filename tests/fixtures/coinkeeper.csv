@@ -1,0 +1,22 @@
+sep=,
+"Data","Type","From","To","Tags","Amount","Currency","Amount converted","Currency of conversion","Recurrence","Note"
+"1/5/2026","Transfer","Trabajo","Banco","Sueldo","1000.00","BOB","1000.00","BOB","None","Pago enero"
+"1/6/2026","Transfer","Banco","Efectivo","","100.00","BOB","100.00","BOB","None","Retiro"
+"1/7/2026","Expense","Efectivo","Comida","Diario","25.50","BOB","25.50","BOB","None","Almuerzo, con ""amigos""
+y café"
+"2/1/2026","Expense","Banco","Comida","","50.00","BOB","50.00","BOB","None","Febrero"
+"1/8/2026","Expense","No existe","Comida","","10.00","BOB","10.00","BOB","None","Revisar"
+
+"Name","Budget","Received to date","Icon","Currency"
+"Trabajo","1200.00","99999.00","old-source","BOB"
+
+"Name","Current amount","Icon","Currency"
+"Banco","1850.00","old-bank","BOB"
+"Efectivo","174.50","old-cash","BOB"
+
+"Name","Budget","Received to date","Icon","Currency"
+"Comida","200.00","55555.00","old-food","BOB"
+
+"Name","Received to date"
+"Sueldo","1000.00"
+"Diario","25.50"
