@@ -350,6 +350,12 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       assert.equal(await mark.evaluate((e, tone) => e.classList.contains(`budget-${tone}`), tone), true);
       assert.equal(await mark.evaluate(e => e.style.getPropertyValue("--budget-fill")), `${fill}%`);
       assert.match(await mark.evaluate(e => getComputedStyle(e).backgroundImage), /linear-gradient/);
+      const iconColor = await mark.evaluate(e => {
+        const style = document.createElement("span").style;
+        style.color = getComputedStyle(e).getPropertyValue("--budget-color");
+        return style.color;
+      });
+      assert.equal(await card("Comida").locator("strong").evaluate(e => getComputedStyle(e).color), iconColor);
       assert.doesNotMatch(await card("Comida").innerText(), /límite|disponible|exceso/);
     }
     await assertBudgetMark("green", 12.75);

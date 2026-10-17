@@ -596,6 +596,9 @@ main:focus {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.entity-card strong.budget-amount {
+  color: var(--budget-color, #aeb5b0);
+}
 .budget-mark {
   --budget-color: #aeb5b0;
   background: linear-gradient(
