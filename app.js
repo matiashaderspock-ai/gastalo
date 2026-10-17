@@ -1172,13 +1172,14 @@
           .filter((b) => b.month === month && b.limit_cents !== null)
           .map((b) => b.limit_cents),
       );
-      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance", balance)}${stat("Gastos del mes", r.expense)}${stat("Presupuesto", monthlyBudget)}</section>
+      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos del mes", r.expense)}${stat("Gastos planeados del mes", monthlyBudget)}</section>
         <div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
         <p class="home-hint">Toca para ver · Mantén para editar · Arrastra para mover</p>
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
+          const carousel = key !== "categories";
           const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
-          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${active(
+          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Para mover horizontalmente una entidad, mantén un instante antes de arrastrar.">' : ""}${active(
             key,
           )
             .map((e) => {
@@ -1203,7 +1204,7 @@
             })
             .join(
               "",
-            )}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}"><span class="entity-name">${createLabel}</span><span class="entity-mark" aria-hidden="true">+</span></button></div></section>`;
+            )}${carousel ? "</div>" : ""}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}"><span class="entity-name">${createLabel}</span><span class="entity-mark" aria-hidden="true">+</span></button></div></section>`;
         }).join(
           "",
         )}<p class="footnote">BOB · Las transferencias mueven saldo entre cuentas. No suman ingresos ni gastos.</p>`;
@@ -1677,9 +1678,8 @@
     }
     document.addEventListener("pointerdown", (e) => {
       if (pointer || settling || !e.isPrimary || e.button !== 0) return;
-      if (editingEntities) return;
       const card = e.target.closest("[data-entity]");
-      if (!card) return;
+      if (!card || (editingEntities && !card.closest(".entity-strip"))) return;
       const p = (pointer = {
         id: e.pointerId,
         from: card.dataset.entity,
@@ -1689,15 +1689,21 @@
         x: e.clientX,
         y: e.clientY,
         dragging: false,
+        strip: card.closest(".entity-strip"),
+        scrollStart: card.closest(".entity-strip")?.scrollLeft || 0,
+        startedAt: performance.now(),
+        allowDrag: !editingEntities && card.dataset.key !== "categories",
       });
-      p.timer = setTimeout(() => {
-        if (pointer !== p) return;
-        p.editing = true;
-        suppressClick = true;
-        p.card.setPointerCapture(p.id);
-        setEntityEditing(true);
-        vibrate();
-      }, 450);
+      p.timer = editingEntities
+        ? null
+        : setTimeout(() => {
+            if (pointer !== p) return;
+            p.editing = true;
+            suppressClick = true;
+            p.card.setPointerCapture(p.id);
+            setEntityEditing(true);
+            vibrate();
+          }, 450);
     });
     document.addEventListener(
       "pointermove",
@@ -1710,13 +1716,30 @@
           e.preventDefault();
           return;
         }
-        if (!p.dragging && Math.hypot(p.x - p.startX, p.y - p.startY) > 6) {
-          if (p.card.dataset.key === "categories") {
+        const dx = p.x - p.startX,
+          dy = p.y - p.startY;
+        if (!p.dragging && !p.scrolling && Math.hypot(dx, dy) > 6) {
+          const canScroll =
+            p.strip && p.strip.scrollWidth > p.strip.clientWidth;
+          if (
+            canScroll &&
+            Math.abs(dx) > Math.abs(dy) * 1.25 &&
+            (e.pointerType !== "mouse" || !p.allowDrag) &&
+            (performance.now() - p.startedAt < 150 || !p.allowDrag)
+          ) {
+            clearTimeout(p.timer);
+            p.scrolling = true;
+            p.card.setPointerCapture(p.id);
+          } else if (!p.allowDrag) {
             clearTimeout(p.timer);
             pointer = null;
             return;
-          }
-          startPointer(p);
+          } else startPointer(p);
+        }
+        if (p.scrolling) {
+          e.preventDefault();
+          p.strip.scrollLeft = p.scrollStart - dx;
+          return;
         }
         if (p.dragging) {
           e.preventDefault();
@@ -1730,7 +1753,7 @@
     document.addEventListener(
       "touchmove",
       (e) => {
-        if (pointer?.dragging) e.preventDefault();
+        if (pointer?.dragging || pointer?.scrolling) e.preventDefault();
       },
       { passive: false },
     );
@@ -1739,7 +1762,8 @@
       if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
       pointer = null;
       clearTimeout(p.timer);
-      if (p.editing) {
+      if (p.editing || p.scrolling) {
+        suppressClick = true;
         if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
         clickTimer = setTimeout(() => {
           suppressClick = false;

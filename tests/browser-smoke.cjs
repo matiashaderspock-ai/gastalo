@@ -24,6 +24,10 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.goto(base);
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
     assert.equal(await page.title(), "gástalo");
+    assert.deepEqual(
+      await page.locator(".home-totals .stat > span").allTextContents(),
+      ["Balance actual", "Gastos del mes", "Gastos planeados del mes"],
+    );
     async function go(name, target = page) {
       await target.locator("#app-menu > summary").click();
       await target.getByRole("button", { name, exact: true }).click();
@@ -527,6 +531,81 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     // Category grids stay compact, wrap to new rows and always retain four columns.
     for (let i = 2; i <= 20; i++)
       await add("categories", `Categoría ${i} nombre largo`);
+    // Additional sources/accounts stay on one row and can be swiped independently.
+    for (let i = 2; i <= 6; i++) await add("sources", `Fuente extra ${i}`);
+    for (let i = 3; i <= 6; i++) await add("accounts", `Cuenta extra ${i}`);
+    async function swipeRow(row) {
+      const strip = page.locator(`.row-${row} .entity-strip`);
+      await strip.scrollIntoViewIfNeeded();
+      const box = await strip.locator(".entity-mark").nth(1).boundingBox();
+      const before = await page.evaluate(() => scrollY);
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: box.x - 56, y: box.y + 24 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+      assert.ok((await strip.evaluate((e) => e.scrollLeft)) > 30);
+      assert.equal(
+        await page.locator(".drag-clone, .entity-detail").count(),
+        0,
+      );
+      assert.equal(await page.evaluate(() => scrollY), before);
+      await strip.evaluate((e) => (e.scrollLeft = 0));
+    }
+    for (const row of [0, 1]) {
+      const strip = page.locator(`.row-${row} .entity-strip`);
+      assert.ok(await strip.evaluate((e) => e.scrollWidth > e.clientWidth));
+      const positions = await strip
+        .locator(".entity-wrap")
+        .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().y));
+      assert.ok(positions.every((y) => Math.abs(y - positions[0]) < 1));
+      await swipeRow(row);
+    }
+    // A brief hold still permits a horizontal transfer in an overflowing account row.
+    await card("Banco").scrollIntoViewIfNeeded();
+    const bank = await card("Banco").locator(".entity-mark").boundingBox();
+    const cash = await card("Efectivo").locator(".entity-mark").boundingBox();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: bank.x + 24, y: bank.y + 24 }],
+    });
+    await page.waitForTimeout(180);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: cash.x + 24, y: cash.y + 24 }],
+    });
+    await page.locator(".drag-clone").waitFor();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await page
+      .getByRole("heading", { name: "Nuevo movimiento", exact: true })
+      .waitFor();
+    assert.equal(
+      await page.locator('#dialog [name="to"] option:checked').innerText(),
+      "Efectivo",
+    );
+    await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+    // Editing mode also allows exploration of entities that are off-screen.
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: bank.x + 24, y: bank.y + 24 }],
+    });
+    await page.locator("#entity-edit-bar").waitFor();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await swipeRow(1);
+    await page.getByRole("button", { name: "Listo", exact: true }).click();
     const categoryGrid = page.locator(".row-2 .entity-grid");
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });
@@ -541,6 +620,22 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         false,
       );
       assert.ok((await categoryGrid.boundingBox()).height < 700);
+      const corner = await page.locator(".row-2 .entity-add").boundingBox();
+      const gridBox = await categoryGrid.boundingBox();
+      const lastCategoryY = await categoryGrid
+        .locator(".entity-wrap")
+        .last()
+        .evaluate((e) => e.getBoundingClientRect().y);
+      assert.ok(
+        Math.abs(corner.x + corner.width - gridBox.x - gridBox.width) < 1,
+      );
+      assert.ok(corner.y >= lastCategoryY);
+      for (const row of [0, 1]) {
+        const tops = await page
+          .locator(`.row-${row} .entity-strip .entity-wrap`)
+          .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().y));
+        assert.ok(tops.every((y) => Math.abs(y - tops[0]) < 1));
+      }
       assert.equal(
         (await card("Comida").locator(".entity-mark").boundingBox()).width,
         48,
@@ -595,7 +690,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: header menu, long-press tools, icons, amount focus, aligned creation, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
+      "PASS: header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();

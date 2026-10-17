@@ -371,6 +371,9 @@ main:focus {
   gap: 8px;
 }
 .home-totals .stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   padding: 6px 0;
   border: 0;
   border-radius: 0;
@@ -499,6 +502,28 @@ main:focus {
   gap: 8px 6px;
   padding: 0;
 }
+/* Three visible entities; creation stays in the fourth column. */
+.entity-strip {
+  grid-column: 1 / span 3;
+  grid-row: 1;
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: calc((100% - 12px) / 3);
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.entity-strip::-webkit-scrollbar {
+  height: 3px;
+}
+.entity-strip::-webkit-scrollbar-thumb {
+  background: #bbc7b9;
+  border-radius: 3px;
+}
 .entity-wrap {
   position: relative;
   min-width: 0;
@@ -604,6 +629,9 @@ main:focus {
 .entity-add {
   grid-column: 4;
   grid-row: 1;
+}
+.row-2 .entity-add {
+  grid-row: auto;
 }
 .entity-tools {
   display: none;
