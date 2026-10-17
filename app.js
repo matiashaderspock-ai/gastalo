@@ -652,10 +652,20 @@
       transfer: "Transferencia",
     };
     const active = (key) => state[key].filter((e) => !e.archived_at);
+    let notificationTimer;
+    function dismissNotification() {
+      clearTimeout(notificationTimer);
+      $("#toast").hidden = true;
+    }
     function notify(message, canUndo = false) {
+      clearTimeout(notificationTimer);
       $("#toast").hidden = false;
       $("#toast").innerHTML =
         `<span>${esc(message)}</span>${canUndo ? '<button data-action="undo">Deshacer</button>' : ""}<button data-action="dismiss" aria-label="Cerrar aviso">×</button>`;
+      notificationTimer = setTimeout(
+        dismissNotification,
+        canUndo ? 8000 : 3000,
+      );
     }
     async function load() {
       const record = await new Promise((resolve, reject) => {
@@ -1139,10 +1149,7 @@
         return;
       }
       if (action === "close") return $("#dialog").close();
-      if (action === "dismiss") {
-        $("#toast").hidden = true;
-        return;
-      }
+      if (action === "dismiss") return dismissNotification();
       if (action === "undo") {
         if (undo) await commit(copy(undo), "Cambio deshecho");
         return;

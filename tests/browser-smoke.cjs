@@ -33,9 +33,19 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
     }
+    // A replacement notice gets its own full lifetime; old timers cannot hide it.
+    await page.clock.install();
     await add("sources", "Trabajo");
+    assert.ok((await page.locator("#toast").boundingBox()).height <= 44);
+    await page.clock.fastForward(2000);
     await add("accounts", "Banco");
+    await page.clock.fastForward(1100);
+    assert.equal(await page.locator("#toast").isVisible(), true);
+    await page.clock.fastForward(2000);
+    assert.equal(await page.locator("#toast").isVisible(), false);
     await add("accounts", "Efectivo");
+    await page.locator('#toast [data-action="dismiss"]').click();
+    assert.equal(await page.locator("#toast").isVisible(), false);
     await add("categories", "Comida");
     const card = (text) =>
       page
@@ -84,6 +94,15 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.match(await page.locator(".transaction-end").innerText(), /30,00/);
+    // Undo notices last eight seconds; the header keeps Undo available afterward.
+    await page.clock.fastForward(3100);
+    assert.equal(
+      await page.locator('#toast [data-action="undo"]').isVisible(),
+      true,
+    );
+    await page.clock.fastForward(5000);
+    assert.equal(await page.locator("#toast").isVisible(), false);
+    assert.equal(await page.locator("#undo-button").isVisible(), true);
     await page.locator('[data-action="delete-transaction"]').click();
     await page.getByText("No hay movimientos con estos filtros.").waitFor();
     await page.locator('#toast [data-action="undo"]').click();
