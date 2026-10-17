@@ -26,7 +26,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(await page.title(), "gástalo");
     assert.deepEqual(
       await page.locator(".home-totals .stat > span").allTextContents(),
-      ["Balance actual", "Gastos del mes", "Gastos planeados del mes"],
+      ["Balance actual", "Gastos efectuados", "Gastos planeados"],
     );
     async function go(name, target = page) {
       await target.locator("#app-menu > summary").click();
@@ -36,6 +36,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         false,
       );
     }
+    const menuBox = await page.locator("#app-menu > summary").boundingBox();
+    const brandBox = await page.locator(".brand").boundingBox();
+    assert.ok(menuBox.x + menuBox.width <= brandBox.x, "Menu is left of the brand");
     // Header disclosure exposes all five views, and supports Escape and outside click.
     await page.locator("#app-menu > summary").click();
     assert.equal(await page.locator("#app-menu nav button").count(), 5);
@@ -342,23 +345,23 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await go("Inicio");
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
-    assert.match(await card("Comida").innerText(), /174,50 disponible/);
-    assert.match(await card("Comida").innerText(), /200,00 límite/);
-    await go("Límites");
-    await page.getByRole("button", { name: "Editar límite de este mes" }).click();
-    await page.locator('#dialog [name="limit"]').fill("20");
-    await page.locator('#dialog button[type="submit"]').click();
-    await page.locator("#dialog").waitFor({ state: "hidden" });
-    await go("Inicio");
-    assert.match(await card("Comida").innerText(), /5,50 de exceso/);
-    assert.equal(await card("Comida").locator(".budget-excess").evaluate(
-      e => getComputedStyle(e).color), "rgb(188, 52, 52)");
-    await go("Límites");
-    await page.getByRole("button", { name: "Editar límite de este mes" }).click();
-    await page.locator('#dialog [name="limit"]').fill("200");
-    await page.locator('#dialog button[type="submit"]').click();
-    await page.locator("#dialog").waitFor({ state: "hidden" });
-    await go("Inicio");
+    async function assertBudgetMark(tone, fill) {
+      const mark = card("Comida").locator(".entity-mark");
+      assert.equal(await mark.evaluate((e, tone) => e.classList.contains(`budget-${tone}`), tone), true);
+      assert.equal(await mark.evaluate(e => e.style.getPropertyValue("--budget-fill")), `${fill}%`);
+      assert.match(await mark.evaluate(e => getComputedStyle(e).backgroundImage), /linear-gradient/);
+      assert.doesNotMatch(await card("Comida").innerText(), /límite|disponible|exceso/);
+    }
+    await assertBudgetMark("green", 12.75);
+    for (const [limit, tone, fill] of [["30", "orange", 85], ["25.50", "orange", 100], ["20", "red", 100], ["0", "red", 100], ["", "gray", 0], ["200", "green", 12.75]]) {
+      await go("Límites");
+      await page.getByRole("button", { name: "Editar límite de este mes" }).click();
+      await page.locator('#dialog [name="limit"]').fill(limit);
+      await page.locator('#dialog button[type="submit"]').click();
+      await page.locator("#dialog").waitFor({ state: "hidden" });
+      await go("Inicio");
+      await assertBudgetMark(tone, fill);
+    }
     // Entity detail has its own scope, month switching and signed account history.
     await card("Comida").tap();
     assert.equal(await page.locator(".entity-history .transaction").count(), 1);
@@ -461,6 +464,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.evaluate(() => document.body.style.top),
       lockedScroll,
     );
+    // The target can react one frame before the final clone position is painted.
+    await page.waitForFunction((x) => {
+      const box = document.querySelector(".drag-clone").getBoundingClientRect();
+      return Math.abs(box.x + box.width / 2 - x) < 2;
+    }, target.x + target.width / 2);
     const cloneBox = await page.locator(".drag-clone").boundingBox();
     assert.ok(Math.abs(cloneBox.width - 67.2) < 1);
     assert.ok(
@@ -553,6 +561,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     for (let i = 3; i <= 33; i++) await add("accounts", `Cuenta extra ${i}`);
     assert.equal(await page.locator('.row-1 .entity-card').count(), 33);
     assert.equal(await card("Categoría 2 nombre largo").locator(".entity-caption").count(), 0);
+    assert.equal(await card("Categoría 2 nombre largo").locator(".budget-gray").count(), 1);
     // Native vertical scrolling begins on names, amounts and card padding, even
     // with 33 horizontally scrollable accounts. A circle also yields early motion.
     for (const selector of [".entity-name", "strong", ".entity-mark", ""]) {
@@ -732,7 +741,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: vertical scroll with 33 accounts, budget availability/excess, header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
+      "PASS: vertical scroll with 33 accounts, budget icon fill thresholds, header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();

@@ -293,10 +293,16 @@
       remaining: limit === null ? null : sum([limit, -spent]),
     };
   }
-  function budgetStatus(limit, spent) {
-    if (limit === null) return null;
-    const remaining = sum([limit, -spent]);
-    return { amount_cents: Math.abs(remaining), exceeded: remaining < 0 };
+  function budgetVisual(limit, spent) {
+    if (limit === null || spent === 0) return { fill: 0, tone: "gray" };
+    if (spent > limit) return { fill: 100, tone: "red" };
+    // Compare integer cents exactly, including budgets near MAX_SAFE_INTEGER.
+    const used = BigInt(spent),
+      total = BigInt(limit);
+    return {
+      fill: Number((used * 10000n) / total) / 100,
+      tone: used * 100n <= total * 65n ? "green" : "orange",
+    };
   }
   function evolution(state, month, filters = {}) {
     return Array.from({ length: 12 }, (_, i) => {
@@ -737,7 +743,7 @@
     filterTransactions,
     report,
     budget,
-    budgetStatus,
+    budgetVisual,
     evolution,
     entityEvolution,
     validateState,
@@ -1197,7 +1203,7 @@
           .filter((b) => b.month === month && b.limit_cents !== null)
           .map((b) => b.limit_cents),
       );
-      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos del mes", r.expense)}${stat("Gastos planeados del mes", monthlyBudget)}</section>
+      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", monthlyBudget)}</section>
         <div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
         <p class="home-hint">Toca para ver · Mantén para editar · Arrastra para mover</p>
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
@@ -1225,8 +1231,15 @@
                     : budget(state, e.id, month).spent;
               const b =
                 key === "categories" ? budget(state, e.id, month) : null;
-              const available = b ? budgetStatus(b.limit, b.spent) : null;
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key, e)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span><span class="entity-caption entity-availability${available.exceeded ? " budget-excess" : ""}" title="${money(available.amount_cents)} ${available.exceeded ? "de exceso" : "disponible"}">${money(available.amount_cents)} ${available.exceeded ? "de exceso" : "disponible"}</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+              const progress = b ? budgetVisual(b.limit, b.spent) : null;
+              const progressLabel = progress
+                ? b.limit === null
+                  ? "Sin presupuesto este mes"
+                  : progress.tone === "red"
+                    ? "Presupuesto excedido"
+                    : `${progress.fill}% del presupuesto utilizado`
+                : "";
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong title="${money(value)}">${money(value)}</strong>${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",

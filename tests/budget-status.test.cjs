@@ -1,19 +1,31 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { budgetStatus } = require("../app.js");
+const { budgetVisual } = require("../app.js");
 
-test("disponible y exceso se calculan en centavos enteros", () => {
-  assert.deepEqual(budgetStatus(20000, 2550), { amount_cents: 17450, exceeded: false });
-  assert.deepEqual(budgetStatus(20000, 20001), { amount_cents: 1, exceeded: true });
-  assert.deepEqual(budgetStatus(30, 10), { amount_cents: 20, exceeded: false });
-  assert.deepEqual(budgetStatus(Number.MAX_SAFE_INTEGER, 1), {
-    amount_cents: Number.MAX_SAFE_INTEGER - 1, exceeded: false,
-  });
+test("sin gasto o sin presupuesto el círculo permanece gris y vacío", () => {
+  for (const limit of [null, 0, 10000])
+    assert.deepEqual(budgetVisual(limit, 0), { fill: 0, tone: "gray" });
+  assert.deepEqual(budgetVisual(null, 5000), { fill: 0, tone: "gray" });
 });
-test("presupuesto agotado o cero y categorías sin presupuesto", () => {
-  assert.deepEqual(budgetStatus(20000, 20000), { amount_cents: 0, exceeded: false });
-  assert.deepEqual(budgetStatus(0, 0), { amount_cents: 0, exceeded: false });
-  assert.deepEqual(budgetStatus(0, 1), { amount_cents: 1, exceeded: true });
-  assert.equal(budgetStatus(null, 2550), null);
-  assert.equal(budgetStatus(null, 0), null);
+test("relleno verde hasta el 65% y naranja por encima, hasta el 100% inclusive", () => {
+  assert.deepEqual(budgetVisual(10000, 1), { fill: 0.01, tone: "green" });
+  assert.deepEqual(budgetVisual(80000, 50000), { fill: 62.5, tone: "green" });
+  assert.deepEqual(budgetVisual(10000, 6500), { fill: 65, tone: "green" });
+  assert.deepEqual(budgetVisual(10000, 6501), { fill: 65.01, tone: "orange" });
+  assert.deepEqual(budgetVisual(10000, 6510), { fill: 65.1, tone: "orange" });
+  assert.deepEqual(budgetVisual(10000, 10000), { fill: 100, tone: "orange" });
+});
+test("al superar el presupuesto el círculo es rojo completo, incluido límite cero", () => {
+  assert.deepEqual(budgetVisual(10000, 10001), { fill: 100, tone: "red" });
+  assert.deepEqual(budgetVisual(10000, 25000), { fill: 100, tone: "red" });
+  assert.deepEqual(budgetVisual(0, 1), { fill: 100, tone: "red" });
+});
+test("los umbrales comparan centavos enteros sin errores de coma flotante", () => {
+  const limit = 9007199254740900;
+  const threshold = Number(BigInt(limit) * 65n / 100n);
+  assert.equal(budgetVisual(limit, threshold).tone, "green");
+  assert.equal(budgetVisual(limit, threshold + 1).tone, "orange");
+  assert.deepEqual(budgetVisual(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER), {
+    fill: 100, tone: "orange",
+  });
 });
