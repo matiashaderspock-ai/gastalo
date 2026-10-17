@@ -18,8 +18,8 @@
     <link rel="manifest" href="./manifest.json" />
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=7" />
-    <script src="./app.js?v=7" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=8" />
+    <script src="./app.js?v=8" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Ir al contenido</a>
@@ -30,29 +30,43 @@
           >.</span
         ></a
       >
+      <details id="app-menu" class="app-menu">
+        <summary aria-label="Abrir menú" title="Menú">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+          >
+            <path d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </summary>
+        <nav aria-label="Navegación principal">
+          <button data-view="home" class="active">
+            <span aria-hidden="true">⌂</span>Inicio
+          </button>
+          <button data-view="history">
+            <span aria-hidden="true">≡</span>Historial
+          </button>
+          <button data-view="budgets">
+            <span aria-hidden="true">▤</span>Límites
+          </button>
+          <button data-view="reports">
+            <span aria-hidden="true">▥</span>Reportes
+          </button>
+          <button data-view="settings">
+            <span aria-hidden="true">⚙</span>Datos
+          </button>
+        </nav>
+      </details>
       <div class="header-end">
         <span id="offline" hidden>Sin conexión</span
         ><span class="currency-chip">BOB</span
         ><button id="undo-button" data-action="undo" hidden>Deshacer</button>
       </div>
     </header>
-    <nav aria-label="Navegación principal">
-      <button data-view="home" class="active">
-        <span aria-hidden="true">⌂</span>Inicio
-      </button>
-      <button data-view="history">
-        <span aria-hidden="true">≡</span>Historial
-      </button>
-      <button data-view="budgets">
-        <span aria-hidden="true">▤</span>Límites
-      </button>
-      <button data-view="reports">
-        <span aria-hidden="true">▥</span>Reportes
-      </button>
-      <button data-view="settings">
-        <span aria-hidden="true">⚙</span>Datos
-      </button>
-    </nav>
     <main id="main" tabindex="-1">
       <p class="empty">Abriendo tu espacio…</p>
     </main>

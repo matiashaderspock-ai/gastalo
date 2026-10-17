@@ -24,18 +24,49 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.goto(base);
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
     assert.equal(await page.title(), "gástalo");
-    async function add(key, name) {
+    async function go(name, target = page) {
+      await target.locator("#app-menu > summary").click();
+      await target.getByRole("button", { name, exact: true }).click();
+      assert.equal(
+        await target.locator("#app-menu").evaluate((e) => e.open),
+        false,
+      );
+    }
+    // Header disclosure exposes all five views, and supports Escape and outside click.
+    await page.locator("#app-menu > summary").click();
+    assert.equal(await page.locator("#app-menu nav button").count(), 5);
+    await page.keyboard.press("Escape");
+    assert.equal(
+      await page.locator("#app-menu").evaluate((e) => e.open),
+      false,
+    );
+    await page.locator("#app-menu > summary").click();
+    await page.locator(".home-totals .stat").last().click();
+    assert.equal(
+      await page.locator("#app-menu").evaluate((e) => e.open),
+      false,
+    );
+    assert.equal(
+      await page.locator("nav").evaluate((e) => getComputedStyle(e).position),
+      "absolute",
+    );
+    const cdp = await context.newCDPSession(page);
+    async function add(key, name, icon = "") {
       await page
         .locator(`[data-action="add"][data-key="${key}"]`)
         .first()
         .click();
       await page.locator('#dialog [name="name"]').fill(name);
+      if (icon) {
+        await page.locator('[data-action="toggle-icons"]').click();
+        await page.locator(`#icon-picker [data-icon="${icon}"]`).click();
+      }
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
     }
     // A replacement notice gets its own full lifetime; old timers cannot hide it.
     await page.clock.install();
-    await add("sources", "Trabajo");
+    await add("sources", "Trabajo", "work");
     assert.ok((await page.locator("#toast").boundingBox()).height <= 44);
     await page.clock.fastForward(2000);
     await add("accounts", "Banco");
@@ -51,6 +82,41 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       page
         .locator(".entity-card")
         .filter({ has: page.locator(".entity-name", { hasText: text }) });
+    async function hold(name) {
+      await card(name).scrollIntoViewIfNeeded();
+      const box = await card(name).locator(".entity-mark").boundingBox();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await page.locator("#entity-edit-bar").waitFor();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+      assert.equal(await page.locator(".drag-clone").count(), 0);
+      assert.equal(await page.locator(".entity-pencil:visible").count(), 4);
+    }
+    // Stationary holds edit every entity type; the pencil opens the icon chooser.
+    for (const name of ["Trabajo", "Banco", "Comida"]) {
+      await hold(name);
+      if (name === "Comida") {
+        await page
+          .getByRole("button", { name: "Editar Comida", exact: true })
+          .click();
+        await page.locator('[data-action="toggle-icons"]').click();
+        assert.equal(await page.locator("#icon-picker button").count(), 24);
+        await page.locator('#icon-picker [data-icon="food"]').click();
+        await page.locator('#dialog button[type="submit"]').click();
+        await page.locator("#dialog").waitFor({ state: "hidden" });
+      }
+      await page.getByRole("button", { name: "Listo", exact: true }).click();
+      assert.equal(await page.locator(".entity-pencil:visible").count(), 0);
+    }
+    const addColumns = await page
+      .locator(".entity-add .entity-mark")
+      .evaluateAll((nodes) => nodes.map((e) => e.getBoundingClientRect().x));
+    assert.ok(addColumns.every((x) => Math.abs(x - addColumns[0]) < 1));
     async function transaction(from, to, amount, note = "") {
       await page.locator('[data-action="movement"]').first().click();
       const fromId = await card(from).getAttribute("data-entity");
@@ -58,6 +124,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.locator('#dialog [name="from"]').selectOption(fromId);
       await page.locator('#dialog [name="to"]').selectOption(toId);
       await page.locator('#dialog [name="amount"]').fill(amount);
+      await page.locator(".movement-extras > summary").click();
       await page.locator('#dialog [name="note"]').fill(note);
       await page.locator('#dialog [name="newTag"]').fill("Personal");
       await page.locator('#dialog button[type="submit"]').click();
@@ -73,6 +140,20 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.match(await card("Banco").innerText(), /900,10/);
     assert.match(await card("Efectivo").innerText(), /74,50/);
+    // The X archives the entity while retaining its movements and balance; Undo restores it.
+    await hold("Banco");
+    await page
+      .getByRole("button", { name: "Eliminar Banco", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Quitar de Inicio", exact: true })
+      .click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(await card("Banco").count(), 0);
+    assert.match(await page.locator(".home-totals").innerText(), /974,60/);
+    await page.locator('#toast [data-action="undo"]').click();
+    await card("Banco").waitFor();
+    await page.getByRole("button", { name: "Listo", exact: true }).click();
     assert.equal(
       await page.locator(".entity-edit, .entity-section h2").count(),
       0,
@@ -158,7 +239,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         .getByRole("button", { name: "Volver a Inicio", exact: true })
         .click();
     }
-    await page.getByRole("button", { name: "Límites", exact: true }).click();
+    await go("Límites");
     await page
       .getByRole("button", { name: "Editar límite de este mes" })
       .click();
@@ -172,7 +253,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByRole("button", { name: "Mes anterior", exact: true })
       .click();
     assert.match(await page.locator(".budget-card").innerText(), /174,50/);
-    await page.getByRole("button", { name: "Historial", exact: true }).click();
+    await go("Historial");
     assert.equal(await page.locator(".transaction").count(), 3);
     await page.locator("#f-text").fill("almuerzo");
     await page.getByRole("button", { name: "Aplicar filtros" }).click();
@@ -196,11 +277,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('#toast [data-action="undo"]').click();
     await page.locator(".transaction").waitFor();
     await page.getByRole("button", { name: "Ver todo" }).click();
-    await page.getByRole("button", { name: "Reportes", exact: true }).click();
+    await go("Reportes");
     assert.equal(await page.locator(".timeline-month").count(), 12);
     assert.match(await page.locator(".stats").innerText(), /1000,10|1\.000,10/);
     assert.match(await page.locator(".stats").innerText(), /30,00/);
-    await page.getByRole("button", { name: "Datos", exact: true }).click();
+    await go("Datos");
     const downloadWait = page.waitForEvent("download");
     await page
       .getByRole("button", { name: "Descargar respaldo JSON", exact: true })
@@ -209,6 +290,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const json = fs.readFileSync(await download.path(), "utf8");
     const exported = A.restore(json);
     assert.equal(exported.transactions.length, 3);
+    assert.equal(exported.sources[0].icon, "work");
+    assert.equal(exported.categories[0].icon, "food");
     assert.equal(exported.transactions[2].amount_cents, 3000);
     await page.locator("#json-file").setInputFiles({
       name: "backup.json",
@@ -236,7 +319,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByText("Otra pestaña cambió tus datos. Recarga antes de guardar.")
       .waitFor();
     await stale.close();
-    await page.getByRole("button", { name: "Datos", exact: true }).click();
+    await go("Datos");
     await page.locator("#import-month").fill("2026-01");
     await page
       .locator("#csv-file")
@@ -252,7 +335,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page
       .getByRole("heading", { name: "Revisión de importación · 1" })
       .waitFor();
-    await page.getByRole("button", { name: "Inicio", exact: true }).click();
+    await go("Inicio");
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
     // Entity detail has its own scope, month switching and signed account history.
@@ -294,15 +377,18 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page
       .getByRole("button", { name: "Volver a Inicio", exact: true })
       .click();
-    // Real touch input exercises the circle, long press, clone and pointer capture.
+    // Real touch motion on the inner SVG exercises capture transfer and the moving clone.
     await card("Banco").scrollIntoViewIfNeeded();
     const grip = await card("Banco").locator(".entity-mark").boundingBox();
     const target = await card("Efectivo").boundingBox();
-    const cdp = await context.newCDPSession(page);
     const point = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [point],
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: point.x + 8, y: point.y }],
     });
     await page.locator(".drag-clone").waitFor();
     assert.equal(
@@ -339,7 +425,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         ],
       });
     }
-    await page.waitForTimeout(30);
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll(".drop-target .entity-name")].some(
+        (e) => e.textContent === "Efectivo",
+      ),
+    );
     assert.equal(
       await card("Efectivo").evaluate((e) =>
         e.classList.contains("drop-target"),
@@ -363,6 +453,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       touchPoints: [],
     });
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
+    await page.waitForFunction(() => document.activeElement?.name === "amount");
+    assert.ok((await page.locator("#dialog").boundingBox()).height < 360);
     assert.equal(
       await page.locator('#dialog [name="to"] option:checked').innerText(),
       "Efectivo",
@@ -382,6 +474,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.mouse.move(foodCircle.x + 24, foodCircle.y + 24, { steps: 8 });
     await page.mouse.up();
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
+    await page.waitForFunction(() => document.activeElement?.name === "amount");
+    assert.ok((await page.locator("#dialog").boundingBox()).height < 360);
     assert.equal(
       await page.locator('#dialog [name="from"] option:checked').innerText(),
       "Banco",
@@ -404,6 +498,10 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchStart",
         touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: box.x + 32, y: box.y + 24 }],
       });
       await page.locator(".drag-clone").waitFor();
       await cdp.send("Input.dispatchTouchEvent", {
@@ -454,7 +552,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         false,
       );
     }
-    await page.locator(".row-2").scrollIntoViewIfNeeded();
+    await page.locator(".entity-section.row-2").scrollIntoViewIfNeeded();
     assert.ok((await page.locator(".home-totals").boundingBox()).y <= 1);
     await page.screenshot({ path: "/tmp/gastalo-mobile.png", fullPage: true });
     await page.evaluate(async () => {
@@ -478,7 +576,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const dp = await desktop.newPage();
     await dp.goto(base);
     await dp.getByRole("heading", { name: "Un mes más claro." }).waitFor();
-    await dp.getByRole("button", { name: "Datos", exact: true }).click();
+    await go("Datos", dp);
     await dp.locator("#import-month").fill("2026-01");
     await dp
       .locator("#csv-file")
@@ -486,7 +584,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await dp.locator('#dialog [name="confirm"]').check();
     await dp.getByRole("button", { name: "Importar y reemplazar" }).click();
     await dp.locator("#dialog").waitFor({ state: "hidden" });
-    await dp.getByRole("button", { name: "Inicio", exact: true }).click();
+    await go("Inicio", dp);
     await dp.locator("#month").fill("2026-01");
     await dp.screenshot({ path: "/tmp/gastalo-desktop.png", fullPage: true });
     assert.equal(
@@ -497,7 +595,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: entity history/charts/deletion, notices, mobile CRUD, pointer drag, budgets, filters, reports, JSON/CSV, reload, concurrent tabs, offline persistence, desktop layout.",
+      "PASS: header menu, long-press tools, icons, amount focus, aligned creation, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();

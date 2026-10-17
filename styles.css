@@ -99,6 +99,9 @@ p {
   margin: 24px 0;
 }
 .app-header {
+  position: relative;
+  z-index: 20;
+  gap: 8px;
   max-width: 1160px;
   margin: auto;
   padding: 6px 28px;
@@ -133,6 +136,7 @@ p {
   color: var(--orange);
 }
 .header-end {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -148,36 +152,60 @@ p {
   font-size: 0.75rem;
   color: #90502c;
 }
-nav {
-  display: flex;
-  gap: 5px;
-  max-width: 1104px;
-  margin: 0 auto 24px;
-  padding: 5px;
-  border: 1px solid var(--line);
-  background: #efefe7;
-  border-radius: 16px;
-  width: calc(100% - 56px);
+.app-menu {
+  margin: 0;
 }
-nav button {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 9px;
-  background: transparent;
-  border-color: transparent;
-  color: var(--muted);
-  font-size: 0.9rem;
+.app-menu > summary {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  width: 36px;
+  padding: 6px;
+  border-radius: 8px;
+  list-style: none;
 }
-nav button span {
-  font-size: 1.25rem;
+.app-menu > summary::-webkit-details-marker {
+  display: none;
 }
-nav button.active {
+.app-menu > summary svg {
+  width: 22px;
+  height: 22px;
+}
+.app-menu[open] > summary {
+  background: #e6ecdf;
+}
+.app-menu nav {
+  position: absolute;
+  left: 16px;
+  top: calc(100% - 2px);
+  z-index: 30;
+  display: grid;
+  width: min(230px, calc(100vw - 32px));
+  padding: 6px;
   background: var(--white);
-  color: var(--ink);
-  box-shadow: 0 2px 4px #173f3608;
-  border-color: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px #173f3620;
+}
+.app-menu nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 8px;
+  text-align: left;
+  background: transparent;
+  font-size: 14px;
+  padding: 8px 12px;
+  min-height: 40px;
+}
+.app-menu nav button span {
+  font-size: 20px;
+  width: 24px;
+  text-align: center;
+}
+.app-menu nav button.active {
+  background: #e6ecdf;
 }
 main {
   max-width: 1160px;
@@ -572,6 +600,61 @@ main:focus {
 }
 .entity-card.dragging .entity-mark svg {
   visibility: hidden;
+}
+.entity-add {
+  grid-column: 4;
+  grid-row: 1;
+}
+.entity-tools {
+  display: none;
+}
+.editing-entities .entity-tools {
+  display: contents;
+}
+.editing-entities .entity-card {
+  cursor: default;
+}
+.entity-tools button {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+  padding: 3px;
+  border-radius: 50%;
+  border: 1px solid var(--paper);
+  background: #e0e6df;
+  color: var(--ink);
+}
+.entity-tools .entity-remove {
+  top: 18px;
+  left: 0;
+  font-size: 20px;
+}
+.entity-tools .entity-pencil {
+  top: 42px;
+  right: 4px;
+}
+.entity-pencil svg {
+  width: 16px;
+  height: 16px;
+}
+#entity-edit-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 6px 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#entity-edit-bar button {
+  min-height: 32px;
+  border: 0;
+  background: #e6ecdf;
+  font-size: 12px;
+  padding: 4px 12px;
 }
 .entity-add .entity-name {
   padding: 0;
@@ -1277,36 +1360,7 @@ dialog::backdrop {
     font-size: 1.25rem;
   }
   main {
-    padding: 0 16px 115px;
-  }
-  nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    width: 100%;
-    border-radius: 18px 18px 0 0;
-    margin: 0;
-    padding: 8px 8px max(8px, env(safe-area-inset-bottom));
-    z-index: 4;
-    background: #fffef9f5;
-    backdrop-filter: blur(10px);
-    gap: 2px;
-  }
-  nav button {
-    flex-direction: column;
-    gap: 4px;
-    font-size: 0.65rem;
-    padding: 5px 2px;
-    border-radius: 10px;
-    min-height: 54px;
-  }
-  nav button span {
-    font-size: 1.25rem;
-  }
-  nav button.active {
-    box-shadow: none;
-    background: #ecf0de;
+    padding: 0 16px 28px;
   }
   .hero {
     padding: 28px 22px 20px;
@@ -1439,7 +1493,7 @@ dialog::backdrop {
     gap: 8px;
   }
   #toast {
-    bottom: calc(80px + env(safe-area-inset-bottom));
+    bottom: calc(16px + env(safe-area-inset-bottom));
   }
   #toast span {
     max-height: 100px;
@@ -1500,4 +1554,120 @@ dialog::backdrop {
       opacity: 1;
     }
   }
+}
+
+.compact-dialog {
+  width: min(440px, calc(100% - 20px));
+  padding: 14px;
+  border-radius: 16px;
+  max-height: calc(100dvh - 20px);
+}
+.compact-dialog .dialog-heading {
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.compact-dialog .dialog-heading h2 {
+  font-size: 18px;
+}
+.compact-dialog .dialog-heading button {
+  min-height: 32px;
+  width: 32px;
+  padding: 2px;
+}
+.compact-dialog label {
+  font-size: 12px;
+  margin: 6px 0;
+}
+.compact-dialog input,
+.compact-dialog select,
+.compact-dialog textarea {
+  min-width: 0;
+  min-height: 38px;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 16px;
+}
+.compact-dialog .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+.compact-dialog fieldset {
+  margin: 8px 0;
+}
+.compact-dialog .check input,
+.compact-dialog .tag-choices input {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  margin: 0;
+}
+.compact-dialog .dialog-actions {
+  margin-top: 10px;
+  gap: 6px;
+}
+.compact-dialog .dialog-actions button {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.movement-extras {
+  margin-top: 4px;
+}
+.movement-extras summary {
+  min-height: 32px;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+#modal-error:empty {
+  display: none;
+}
+.compact-dialog .icon-field {
+  border: 0;
+  padding: 0;
+  margin: 6px 0 10px;
+}
+.icon-field legend {
+  font-size: 12px;
+}
+.icon-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px 0;
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+}
+.icon-preview .entity-mark {
+  flex-basis: 40px;
+  width: 40px;
+  height: 40px;
+}
+.icon-picker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px 0;
+}
+.icon-picker button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 40px;
+  padding: 7px;
+  border-radius: 8px;
+  background: transparent;
+}
+.icon-picker button[aria-pressed="true"] {
+  background: #e6ecdf;
+  border-color: var(--row-color);
+}
+.icon-picker svg {
+  width: 24px;
+  height: 24px;
+  color: var(--row-color);
 }

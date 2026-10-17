@@ -3,6 +3,110 @@
   "use strict";
   const SCHEMA_VERSION = 1;
   const TYPES = ["sources", "accounts", "categories"];
+  // Original SVG symbols. Persist only their keys, never SVG from user data.
+  const ENTITY_ICONS = {
+    income: {
+      label: "Ingresos",
+      path: '<path d="M12 19V5m-5 5 5-5 5 5M5 19h14"/>',
+    },
+    wallet: {
+      label: "Billetera",
+      path: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18m-5 5h2M6 6V4h12"/>',
+    },
+    tag: {
+      label: "Etiqueta",
+      path: '<path d="m3 12 9 9 9-9V3h-9L3 12Z"/><circle cx="16" cy="8" r="1"/>',
+    },
+    bank: {
+      label: "Banco",
+      path: '<path d="m3 8 9-5 9 5H3Zm2 3v7m5-7v7m4-7v7m5-7v7M3 21h18"/>',
+    },
+    card: {
+      label: "Tarjeta",
+      path: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/>',
+    },
+    home: {
+      label: "Hogar",
+      path: '<path d="m3 11 9-8 9 8M5 10v11h14V10M10 21v-7h4v7"/>',
+    },
+    food: {
+      label: "Comida",
+      path: '<path d="M5 3v6m3-6v6M3 3v6a3 3 0 0 0 6 0M6 12v9M18 3c-4 2-4 9 0 9h2M20 3v18"/>',
+    },
+    coffee: {
+      label: "Café",
+      path: '<path d="M3 8h13v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8Zm13 1h2a3 3 0 0 1 0 6h-2M6 3v2m4-2v2"/>',
+    },
+    car: {
+      label: "Auto",
+      path: '<path d="m4 9 2-5h12l2 5M3 10h18v8H3v-8Zm2 8v3m14-3v3M6 13h2m8 0h2"/>',
+    },
+    bus: {
+      label: "Transporte",
+      path: '<rect x="5" y="2" width="14" height="18" rx="3"/><path d="M5 10h14M8 20l-2 2m10-2 2 2M8 15h1m6 0h1M9 5h6"/>',
+    },
+    health: {
+      label: "Salud",
+      path: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3Z"/>',
+    },
+    gym: {
+      label: "Gimnasio",
+      path: '<path d="M7 8h10M7 16h10M3 7h4v10H3V7Zm14 0h4v10h-4V7ZM1 10v4m22-4v4"/>',
+    },
+    education: {
+      label: "Estudios",
+      path: '<path d="m2 8 10-5 10 5-10 5L2 8Zm4 2v7c4 3 8 3 12 0v-7m4-2v9"/>',
+    },
+    travel: {
+      label: "Viajes",
+      path: '<path d="m3 10 7 2 3 9 2-1-1-8 6-6a2 2 0 0 0-2-2l-6 6-8-1-1 1Z"/>',
+    },
+    gift: {
+      label: "Regalo",
+      path: '<path d="M3 8h18v5H3V8Zm2 5v8h14v-8M12 8v13M12 8C4 8 5 1 9 3l3 5Zm0 0c8 0 7-7 3-5l-3 5Z"/>',
+    },
+    work: {
+      label: "Trabajo",
+      path: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12c5 3 13 3 18 0M10 13h4v4h-4z"/>',
+    },
+    shopping: {
+      label: "Compras",
+      path: '<path d="M4 7h16l-1 14H5L4 7Zm4 0V5a4 4 0 0 1 8 0v2"/>',
+    },
+    phone: {
+      label: "Teléfono",
+      path: '<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/>',
+    },
+    spark: {
+      label: "Tecnología",
+      path: '<path d="m12 2-2 8-8 2 8 2 2 8 2-8 8-2-8-2-2-8Z"/>',
+    },
+    pet: {
+      label: "Mascota",
+      path: '<ellipse cx="6" cy="7" rx="2" ry="3"/><ellipse cx="18" cy="7" rx="2" ry="3"/><path d="M5 18c0-3 5-8 7-8s7 5 7 8c0 4-5 1-7 1s-7 3-7-1Z"/>',
+    },
+    bills: {
+      label: "Servicios",
+      path: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Zm3 5h6m-6 4h6m-6 4h3"/>',
+    },
+    bike: {
+      label: "Bicicleta",
+      path: '<circle cx="5" cy="16" r="4"/><circle cx="19" cy="16" r="4"/><path d="m5 16 5-9 5 9H5Zm5-9h6m-2-4h3l2 13M8 4h4"/>',
+    },
+    music: {
+      label: "Música",
+      path: '<path d="M9 18V5l12-2v13M9 8l12-2"/><ellipse cx="6" cy="19" rx="3" ry="2"/><ellipse cx="18" cy="17" rx="3" ry="2"/>',
+    },
+    shield: {
+      label: "Seguro",
+      path: '<path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-4 10 3 3 5-6"/>',
+    },
+  };
+  function entityIconKey(item, type) {
+    return Object.hasOwn(ENTITY_ICONS, item?.icon)
+      ? item.icon
+      : { sources: "income", accounts: "wallet", categories: "tag" }[type];
+  }
   const uid = () => globalThis.crypto.randomUUID();
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const assert = (ok, message) => {
@@ -249,6 +353,11 @@
           "Entidad inválida.",
         );
         if (key !== "tags") assert(e.currency === "BOB", "v1 solo admite BOB.");
+        if (key !== "tags" && e.icon !== undefined)
+          assert(
+            typeof e.icon === "string" && Object.hasOwn(ENTITY_ICONS, e.icon),
+            "Icono de entidad inválido.",
+          );
         if (key === "accounts")
           assert(
             integer(e.opening_balance_cents) &&
@@ -591,6 +700,8 @@
   }
   const API = {
     SCHEMA_VERSION,
+    ENTITY_ICONS,
+    entityIconKey,
     cents,
     sum,
     dateOK,
@@ -651,6 +762,7 @@
       detailId = null,
       detailScope = "month",
       homeScroll = 0,
+      editingEntities = false,
       undo = null,
       pendingImport = null,
       historyLimit = 100,
@@ -756,8 +868,17 @@
           .join("")
       );
     }
-    function modal(title, html, onSubmit) {
+    function modal(
+      title,
+      html,
+      onSubmit,
+      {
+        focusSelector = "input:not([type=hidden]),select,button",
+        compact = false,
+      } = {},
+    ) {
       const dialog = $("#dialog");
+      dialog.classList.toggle("compact-dialog", compact);
       $("#dialog-title").textContent = title;
       $("#dialog-body").innerHTML = html;
       $("#modal-error").textContent = "";
@@ -775,10 +896,10 @@
           if (button) button.disabled = false;
         }
       };
+      const initialField = $("#dialog-body").querySelector(focusSelector);
+      initialField?.setAttribute("autofocus", "");
       if (!dialog.open) dialog.showModal();
-      requestAnimationFrame(() =>
-        $("#dialog-body").querySelector("input,select,button")?.focus(),
-      );
+      initialField?.focus();
     }
     const actions = (save = "Guardar") =>
       `<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary" type="submit">${save}</button></div>`;
@@ -795,9 +916,9 @@
           "Elige origen",
         )}</select></label>
         <label>Destino<select name="to" required></select></label></div>
-        <label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
-        <label>Fecha<input name="date" type="date" required value="${esc(t?.occurred_on || today())}"></label>
-        <fieldset><legend>Etiquetas</legend><div class="tag-choices">${
+        <div class="form-grid"><label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
+        <label>Fecha<input name="date" type="date" required value="${esc(t?.occurred_on || today())}"></label></div>
+        <details class="movement-extras" ${t?.note || t?.tag_ids.length ? "open" : ""}><summary>Etiquetas y nota</summary><fieldset><legend>Etiquetas</legend><div class="tag-choices">${
           state.tags
             .filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id))
             .map(
@@ -807,7 +928,7 @@
             .join("") || '<span class="muted">Aún no hay etiquetas.</span>'
         }</div></fieldset>
         <label>Nueva etiqueta (opcional)<input name="newTag" maxlength="80" placeholder="Un nombre de etiqueta"></label>
-        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label>${actions(t ? "Guardar cambios" : "Registrar")}`,
+        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label></details>${actions(t ? "Guardar cambios" : "Registrar")}`,
         async (data) => {
           const next = copy(state),
             fromId = data.get("from"),
@@ -862,6 +983,11 @@
             !!t,
           );
         },
+        {
+          compact: true,
+          focusSelector:
+            t || (from && to) ? '[name="amount"]' : '[name="from"]',
+        },
       );
       const fromSelect = $('#dialog [name="from"]'),
         toSelect = $('#dialog [name="to"]');
@@ -890,9 +1016,11 @@
       modal(
         (e ? "Editar " : "Crear ") + title,
         `
+        ${key !== "tags" ? iconChooser(key, e) : ""}
         <label>Nombre<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
         ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial<input type="date" name="openingDate" required value="${e?.opening_date || today()}"></label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
         ${key === "sources" ? `<label>Ingreso mensual previsto · BOB (opcional)<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
+        ${key === "categories" ? `<label>Presupuesto · ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && budget(state, e.id, month).limit !== null ? decimal(budget(state, e.id, month).limit) : ""}" placeholder="Sin límite"></label>` : ""}
         ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>Archivar (conserva historial)</label>` : ""}${actions()}`,
         async (data) => {
           const next = copy(state),
@@ -914,7 +1042,10 @@
               ? e?.archived_at || new Date().toISOString()
               : null,
           };
-          if (key !== "tags") item.currency = "BOB";
+          if (key !== "tags") {
+            item.currency = "BOB";
+            item.icon = data.get("icon");
+          }
           if (key === "accounts") {
             item.opening_balance_cents = cents(data.get("opening"));
             item.opening_date = data.get("openingDate");
@@ -932,8 +1063,28 @@
           if (e)
             next[key][next[key].findIndex((item) => item.id === id)] = item;
           else next[key].push(item);
+          if (key === "categories") {
+            const rawLimit = data.get("limit").trim();
+            const limit = rawLimit ? cents(rawLimit) : null;
+            assert(
+              limit === null || limit >= 0,
+              "El límite no puede ser negativo.",
+            );
+            const record = next.budgets.find(
+              (b) => b.category_id === item.id && b.month === month,
+            );
+            if (record) record.limit_cents = limit;
+            else if (limit !== null)
+              next.budgets.push({
+                id: uid(),
+                category_id: item.id,
+                month,
+                limit_cents: limit,
+              });
+          }
           await commit(next, "Guardado");
         },
+        { compact: true, focusSelector: '[name="name"]' },
       );
     }
     function editBudget(id) {
@@ -970,16 +1121,43 @@
         : `<label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label>`;
       return `<div class="month-nav ${compact ? "compact-month" : ""}"><button data-action="prev" aria-label="Mes anterior">‹</button>${picker}<button data-action="next" aria-label="Mes siguiente">›</button></div>`;
     }
-    // Original, monochrome row symbols; no external icon assets.
-    function rowIcon(key) {
-      const paths = {
-        sources: '<path d="M12 19V5m-5 5 5-5 5 5M5 19h14"/>',
-        accounts:
-          '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18m-5 5h2M6 6V4h12"/>',
-        categories:
-          '<path d="m3 12 9 9 9-9V3h-9L3 12Z"/><circle cx="16" cy="8" r="1"/>',
-      };
-      return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[key]}</svg>`;
+    function iconSvg(iconKey) {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ENTITY_ICONS[iconKey].path}</svg>`;
+    }
+    function rowIcon(key, item = {}) {
+      return iconSvg(entityIconKey(item, key));
+    }
+    function iconChooser(key, item) {
+      const selectedIcon = entityIconKey(item, key);
+      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" role="group" aria-label="Elegir icono" hidden>${Object.entries(
+        ENTITY_ICONS,
+      )
+        .map(
+          ([id, icon]) =>
+            `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`,
+        )
+        .join("")}</div></fieldset>`;
+    }
+    function setEntityEditing(editing) {
+      editingEntities = editing;
+      $("#main").classList.toggle(
+        "editing-entities",
+        editing && view === "home",
+      );
+      if ($("#entity-edit-bar")) $("#entity-edit-bar").hidden = !editing;
+    }
+    function removeEntity(key, id) {
+      modal(
+        "Quitar " + name(id),
+        `<p>Se quitará de Inicio. Sus movimientos y saldos se conservan en el historial. Puedes restaurarla en Datos.</p>${actions("Quitar de Inicio")}`,
+        async () => {
+          const next = copy(state);
+          next[key].find((e) => e.id === id).archived_at =
+            new Date().toISOString();
+          await commit(next, "Entidad quitada de Inicio", true);
+        },
+        { compact: true, focusSelector: 'button[data-action="close"]' },
+      );
     }
     function home() {
       const r = report(state, month),
@@ -996,7 +1174,8 @@
       );
       return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance", balance)}${stat("Gastos del mes", r.expense)}${stat("Presupuesto", monthlyBudget)}</section>
         <div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
-        <p class="home-hint">Toca para ver el historial · Arrastra para mover</p>
+        <p class="home-hint">Toca para ver · Mantén para editar · Arrastra para mover</p>
+        <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
           return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${active(
@@ -1020,7 +1199,7 @@
                     : budget(state, e.id, month).spent;
               const b =
                 key === "categories" ? budget(state, e.id, month) : null;
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button></div>`;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key, e)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",
@@ -1202,6 +1381,10 @@
       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Haz respaldos frecuentes: borrar los datos de Safari o perder el dispositivo puede borrar el historial. No hay sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
     }
     function render() {
+      $("#main").classList.toggle(
+        "editing-entities",
+        editingEntities && view === "home",
+      );
       $("#main").innerHTML = {
         home,
         detail,
@@ -1250,10 +1433,34 @@
         id = button.dataset.id;
       if (button.dataset.view) {
         view = button.dataset.view;
+        editingEntities = false;
+        $("#app-menu").open = false;
         historyLimit = 100;
         render();
         window.scrollTo(0, 0);
         $("#main").focus();
+        return;
+      }
+      if (action === "finish-editing") return setEntityEditing(false);
+      if (action === "remove-entity")
+        return removeEntity(button.dataset.key, id);
+      if (action === "toggle-icons") {
+        const picker = $("#icon-picker");
+        picker.hidden = !picker.hidden;
+        button.setAttribute("aria-expanded", String(!picker.hidden));
+        return;
+      }
+      if (action === "select-icon") {
+        $('#dialog [name="icon"]').value = button.dataset.icon;
+        $(".icon-preview .entity-mark").innerHTML = iconSvg(
+          button.dataset.icon,
+        );
+        document
+          .querySelectorAll("[data-action=select-icon]")
+          .forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        $("#icon-picker").hidden = true;
+        $(".icon-preview").setAttribute("aria-expanded", "false");
+        $(".icon-preview").focus();
         return;
       }
       if (action === "close") return $("#dialog").close();
@@ -1374,6 +1581,7 @@
       }
     }
     document.addEventListener("click", (e) => {
+      if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;
       if (e.target.matches(".month-picker input")) {
         try {
           e.target.showPicker?.();
@@ -1384,7 +1592,16 @@
       const button = e.target.closest("[data-action], [data-view]");
       if (button) handleAction(button).catch((error) => notify(error.message));
       const card = e.target.closest("[data-entity]");
-      if (card && !suppressClick) openEntity(card.dataset.entity);
+      if (card && !suppressClick && !editingEntities)
+        openEntity(card.dataset.entity);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !$("#dialog").open) {
+        if ($("#app-menu").open) {
+          $("#app-menu").open = false;
+          $("#app-menu summary").focus();
+        } else if (editingEntities) setEntityEditing(false);
+      }
     });
     function openEntity(id) {
       homeScroll = window.scrollY;
@@ -1460,9 +1677,8 @@
     }
     document.addEventListener("pointerdown", (e) => {
       if (pointer || settling || !e.isPrimary || e.button !== 0) return;
-      const card = e.target.closest(
-        '[data-entity]:not([data-key="categories"])',
-      );
+      if (editingEntities) return;
+      const card = e.target.closest("[data-entity]");
       if (!card) return;
       const p = (pointer = {
         id: e.pointerId,
@@ -1474,7 +1690,14 @@
         y: e.clientY,
         dragging: false,
       });
-      p.timer = setTimeout(() => startPointer(p), 150);
+      p.timer = setTimeout(() => {
+        if (pointer !== p) return;
+        p.editing = true;
+        suppressClick = true;
+        p.card.setPointerCapture(p.id);
+        setEntityEditing(true);
+        vibrate();
+      }, 450);
     });
     document.addEventListener(
       "pointermove",
@@ -1483,8 +1706,18 @@
         if (!p || e.pointerId !== p.id) return;
         p.x = e.clientX;
         p.y = e.clientY;
-        if (!p.dragging && Math.hypot(p.x - p.startX, p.y - p.startY) > 6)
+        if (p.editing) {
+          e.preventDefault();
+          return;
+        }
+        if (!p.dragging && Math.hypot(p.x - p.startX, p.y - p.startY) > 6) {
+          if (p.card.dataset.key === "categories") {
+            clearTimeout(p.timer);
+            pointer = null;
+            return;
+          }
           startPointer(p);
+        }
         if (p.dragging) {
           e.preventDefault();
           if (!p.frame) p.frame = requestAnimationFrame(() => paintPointer(p));
@@ -1506,6 +1739,13 @@
       if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
       pointer = null;
       clearTimeout(p.timer);
+      if (p.editing) {
+        if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
+        clickTimer = setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+        return;
+      }
       if (!p.dragging) return;
       settling = true;
       suppressClick = true;
@@ -1564,11 +1804,15 @@
     }
     document.addEventListener("pointerup", endPointer);
     document.addEventListener("pointercancel", endPointer);
-    document.addEventListener("lostpointercapture", endPointer);
+    document.addEventListener("lostpointercapture", (e) => {
+      // A touch starts on the inner SVG; transferring capture to its card is
+      // expected. Cancel only when the card actually loses capture.
+      if (pointer && !pointer.card.hasPointerCapture(e.pointerId))
+        endPointer(e);
+    });
     window.addEventListener("blur", endPointer);
     document.addEventListener("contextmenu", (e) => {
-      if (e.target.closest('[data-entity]:not([data-key="categories"])'))
-        e.preventDefault();
+      if (e.target.closest("[data-entity]")) e.preventDefault();
     });
     document.addEventListener("change", async (e) => {
       try {

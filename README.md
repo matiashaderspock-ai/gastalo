@@ -2,7 +2,7 @@
 
 PWA personal de gastos en BOB. HTML/CSS y un `app.js` vanilla, sin dependencias de ejecución ni servidor. Guarda los datos en IndexedDB `gastalo` en este dispositivo.
 
-- Tres filas de fuentes, cuentas y categorías. Arrastra un círculo (mantén pulsado 150 ms o muévelo) para registrar movimientos, o usa «+ Movimiento»; confirma importe, fecha, etiquetas y nota. Toca cualquier círculo para ver su historial, editar la entidad y consultar su gráfico mensual.
+- Tres filas de fuentes, cuentas y categorías. Arrastra un círculo (muévelo más de 6 px) para registrar movimientos, o usa «+ Movimiento»; confirma importe, fecha, etiquetas y nota. Toca cualquier círculo para ver su historial y gráfico mensual; mantén pulsado 450 ms para mostrar los controles de edición. La navegación está en el menú junto al nombre de la app. Las entidades permiten elegir iconos propios; la X las quita de Inicio y conserva el historial.
 - Historial con filtros combinados, edición y borrado con deshacer. El último cambio editable/borrado puede deshacerse hasta otra escritura o recarga.
 - Presupuestos independientes por mes, cero distinto de sin límite, sin arrastre. Copiar límites anteriores es explícito y no sobreescribe los existentes.
 - Reportes en BOB, gráfico y tabla por categoría y últimos 12 meses. Los filtros se comparten con historial; las transferencias no suman ingresos ni gastos.
