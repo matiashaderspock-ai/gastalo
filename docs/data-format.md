@@ -69,3 +69,5 @@ Importar CSV o JSON ofrece vista previa y reemplaza el estado de forma atómica 
 ## Persistencia y fallos
 
 IndexedDB `gastalo`, versión 1, almacén `state`, clave `main`: `{revision,data}`. La escritura reemplaza el estado en una sola transacción y verifica su revisión para evitar que dos pestañas se sobrescriban silenciosamente. Un conflicto exige recargar la pestaña antigua. Una escritura rechazada conserva el estado anterior; no se muestra éxito. El archivo se valida completamente antes del reemplazo. Exportar devuelve solo el contrato financiero, sin el envoltorio de persistencia.
+
+Las fuentes, cuentas y categorías admiten el campo opcional `icon`: una clave del catálogo SVG propio de la app. Los respaldos v1 sin ese campo siguen siendo válidos y usan el icono predeterminado del tipo. El campo se conserva en exportación/restauración.

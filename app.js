@@ -3,6 +3,110 @@
   "use strict";
   const SCHEMA_VERSION = 1;
   const TYPES = ["sources", "accounts", "categories"];
+  // Original SVG symbols. Persist only their keys, never SVG from user data.
+  const ENTITY_ICONS = {
+    income: {
+      label: "Ingresos",
+      path: '<path d="M12 19V5m-5 5 5-5 5 5M5 19h14"/>',
+    },
+    wallet: {
+      label: "Billetera",
+      path: '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18m-5 5h2M6 6V4h12"/>',
+    },
+    tag: {
+      label: "Etiqueta",
+      path: '<path d="m3 12 9 9 9-9V3h-9L3 12Z"/><circle cx="16" cy="8" r="1"/>',
+    },
+    bank: {
+      label: "Banco",
+      path: '<path d="m3 8 9-5 9 5H3Zm2 3v7m5-7v7m4-7v7m5-7v7M3 21h18"/>',
+    },
+    card: {
+      label: "Tarjeta",
+      path: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20M6 15h4"/>',
+    },
+    home: {
+      label: "Hogar",
+      path: '<path d="m3 11 9-8 9 8M5 10v11h14V10M10 21v-7h4v7"/>',
+    },
+    food: {
+      label: "Comida",
+      path: '<path d="M5 3v6m3-6v6M3 3v6a3 3 0 0 0 6 0M6 12v9M18 3c-4 2-4 9 0 9h2M20 3v18"/>',
+    },
+    coffee: {
+      label: "Café",
+      path: '<path d="M3 8h13v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V8Zm13 1h2a3 3 0 0 1 0 6h-2M6 3v2m4-2v2"/>',
+    },
+    car: {
+      label: "Auto",
+      path: '<path d="m4 9 2-5h12l2 5M3 10h18v8H3v-8Zm2 8v3m14-3v3M6 13h2m8 0h2"/>',
+    },
+    bus: {
+      label: "Transporte",
+      path: '<rect x="5" y="2" width="14" height="18" rx="3"/><path d="M5 10h14M8 20l-2 2m10-2 2 2M8 15h1m6 0h1M9 5h6"/>',
+    },
+    health: {
+      label: "Salud",
+      path: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3Z"/>',
+    },
+    gym: {
+      label: "Gimnasio",
+      path: '<path d="M7 8h10M7 16h10M3 7h4v10H3V7Zm14 0h4v10h-4V7ZM1 10v4m22-4v4"/>',
+    },
+    education: {
+      label: "Estudios",
+      path: '<path d="m2 8 10-5 10 5-10 5L2 8Zm4 2v7c4 3 8 3 12 0v-7m4-2v9"/>',
+    },
+    travel: {
+      label: "Viajes",
+      path: '<path d="m3 10 7 2 3 9 2-1-1-8 6-6a2 2 0 0 0-2-2l-6 6-8-1-1 1Z"/>',
+    },
+    gift: {
+      label: "Regalo",
+      path: '<path d="M3 8h18v5H3V8Zm2 5v8h14v-8M12 8v13M12 8C4 8 5 1 9 3l3 5Zm0 0c8 0 7-7 3-5l-3 5Z"/>',
+    },
+    work: {
+      label: "Trabajo",
+      path: '<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12c5 3 13 3 18 0M10 13h4v4h-4z"/>',
+    },
+    shopping: {
+      label: "Compras",
+      path: '<path d="M4 7h16l-1 14H5L4 7Zm4 0V5a4 4 0 0 1 8 0v2"/>',
+    },
+    phone: {
+      label: "Teléfono",
+      path: '<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 5h4m-3 14h2"/>',
+    },
+    spark: {
+      label: "Tecnología",
+      path: '<path d="m12 2-2 8-8 2 8 2 2 8 2-8 8-2-8-2-2-8Z"/>',
+    },
+    pet: {
+      label: "Mascota",
+      path: '<ellipse cx="6" cy="7" rx="2" ry="3"/><ellipse cx="18" cy="7" rx="2" ry="3"/><path d="M5 18c0-3 5-8 7-8s7 5 7 8c0 4-5 1-7 1s-7 3-7-1Z"/>',
+    },
+    bills: {
+      label: "Servicios",
+      path: '<path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2Zm3 5h6m-6 4h6m-6 4h3"/>',
+    },
+    bike: {
+      label: "Bicicleta",
+      path: '<circle cx="5" cy="16" r="4"/><circle cx="19" cy="16" r="4"/><path d="m5 16 5-9 5 9H5Zm5-9h6m-2-4h3l2 13M8 4h4"/>',
+    },
+    music: {
+      label: "Música",
+      path: '<path d="M9 18V5l12-2v13M9 8l12-2"/><ellipse cx="6" cy="19" rx="3" ry="2"/><ellipse cx="18" cy="17" rx="3" ry="2"/>',
+    },
+    shield: {
+      label: "Seguro",
+      path: '<path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-4 10 3 3 5-6"/>',
+    },
+  };
+  function entityIconKey(item, type) {
+    return Object.hasOwn(ENTITY_ICONS, item?.icon)
+      ? item.icon
+      : { sources: "income", accounts: "wallet", categories: "tag" }[type];
+  }
   const uid = () => globalThis.crypto.randomUUID();
   const copy = (value) => JSON.parse(JSON.stringify(value));
   const assert = (ok, message) => {
@@ -72,24 +176,46 @@
       imports: [],
     };
   }
-  function direction(state, from, to) {
+  // Pure gesture rule. Entity types use the same keys as the stored collections.
+  function canDrop(from, to) {
+    if (!from || !to || from.id === to.id) return false;
+    return (
+      (from.type === "sources" && to.type === "accounts") ||
+      (from.type === "accounts" &&
+        (to.type === "categories" || to.type === "accounts"))
+    );
+  }
+  // Decide before capturing the pointer or blocking native page scrolling.
+  function gestureIntent({
+    dx, dy, elapsedMs, onCircle, canDrag, canPan, pointerType,
+  }) {
+    const vertical = Math.abs(dy),
+      horizontal = Math.abs(dx);
+    if (vertical > 10 && elapsedMs < 150) return "scroll";
+    if (Math.hypot(dx, dy) <= 6) return "pending";
+    if (!onCircle) return "scroll";
     if (
-      state.sources.some((e) => e.id === from) &&
-      state.accounts.some((e) => e.id === to)
+      canPan && horizontal > vertical * 1.25 &&
+      (pointerType !== "mouse" || !canDrag) && (elapsedMs < 150 || !canDrag)
     )
-      return "income";
-    if (
-      state.accounts.some((e) => e.id === from) &&
-      state.categories.some((e) => e.id === to)
-    )
-      return "expense";
-    if (
-      from !== to &&
-      state.accounts.some((e) => e.id === from) &&
-      state.accounts.some((e) => e.id === to)
-    )
-      return "transfer";
-    return null;
+      return "pan";
+    if (!canDrag) return "scroll";
+    if (vertical >= horizontal && elapsedMs < 150) return "pending";
+    return "drag";
+  }
+  function direction(state, fromId, toId) {
+    const resolve = (id) => {
+      const type = TYPES.find((key) => state[key].some((e) => e.id === id));
+      return type ? { id, type } : null;
+    };
+    const from = resolve(fromId),
+      to = resolve(toId);
+    if (!canDrop(from, to)) return null;
+    return from.type === "sources"
+      ? "income"
+      : to.type === "categories"
+        ? "expense"
+        : "transfer";
   }
   const posted = (state) =>
     state.transactions.filter((t) => t.status === "posted");
@@ -167,10 +293,48 @@
       remaining: limit === null ? null : sum([limit, -spent]),
     };
   }
+  function budgetVisual(limit, spent) {
+    if (limit === null || spent === 0) return { fill: 0, tone: "gray" };
+    if (spent > limit) return { fill: 100, tone: "red" };
+    // Compare integer cents exactly, including budgets near MAX_SAFE_INTEGER.
+    const used = BigInt(spent),
+      total = BigInt(limit);
+    return {
+      fill: Number((used * 10000n) / total) / 100,
+      tone: used * 100n <= total * 65n ? "green" : "orange",
+    };
+  }
   function evolution(state, month, filters = {}) {
     return Array.from({ length: 12 }, (_, i) => {
       const m = shiftMonth(month, i - 11);
       return { month: m, ...report(state, m, filters) };
+    });
+  }
+  // Read-only monthly history: flows for sources/categories, closing balance for accounts.
+  function entityEvolution(state, id, month) {
+    const type = TYPES.find((key) => state[key].some((e) => e.id === id));
+    assert(type, "Entidad inexistente.");
+    const item = state[type].find((e) => e.id === id);
+    const ts = filterTransactions(state, { entities: [id] });
+    return Array.from({ length: 12 }, (_, i) => {
+      const m = shiftMonth(month, i - 11);
+      const end = shiftMonth(m, 1) + "-01";
+      const value =
+        type === "accounts"
+          ? sum([
+              item.opening_date < end ? item.opening_balance_cents : 0,
+              ...ts
+                .filter((t) => t.occurred_on < end)
+                .map((t) =>
+                  t.to_id === id ? t.amount_cents : -t.amount_cents,
+                ),
+            ])
+          : sum(
+              ts
+                .filter((t) => t.occurred_on.startsWith(m))
+                .map((t) => t.amount_cents),
+            );
+      return { month: m, value };
     });
   }
   function validateState(s) {
@@ -218,6 +382,11 @@
           "Entidad inválida.",
         );
         if (key !== "tags") assert(e.currency === "BOB", "v1 solo admite BOB.");
+        if (key !== "tags" && e.icon !== undefined)
+          assert(
+            typeof e.icon === "string" && Object.hasOwn(ENTITY_ICONS, e.icon),
+            "Icono de entidad inválido.",
+          );
         if (key === "accounts")
           assert(
             integer(e.opening_balance_cents) &&
@@ -560,17 +729,23 @@
   }
   const API = {
     SCHEMA_VERSION,
+    ENTITY_ICONS,
+    entityIconKey,
     cents,
     sum,
     dateOK,
     shiftMonth,
     emptyState,
     direction,
+    canDrop,
+    gestureIntent,
     balances,
     filterTransactions,
     report,
     budget,
+    budgetVisual,
     evolution,
+    entityEvolution,
     validateState,
     backup,
     restore,
@@ -615,7 +790,10 @@
       revision = 0,
       db,
       view = "home",
-      selected = null,
+      detailId = null,
+      detailScope = "month",
+      homeScroll = 0,
+      editingEntities = false,
       undo = null,
       pendingImport = null,
       historyLimit = 100,
@@ -647,10 +825,20 @@
       transfer: "Transferencia",
     };
     const active = (key) => state[key].filter((e) => !e.archived_at);
+    let notificationTimer;
+    function dismissNotification() {
+      clearTimeout(notificationTimer);
+      $("#toast").hidden = true;
+    }
     function notify(message, canUndo = false) {
+      clearTimeout(notificationTimer);
       $("#toast").hidden = false;
       $("#toast").innerHTML =
         `<span>${esc(message)}</span>${canUndo ? '<button data-action="undo">Deshacer</button>' : ""}<button data-action="dismiss" aria-label="Cerrar aviso">×</button>`;
+      notificationTimer = setTimeout(
+        dismissNotification,
+        canUndo ? 8000 : 3000,
+      );
     }
     async function load() {
       const record = await new Promise((resolve, reject) => {
@@ -692,7 +880,6 @@
             );
         });
         state = next;
-        selected = null;
         revision++;
         undo = reversible ? before : null;
         render();
@@ -712,8 +899,17 @@
           .join("")
       );
     }
-    function modal(title, html, onSubmit) {
+    function modal(
+      title,
+      html,
+      onSubmit,
+      {
+        focusSelector = "input:not([type=hidden]),select,button",
+        compact = false,
+      } = {},
+    ) {
       const dialog = $("#dialog");
+      dialog.classList.toggle("compact-dialog", compact);
       $("#dialog-title").textContent = title;
       $("#dialog-body").innerHTML = html;
       $("#modal-error").textContent = "";
@@ -731,10 +927,10 @@
           if (button) button.disabled = false;
         }
       };
+      const initialField = $("#dialog-body").querySelector(focusSelector);
+      initialField?.setAttribute("autofocus", "");
       if (!dialog.open) dialog.showModal();
-      requestAnimationFrame(() =>
-        $("#dialog-body").querySelector("input,select,button")?.focus(),
-      );
+      initialField?.focus();
     }
     const actions = (save = "Guardar") =>
       `<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary" type="submit">${save}</button></div>`;
@@ -751,9 +947,9 @@
           "Elige origen",
         )}</select></label>
         <label>Destino<select name="to" required></select></label></div>
-        <label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
-        <label>Fecha<input name="date" type="date" required value="${esc(t?.occurred_on || today())}"></label>
-        <fieldset><legend>Etiquetas</legend><div class="tag-choices">${
+        <div class="form-grid"><label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
+        <label>Fecha<input name="date" type="date" required value="${esc(t?.occurred_on || today())}"></label></div>
+        <details class="movement-extras" ${t?.note || t?.tag_ids.length ? "open" : ""}><summary>Etiquetas y nota</summary><fieldset><legend>Etiquetas</legend><div class="tag-choices">${
           state.tags
             .filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id))
             .map(
@@ -763,7 +959,7 @@
             .join("") || '<span class="muted">Aún no hay etiquetas.</span>'
         }</div></fieldset>
         <label>Nueva etiqueta (opcional)<input name="newTag" maxlength="80" placeholder="Un nombre de etiqueta"></label>
-        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label>${actions(t ? "Guardar cambios" : "Registrar")}`,
+        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label></details>${actions(t ? "Guardar cambios" : "Registrar")}`,
         async (data) => {
           const next = copy(state),
             fromId = data.get("from"),
@@ -818,6 +1014,11 @@
             !!t,
           );
         },
+        {
+          compact: true,
+          focusSelector:
+            t || (from && to) ? '[name="amount"]' : '[name="from"]',
+        },
       );
       const fromSelect = $('#dialog [name="from"]'),
         toSelect = $('#dialog [name="to"]');
@@ -833,7 +1034,7 @@
         );
       };
       update(t?.to_id || to);
-      fromSelect.onchange = () => update("");
+      fromSelect.onchange = () => update(to);
     }
     function editEntity(key, id = null) {
       const e = id ? state[key].find((e) => e.id === id) : null;
@@ -846,9 +1047,11 @@
       modal(
         (e ? "Editar " : "Crear ") + title,
         `
+        ${key !== "tags" ? iconChooser(key, e) : ""}
         <label>Nombre<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
         ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial<input type="date" name="openingDate" required value="${e?.opening_date || today()}"></label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
         ${key === "sources" ? `<label>Ingreso mensual previsto · BOB (opcional)<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
+        ${key === "categories" ? `<label>Presupuesto · ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && budget(state, e.id, month).limit !== null ? decimal(budget(state, e.id, month).limit) : ""}" placeholder="Sin límite"></label>` : ""}
         ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>Archivar (conserva historial)</label>` : ""}${actions()}`,
         async (data) => {
           const next = copy(state),
@@ -870,7 +1073,10 @@
               ? e?.archived_at || new Date().toISOString()
               : null,
           };
-          if (key !== "tags") item.currency = "BOB";
+          if (key !== "tags") {
+            item.currency = "BOB";
+            item.icon = data.get("icon");
+          }
           if (key === "accounts") {
             item.opening_balance_cents = cents(data.get("opening"));
             item.opening_date = data.get("openingDate");
@@ -888,8 +1094,28 @@
           if (e)
             next[key][next[key].findIndex((item) => item.id === id)] = item;
           else next[key].push(item);
+          if (key === "categories") {
+            const rawLimit = data.get("limit").trim();
+            const limit = rawLimit ? cents(rawLimit) : null;
+            assert(
+              limit === null || limit >= 0,
+              "El límite no puede ser negativo.",
+            );
+            const record = next.budgets.find(
+              (b) => b.category_id === item.id && b.month === month,
+            );
+            if (record) record.limit_cents = limit;
+            else if (limit !== null)
+              next.budgets.push({
+                id: uid(),
+                category_id: item.id,
+                month,
+                limit_cents: limit,
+              });
+          }
           await commit(next, "Guardado");
         },
+        { compact: true, focusSelector: '[name="name"]' },
       );
     }
     function editBudget(id) {
@@ -920,51 +1146,104 @@
     function stat(label, amount, cls = "") {
       return `<div class="stat ${cls}"><span>${label}</span><strong><small>Bs</small>${money(amount).slice(3)}</strong></div>`;
     }
-    function monthNav() {
-      return `<div class="month-nav"><button data-action="prev" aria-label="Mes anterior">←</button><label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label><button data-action="next" aria-label="Mes siguiente">→</button></div>`;
+    function monthNav(compact = false) {
+      const picker = compact
+        ? `<label class="month-picker"><span aria-hidden="true">${esc(new Intl.DateTimeFormat("es-BO", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(month + "-15T12:00:00Z")))}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
+        : `<label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label>`;
+      return `<div class="month-nav ${compact ? "compact-month" : ""}"><button data-action="prev" aria-label="Mes anterior">‹</button>${picker}<button data-action="next" aria-label="Mes siguiente">›</button></div>`;
+    }
+    function iconSvg(iconKey) {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ENTITY_ICONS[iconKey].path}</svg>`;
+    }
+    function rowIcon(key, item = {}) {
+      return iconSvg(entityIconKey(item, key));
+    }
+    function iconChooser(key, item) {
+      const selectedIcon = entityIconKey(item, key);
+      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" role="group" aria-label="Elegir icono" hidden>${Object.entries(
+        ENTITY_ICONS,
+      )
+        .map(
+          ([id, icon]) =>
+            `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`,
+        )
+        .join("")}</div></fieldset>`;
+    }
+    function setEntityEditing(editing) {
+      editingEntities = editing;
+      $("#main").classList.toggle(
+        "editing-entities",
+        editing && view === "home",
+      );
+      if ($("#entity-edit-bar")) $("#entity-edit-bar").hidden = !editing;
+    }
+    function removeEntity(key, id) {
+      modal(
+        "Quitar " + name(id),
+        `<p>Se quitará de Inicio. Sus movimientos y saldos se conservan en el historial. Puedes restaurarla en Datos.</p>${actions("Quitar de Inicio")}`,
+        async () => {
+          const next = copy(state);
+          next[key].find((e) => e.id === id).archived_at =
+            new Date().toISOString();
+          await commit(next, "Entidad quitada de Inicio", true);
+        },
+        { compact: true, focusSelector: 'button[data-action="close"]' },
+      );
     }
     function home() {
       const r = report(state, month),
         bs = balances(state);
-      return `<section class="hero"><div class="eyebrow">TU DINERO, A TU RITMO</div><h1>Un mes más claro.</h1><p>Decide dónde va cada boliviano.</p>${monthNav()}<div class="stats">${stat("Ingresos del mes", r.income, "positive")}${stat("Gastos del mes", r.expense)}${stat("Balance del mes", r.net)}</div></section>
-        <div class="flow-help"><span id="flow-message" role="status">${selected ? `Ahora elige el destino de ${esc(name(selected))}.` : "Arrastra desde ⠿ o toca origen y destino."}</span>${selected ? '<button data-action="cancel-selection">Cancelar</button>' : ""}<button class="primary" data-action="movement">+ Movimiento</button></div>
+      const balance = sum(
+        state.accounts
+          .filter((a) => !a.exclude_from_total)
+          .map((a) => bs[a.id]),
+      );
+      const monthlyBudget = sum(
+        state.budgets
+          .filter((b) => b.month === month && b.limit_cents !== null)
+          .map((b) => b.limit_cents),
+      );
+      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", monthlyBudget)}</section>
+        <div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
+        <p class="home-hint">Toca para ver · Mantén para editar · Arrastra para mover</p>
+        <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
-          const total =
-            key === "sources"
-              ? r.income
-              : key === "categories"
-                ? r.expense
-                : sum(
-                    state.accounts
-                      .filter((a) => !a.exclude_from_total)
-                      .map((a) => bs[a.id]),
-                  );
-          return `<section class="entity-section"><div class="section-heading"><div><span class="step">0${idx + 1}</span><h2>${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}</h2></div><span class="section-total">${key === "accounts" ? "Saldo actual" : "Este mes"} <strong>${money(total)}</strong></span><button data-action="add" data-key="${key}" aria-label="Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}">+</button></div><div class="entity-grid">${
-            active(key)
-              .map((e, i) => {
-                const value =
-                  key === "accounts"
-                    ? bs[e.id]
-                    : key === "sources"
-                      ? sum(
-                          posted(state)
-                            .filter(
-                              (t) =>
-                                t.kind === "income" &&
-                                t.from_id === e.id &&
-                                t.occurred_on.startsWith(month),
-                            )
-                            .map((t) => t.amount_cents),
-                        )
-                      : budget(state, e.id, month).spent;
-                const b =
-                  key === "categories" ? budget(state, e.id, month) : null;
-                const valid = selected && direction(state, selected, e.id);
-                return `<div class="entity-wrap"><button class="entity-card ${selected === e.id ? "selected" : ""} ${valid ? "valid-target" : ""}" data-entity="${esc(e.id)}" data-key="${key}" ${key !== "categories" ? 'draggable="true"' : ""} aria-pressed="${selected === e.id}"><span class="entity-mark mark-${idx}">${esc(e.name.slice(0, 1).toLocaleUpperCase("es"))}</span>${key !== "categories" ? '<span class="drag-grip" aria-hidden="true">⠿</span>' : ""}<span class="entity-name">${esc(e.name)}</span><strong>${money(value)}</strong><span class="entity-caption">${b ? (b.remaining === null ? "Sin límite" : b.remaining < 0 ? `${money(-b.remaining)} de exceso` : `${money(b.remaining)} disponibles`) : key === "sources" ? "recibido este mes" : "saldo actual"}${e.exclude_from_total ? " · excluida" : ""}</span>${b?.limit !== null && b ? `<progress max="${Math.max(b.limit, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)} de ${money(b.limit)}"></progress>` : ""}</button><button class="entity-edit" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}">···</button></div>`;
-              })
-              .join("") ||
-            `<button class="empty-card" data-action="add" data-key="${key}">+ Crea tu primera ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}</button>`
-          }</div></section>`;
+          const carousel = key !== "categories";
+          const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
+          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Para mover horizontalmente una entidad, mantén un instante antes de arrastrar.">' : ""}${active(
+            key,
+          )
+            .map((e) => {
+              const value =
+                key === "accounts"
+                  ? bs[e.id]
+                  : key === "sources"
+                    ? sum(
+                        posted(state)
+                          .filter(
+                            (t) =>
+                              t.kind === "income" &&
+                              t.from_id === e.id &&
+                              t.occurred_on.startsWith(month),
+                          )
+                          .map((t) => t.amount_cents),
+                      )
+                    : budget(state, e.id, month).spent;
+              const b =
+                key === "categories" ? budget(state, e.id, month) : null;
+              const progress = b ? budgetVisual(b.limit, b.spent) : null;
+              const progressLabel = progress
+                ? b.limit === null
+                  ? "Sin presupuesto este mes"
+                  : progress.tone === "red"
+                    ? "Presupuesto excedido"
+                    : `${progress.fill}% del presupuesto utilizado`
+                : "";
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${money(value)}</strong>${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+            })
+            .join(
+              "",
+            )}${carousel ? "</div>" : ""}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}"><span class="entity-name">${createLabel}</span><span class="entity-mark" aria-hidden="true">+</span></button></div></section>`;
         }).join(
           "",
         )}<p class="footnote">BOB · Las transferencias mueven saldo entre cuentas. No suman ingresos ni gastos.</p>`;
@@ -990,6 +1269,84 @@
           .join("")}</select></label>
         <label class="wide">Buscar en nota<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="Ej. almuerzo"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">Aplicar filtros</button><button data-action="clear-filters">Ver todo</button></div></details>`;
     }
+    function transactionRow(t, contextId = null) {
+      const sign = !contextId
+        ? ""
+        : t.kind === "expense"
+          ? "−"
+          : t.kind === "income" || t.to_id === contextId
+            ? "+"
+            : "−";
+      return `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+    }
+    function entityChart(id, type) {
+      const series = entityEvolution(state, id, month);
+      const low = Math.min(0, ...series.map((p) => p.value));
+      const high = Math.max(0, ...series.map((p) => p.value));
+      const range = high - low || 1;
+      const x = (i) => 90 + i * 45;
+      const y = (value) => 150 - ((value - low) / range) * 130;
+      const points = series.map((p, i) => `${x(i)},${y(p.value)}`).join(" L ");
+      const caption =
+        type === "accounts"
+          ? "Saldo al cierre de cada mes"
+          : type === "sources"
+            ? "Ingresos por mes"
+            : "Gastos por mes";
+      const ticks = [...new Set([high, Math.round((high + low) / 2), low])];
+      const axisNumber = new Intl.NumberFormat("es-BO", {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      });
+      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><svg viewBox="0 0 610 190" role="img" aria-labelledby="chart-title chart-description"><title id="chart-title">${caption} · ${esc(name(id))}</title><desc id="chart-description">${series.map((p) => `${p.month}: ${money(p.value)}`).join("; ")}. Datos disponibles en la tabla siguiente.</desc>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${series[i].month.slice(5)}/${series[i].month.slice(2, 4)}</text>`).join("")}</svg><details class="chart-data"><summary>Ver datos del gráfico</summary><table><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p) => `<tr><td>${p.month}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></details></section>`;
+    }
+    function detail() {
+      const type = TYPES.find((key) =>
+        state[key].some((e) => e.id === detailId),
+      );
+      if (!type)
+        return '<p class="empty">Esta entidad ya no está disponible.</p><button data-view="home">Volver a Inicio</button>';
+      const item = entity(detailId);
+      const all = filterTransactions(state, { entities: [detailId] }).sort(
+        (a, b) =>
+          b.occurred_on.localeCompare(a.occurred_on) ||
+          b.created_at.localeCompare(a.created_at),
+      );
+      const ts = all.filter(
+        (t) => detailScope === "all" || t.occurred_on.startsWith(month),
+      );
+      const monthly = all.filter((t) => t.occurred_on.startsWith(month));
+      const incoming = sum(
+        monthly
+          .filter((t) => t.to_id === detailId || t.kind === "income")
+          .map((t) => t.amount_cents),
+      );
+      const outgoing = sum(
+        monthly
+          .filter((t) => t.from_id === detailId || t.kind === "expense")
+          .map((t) => t.amount_cents),
+      );
+      const groups = new Map();
+      for (const t of ts.slice(0, historyLimit)) {
+        if (!groups.has(t.occurred_on)) groups.set(t.occurred_on, []);
+        groups.get(t.occurred_on).push(t);
+      }
+      const summary =
+        type === "accounts"
+          ? stat("Saldo actual", balances(state)[detailId]) +
+            stat("Entradas del mes", incoming) +
+            stat("Salidas del mes", outgoing)
+          : type === "sources"
+            ? stat("Ingresos del mes", incoming)
+            : stat("Gastos del mes", outgoing) +
+              (budget(state, detailId, month).limit !== null
+                ? stat(
+                    "Presupuesto del mes",
+                    budget(state, detailId, month).limit,
+                  )
+                : "");
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-toolbar"><button data-action="back-home" aria-label="Volver a Inicio">‹</button><div><span class="detail-kind">${{ sources: "Fuente de ingreso", accounts: "Cuenta", categories: "Categoría de gasto" }[type]}</span><h1>${esc(item.name)}</h1></div><button data-action="edit-entity" data-key="${type}" data-id="${esc(detailId)}">Editar</button></div><div class="detail-period">${monthNav(true)}<button data-action="entity-movement">+ Movimiento</button></div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${esc(new Intl.DateTimeFormat("es-BO", { dateStyle: "long", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z")))}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+    }
     function history() {
       const ts = filterTransactions(state, filters).sort(
         (a, b) =>
@@ -1002,13 +1359,10 @@
         expense = sum(
           ts.filter((t) => t.kind === "expense").map((t) => t.amount_cents),
         );
-      return `<div class="page-heading"><div class="eyebrow">CADA MOVIMIENTO CUENTA</div><h1>Historial</h1><p>Encuentra, corrige y sigue adelante.</p></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
+      return `<div class="page-heading"><div class="eyebrow">CADA MOVIMIENTO CUENTA</div><h1>Historial</h1><p>Consulta, edita o borra movimientos individuales.</p></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
         ts
           .slice(0, historyLimit)
-          .map(
-            (t) =>
-              `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`,
-          )
+          .map((t) => transactionRow(t))
           .join("") ||
         '<p class="empty">No hay movimientos con estos filtros.</p>'
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
@@ -1036,7 +1390,7 @@
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
-      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Reportes</h1><p>Ingresos, gastos y decisiones con perspectiva.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
+      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Reportes</h1><p>Totales por categoría y evolución mensual de ingresos y gastos.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
       <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
         r.categories
           .filter((c) => c.spent)
@@ -1052,7 +1406,7 @@
     function settings() {
       return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Datos y ajustes</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
       <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
-      <section class="panel"><h2>Traer tu historial de CoinKeeper</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
+      <section class="panel"><h2>Trae tu historial desde otra app</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
           .slice(0, historyLimit)
@@ -1067,14 +1421,28 @@
       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Haz respaldos frecuentes: borrar los datos de Safari o perder el dispositivo puede borrar el historial. No hay sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
     }
     function render() {
-      $("#main").innerHTML = { home, history, budgets, reports, settings }[
-        view
-      ]();
+      $("#main").classList.toggle(
+        "editing-entities",
+        editingEntities && view === "home",
+      );
+      $("#main").innerHTML = {
+        home,
+        detail,
+        history,
+        budgets,
+        reports,
+        settings,
+      }[view]();
       document.querySelectorAll("nav button").forEach((button) => {
-        button.classList.toggle("active", button.dataset.view === view);
+        button.classList.toggle(
+          "active",
+          button.dataset.view === (view === "detail" ? "home" : view),
+        );
         button.setAttribute(
           "aria-current",
-          button.dataset.view === view ? "page" : "false",
+          button.dataset.view === (view === "detail" ? "home" : view)
+            ? "page"
+            : "false",
         );
       });
       $("#undo-button").hidden = !undo;
@@ -1086,7 +1454,6 @@
         `<p>${esc(source)}</p><dl class="import-summary"><div><dt>Movimientos aceptados</dt><dd>${next.transactions.length}</dd></div><div><dt>Filas pendientes</dt><dd>${next.review.length}</dd></div><div><dt>Cuentas</dt><dd>${next.accounts.length}</dd></div><div><dt>Categorías</dt><dd>${next.categories.length}</dd></div></dl><p>Se reemplazarán los datos actuales (${state.transactions.length} movimientos). Puedes descargar un respaldo antes de continuar.</p><button type="button" data-action="export">Descargar respaldo actual</button><label class="check"><input name="confirm" type="checkbox" required>Entiendo que se reemplazarán los datos de este dispositivo.</label>${actions("Importar y reemplazar")}`,
         async () => {
           await commit(pendingImport, "Importación guardada");
-          selected = null;
           pendingImport = null;
         },
       );
@@ -1106,25 +1473,61 @@
         id = button.dataset.id;
       if (button.dataset.view) {
         view = button.dataset.view;
-        selected = null;
+        editingEntities = false;
+        $("#app-menu").open = false;
         historyLimit = 100;
         render();
         window.scrollTo(0, 0);
         $("#main").focus();
         return;
       }
-      if (action === "close") return $("#dialog").close();
-      if (action === "dismiss") {
-        $("#toast").hidden = true;
+      if (action === "finish-editing") return setEntityEditing(false);
+      if (action === "remove-entity")
+        return removeEntity(button.dataset.key, id);
+      if (action === "toggle-icons") {
+        const picker = $("#icon-picker");
+        picker.hidden = !picker.hidden;
+        button.setAttribute("aria-expanded", String(!picker.hidden));
         return;
       }
+      if (action === "select-icon") {
+        $('#dialog [name="icon"]').value = button.dataset.icon;
+        $(".icon-preview .entity-mark").innerHTML = iconSvg(
+          button.dataset.icon,
+        );
+        document
+          .querySelectorAll("[data-action=select-icon]")
+          .forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        $("#icon-picker").hidden = true;
+        $(".icon-preview").setAttribute("aria-expanded", "false");
+        $(".icon-preview").focus();
+        return;
+      }
+      if (action === "close") return $("#dialog").close();
+      if (action === "dismiss") return dismissNotification();
       if (action === "undo") {
         if (undo) await commit(copy(undo), "Cambio deshecho");
         return;
       }
-      if (action === "cancel-selection") {
-        selected = null;
+      if (action === "back-home") {
+        view = "home";
+        render();
+        window.scrollTo(0, homeScroll);
+        [...document.querySelectorAll("[data-entity]")]
+          .find((card) => card.dataset.entity === detailId)
+          ?.focus({ preventScroll: true });
+        return;
+      }
+      if (action === "detail-scope") {
+        detailScope = button.dataset.scope;
+        historyLimit = 100;
         return render();
+      }
+      if (action === "entity-movement") {
+        return movement(
+          state.categories.some((c) => c.id === detailId) ? "" : detailId,
+          state.categories.some((c) => c.id === detailId) ? detailId : "",
+        );
       }
       if (action === "movement") return movement();
       if (action === "add") return editEntity(button.dataset.key);
@@ -1145,7 +1548,8 @@
       }
       if (action === "prev" || action === "next") {
         month = shiftMonth(month, action === "prev" ? -1 : 1);
-        selected = null;
+        detailScope = "month";
+        historyLimit = 100;
         return render();
       }
       if (action === "more") {
@@ -1217,140 +1621,284 @@
       }
     }
     document.addEventListener("click", (e) => {
+      if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;
+      if (e.target.matches(".month-picker input")) {
+        try {
+          e.target.showPicker?.();
+        } catch {
+          // Native input interaction remains available on browsers without showPicker.
+        }
+      }
       const button = e.target.closest("[data-action], [data-view]");
       if (button) handleAction(button).catch((error) => notify(error.message));
       const card = e.target.closest("[data-entity]");
-      if (card && !suppressClick) choose(card.dataset.entity);
+      if (card && !suppressClick && !editingEntities)
+        openEntity(card.dataset.entity);
     });
-    function choose(id) {
-      if (selected === id) {
-        selected = null;
-        render();
-        return;
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !$("#dialog").open) {
+        if ($("#app-menu").open) {
+          $("#app-menu").open = false;
+          $("#app-menu summary").focus();
+        } else if (editingEntities) setEntityEditing(false);
       }
-      if (selected && direction(state, selected, id)) {
-        const from = selected;
-        selected = null;
-        render();
-        movement(from, id);
-        return;
-      }
-      if (state.categories.some((c) => c.id === id)) {
-        notify("Elige primero una cuenta de origen.");
-        return;
-      }
-      selected = id;
+    });
+    function openEntity(id) {
+      homeScroll = window.scrollY;
+      detailId = id;
+      detailScope = "month";
+      historyLimit = 100;
+      view = "detail";
       render();
+      window.scrollTo(0, 0);
+      $("#main").focus();
     }
-    let dragFrom = null,
-      pointer = null,
-      suppressClick = false;
-    document.addEventListener("dragstart", (e) => {
-      const card = e.target.closest('[draggable="true"]');
-      if (!card) return;
-      dragFrom = card.dataset.entity;
-      e.dataTransfer.setData("text/plain", dragFrom);
-      e.dataTransfer.effectAllowed = "link";
-    });
-    document.addEventListener("dragover", (e) => {
-      const card = e.target.closest("[data-entity]");
-      if (card && direction(state, dragFrom, card.dataset.entity)) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "link";
+    let pointer = null,
+      settling = false,
+      suppressClick = false,
+      clickTimer;
+    const vibrate = () => {
+      try {
+        navigator.vibrate?.(15);
+      } catch {
+        /* Optional on Safari and PWAs. */
       }
-    });
-    document.addEventListener("drop", (e) => {
-      const card = e.target.closest("[data-entity]");
-      if (card && direction(state, dragFrom, card.dataset.entity)) {
-        e.preventDefault();
-        movement(dragFrom, card.dataset.entity);
+    };
+    const dropTarget = (p, x, y) => {
+      const card = document.elementFromPoint(x, y)?.closest("[data-entity]");
+      return card && direction(state, p.from, card.dataset.entity)
+        ? card
+        : null;
+    };
+    function paintPointer(p) {
+      p.frame = null;
+      // Viewport coordinates stay stable while the page is locked.
+      p.clone.style.transform = `translate3d(${p.x - 24}px, ${p.y - 64}px, 0) scale(1.4)`;
+      const target = dropTarget(p, p.x, p.y);
+      if (target !== p.target) {
+        p.target?.classList.remove("drop-target");
+        target?.classList.add("drop-target");
+        p.target = target;
       }
-      dragFrom = null;
-    });
-    document.addEventListener("dragend", () => {
-      dragFrom = null;
-    });
-    // Touch: hold briefly to drag; regular taps and scrolling remain native.
+    }
+    function startPointer(p) {
+      if (pointer !== p || p.dragging) return;
+      clearTimeout(p.timer);
+      p.dragging = true;
+      p.origin = p.card.querySelector(".entity-mark").getBoundingClientRect();
+      p.clone = p.card.querySelector(".entity-mark").cloneNode(true);
+      p.clone.classList.add("drag-clone");
+      p.clone.setAttribute("aria-hidden", "true");
+      p.clone.style.setProperty(
+        "--row-color",
+        getComputedStyle(p.card).getPropertyValue("--row-color"),
+      );
+      document.body.append(p.clone);
+      p.card.classList.add("dragging");
+      document.querySelectorAll("[data-entity]").forEach((card) => {
+        card.classList.toggle(
+          "valid-target",
+          !!direction(state, p.from, card.dataset.entity),
+        );
+        card.classList.toggle(
+          "invalid-target",
+          card !== p.card && !direction(state, p.from, card.dataset.entity),
+        );
+      });
+      p.scrollX = window.scrollX;
+      p.scrollY = window.scrollY;
+      // Fixed body also prevents rubber-band page scrolling in installed iOS PWAs.
+      document.body.style.top = `-${p.scrollY}px`;
+      document.body.style.left = `-${p.scrollX}px`;
+      document.documentElement.classList.add("is-dragging");
+      p.card.setPointerCapture(p.id);
+      paintPointer(p);
+      vibrate();
+    }
     document.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse") return;
-      const card = e.target.closest('[draggable="true"]');
-      if (!card) return;
-      pointer = {
+      if (pointer || settling || !e.isPrimary || e.button !== 0) return;
+      const card = e.target.closest("[data-entity]");
+      if (!card || (editingEntities && !card.closest(".entity-strip"))) return;
+      const p = (pointer = {
         id: e.pointerId,
         from: card.dataset.entity,
+        card,
+        startX: e.clientX,
+        startY: e.clientY,
         x: e.clientX,
         y: e.clientY,
         dragging: false,
-        card,
-      };
-      pointer.timer = setTimeout(
-        () => {
-          if (!pointer) return;
-          pointer.dragging = true;
-          card.classList.add("dragging");
-          card.setPointerCapture(e.pointerId);
-          navigator.vibrate?.(15);
-        },
-        e.target.closest(".drag-grip") ? 0 : 280,
-      );
+        strip: card.closest(".entity-strip"),
+        scrollStart: card.closest(".entity-strip")?.scrollLeft || 0,
+        startedAt: performance.now(),
+        onCircle: !!e.target.closest(".entity-mark"),
+        allowDrag: !editingEntities && card.dataset.key !== "categories",
+        pageScrollStart: window.scrollY,
+      });
+      p.timer = editingEntities
+        ? null
+        : setTimeout(() => {
+            if (pointer !== p) return;
+            p.editing = true;
+            suppressClick = true;
+            p.card.setPointerCapture(p.id);
+            setEntityEditing(true);
+            vibrate();
+          }, 450);
     });
     document.addEventListener(
       "pointermove",
       (e) => {
-        if (!pointer || e.pointerId !== pointer.id) return;
-        if (
-          !pointer.dragging &&
-          Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 8
-        ) {
-          clearTimeout(pointer.timer);
-          pointer = null;
+        const p = pointer;
+        if (!p || e.pointerId !== p.id) return;
+        p.x = e.clientX;
+        p.y = e.clientY;
+        if (p.editing) {
+          e.preventDefault();
           return;
         }
-        if (pointer.dragging) {
+        const dx = p.x - p.startX,
+          dy = p.y - p.startY;
+        if (!p.dragging && !p.scrolling && !p.verticalScrolling) {
+          const intent = gestureIntent({
+            dx,
+            dy,
+            elapsedMs: performance.now() - p.startedAt,
+            onCircle: p.onCircle,
+            canDrag: p.allowDrag,
+            canPan: !!p.strip && p.strip.scrollWidth > p.strip.clientWidth,
+            pointerType: e.pointerType,
+          });
+          if (intent === "scroll") {
+            clearTimeout(p.timer);
+            if (p.onCircle && p.card.dataset.key !== "categories") {
+              // touch-action is fixed at pointerdown. A cancelled circle drag
+              // pans the page explicitly; the rest of the card scrolls natively.
+              p.verticalScrolling = true;
+              p.card.setPointerCapture(p.id);
+            } else {
+              pointer = null;
+              return;
+            }
+          } else if (intent === "pan") {
+            clearTimeout(p.timer);
+            p.scrolling = true;
+            p.card.setPointerCapture(p.id);
+          } else if (intent === "drag") startPointer(p);
+        }
+        if (p.verticalScrolling) {
           e.preventDefault();
-          document
-            .querySelectorAll(".drop-target")
-            .forEach((c) => c.classList.remove("drop-target"));
-          const target = document
-            .elementFromPoint(e.clientX, e.clientY)
-            ?.closest("[data-entity]");
-          if (target && direction(state, pointer.from, target.dataset.entity))
-            target.classList.add("drop-target");
+          window.scrollTo(window.scrollX, p.pageScrollStart - dy);
+          return;
+        }
+        if (p.scrolling) {
+          e.preventDefault();
+          p.strip.scrollLeft = p.scrollStart - dx;
+          return;
+        }
+        if (p.dragging) {
+          e.preventDefault();
+          if (!p.frame) p.frame = requestAnimationFrame(() => paintPointer(p));
         }
       },
       { passive: false },
     );
-    function endPointer(e) {
-      if (!pointer) return;
+    // Safari decides native scrolling at pointerdown, so source circles declare
+    // touch-action:none in CSS before the gesture. Gaps and headings still scroll.
+    document.addEventListener(
+      "touchmove",
+      (e) => {
+        if (pointer?.dragging || pointer?.scrolling) e.preventDefault();
+      },
+      { passive: false },
+    );
+    async function endPointer(e) {
       const p = pointer;
-      clearTimeout(p.timer);
+      if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
       pointer = null;
-      p.card.classList.remove("dragging");
-      document
-        .querySelectorAll(".drop-target")
-        .forEach((c) => c.classList.remove("drop-target"));
+      clearTimeout(p.timer);
+      if (p.editing || p.scrolling || p.verticalScrolling) {
+        suppressClick = true;
+        if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
+        clickTimer = setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+        return;
+      }
       if (!p.dragging) return;
+      settling = true;
       suppressClick = true;
-      setTimeout(() => {
-        suppressClick = false;
-      }, 350);
-      const target = document
-        .elementFromPoint(e.clientX, e.clientY)
-        ?.closest("[data-entity]");
-      if (
-        e.type === "pointerup" &&
-        target &&
-        direction(state, p.from, target.dataset.entity)
-      )
-        movement(p.from, target.dataset.entity);
+      clearTimeout(clickTimer);
+      cancelAnimationFrame(p.frame);
+      const target =
+        e.type === "pointerup" ? dropTarget(p, e.clientX, e.clientY) : null;
+      const rect =
+        target?.querySelector(".entity-mark").getBoundingClientRect() ||
+        p.origin;
+      if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
+      p.target?.classList.remove("drop-target");
+      if (target) vibrate();
+      const reduced = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      try {
+        const animation = p.clone.animate(
+          [
+            { transform: p.clone.style.transform },
+            { transform: `translate3d(${rect.x}px, ${rect.y}px, 0) scale(1)` },
+          ],
+          {
+            duration: reduced ? 0 : target ? 150 : 200,
+            easing: "ease-out",
+            fill: "forwards",
+          },
+        );
+        await animation.finished;
+      } finally {
+        p.clone.remove();
+        document
+          .querySelectorAll(
+            ".dragging, .valid-target, .invalid-target, .drop-target",
+          )
+          .forEach((card) =>
+            card.classList.remove(
+              "dragging",
+              "valid-target",
+              "invalid-target",
+              "drop-target",
+            ),
+          );
+        document.documentElement.classList.remove("is-dragging");
+        document.body.style.top = "";
+        document.body.style.left = "";
+        window.scrollTo(p.scrollX, p.scrollY);
+        settling = false;
+        // A new tap must work immediately after settling; suppress only the drag click.
+        clickTimer = setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+      }
+      render();
+      if (target) movement(p.from, target.dataset.entity);
     }
     document.addEventListener("pointerup", endPointer);
     document.addEventListener("pointercancel", endPointer);
+    document.addEventListener("lostpointercapture", (e) => {
+      // A touch starts on the inner SVG; transferring capture to its card is
+      // expected. Cancel only when the card actually loses capture.
+      if (pointer && !pointer.card.hasPointerCapture(e.pointerId))
+        endPointer(e);
+    });
+    window.addEventListener("blur", endPointer);
+    document.addEventListener("contextmenu", (e) => {
+      if (e.target.closest("[data-entity]")) e.preventDefault();
+    });
     document.addEventListener("change", async (e) => {
       try {
         if (e.target.id === "month" && monthOK(e.target.value)) {
           month = e.target.value;
-          selected = null;
+          detailScope = "month";
+          historyLimit = 100;
           render();
         }
         if (e.target.id === "csv-file" || e.target.id === "json-file") {
