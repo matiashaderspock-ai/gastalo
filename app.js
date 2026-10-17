@@ -72,24 +72,28 @@
       imports: [],
     };
   }
-  function direction(state, from, to) {
-    if (
-      state.sources.some((e) => e.id === from) &&
-      state.accounts.some((e) => e.id === to)
-    )
-      return "income";
-    if (
-      state.accounts.some((e) => e.id === from) &&
-      state.categories.some((e) => e.id === to)
-    )
-      return "expense";
-    if (
-      from !== to &&
-      state.accounts.some((e) => e.id === from) &&
-      state.accounts.some((e) => e.id === to)
-    )
-      return "transfer";
-    return null;
+  // Pure gesture rule. Entity types use the same keys as the stored collections.
+  function canDrop(from, to) {
+    if (!from || !to || from.id === to.id) return false;
+    return (
+      (from.type === "sources" && to.type === "accounts") ||
+      (from.type === "accounts" &&
+        (to.type === "categories" || to.type === "accounts"))
+    );
+  }
+  function direction(state, fromId, toId) {
+    const resolve = (id) => {
+      const type = TYPES.find((key) => state[key].some((e) => e.id === id));
+      return type ? { id, type } : null;
+    };
+    const from = resolve(fromId),
+      to = resolve(toId);
+    if (!canDrop(from, to)) return null;
+    return from.type === "sources"
+      ? "income"
+      : to.type === "categories"
+        ? "expense"
+        : "transfer";
   }
   const posted = (state) =>
     state.transactions.filter((t) => t.status === "posted");
@@ -566,6 +570,7 @@
     shiftMonth,
     emptyState,
     direction,
+    canDrop,
     balances,
     filterTransactions,
     report,
@@ -923,48 +928,68 @@
     function monthNav() {
       return `<div class="month-nav"><button data-action="prev" aria-label="Mes anterior">←</button><label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label><button data-action="next" aria-label="Mes siguiente">→</button></div>`;
     }
+    // Original, monochrome row symbols; no external icon assets.
+    function rowIcon(key) {
+      const paths = {
+        sources: '<path d="M12 19V5m-5 5 5-5 5 5M5 19h14"/>',
+        accounts:
+          '<rect x="3" y="6" width="18" height="14" rx="3"/><path d="M3 10h18m-5 5h2M6 6V4h12"/>',
+        categories:
+          '<path d="m3 12 9 9 9-9V3h-9L3 12Z"/><circle cx="16" cy="8" r="1"/>',
+      };
+      return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[key]}</svg>`;
+    }
     function home() {
       const r = report(state, month),
         bs = balances(state);
-      return `<section class="hero"><div class="eyebrow">TU DINERO, A TU RITMO</div><h1>Un mes más claro.</h1><p>Decide dónde va cada boliviano.</p>${monthNav()}<div class="stats">${stat("Ingresos del mes", r.income, "positive")}${stat("Gastos del mes", r.expense)}${stat("Balance del mes", r.net)}</div></section>
-        <div class="flow-help"><span id="flow-message" role="status">${selected ? `Ahora elige el destino de ${esc(name(selected))}.` : "Arrastra desde ⠿ o toca origen y destino."}</span>${selected ? '<button data-action="cancel-selection">Cancelar</button>' : ""}<button class="primary" data-action="movement">+ Movimiento</button></div>
+      const balance = sum(
+        state.accounts
+          .filter((a) => !a.exclude_from_total)
+          .map((a) => bs[a.id]),
+      );
+      const monthlyBudget = sum(
+        state.budgets
+          .filter((b) => b.month === month && b.limit_cents !== null)
+          .map((b) => b.limit_cents),
+      );
+      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance", balance)}${stat("Gastos del mes", r.expense)}${stat("Presupuesto del mes", monthlyBudget)}</section>
+        <div class="home-toolbar">${monthNav()}<button class="primary" data-action="movement">+ Movimiento</button></div>
+        <div class="flow-help"><span id="flow-message" role="status">${selected ? `Ahora elige el destino de ${esc(name(selected))}.` : "Arrastra un círculo o toca origen y destino."}</span>${selected ? '<button data-action="cancel-selection">Cancelar</button>' : ""}</div>
         ${TYPES.map((key, idx) => {
           const total =
             key === "sources"
               ? r.income
               : key === "categories"
                 ? r.expense
-                : sum(
-                    state.accounts
-                      .filter((a) => !a.exclude_from_total)
-                      .map((a) => bs[a.id]),
-                  );
-          return `<section class="entity-section"><div class="section-heading"><div><span class="step">0${idx + 1}</span><h2>${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}</h2></div><span class="section-total">${key === "accounts" ? "Saldo actual" : "Este mes"} <strong>${money(total)}</strong></span><button data-action="add" data-key="${key}" aria-label="Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}">+</button></div><div class="entity-grid">${
-            active(key)
-              .map((e, i) => {
-                const value =
-                  key === "accounts"
-                    ? bs[e.id]
-                    : key === "sources"
-                      ? sum(
-                          posted(state)
-                            .filter(
-                              (t) =>
-                                t.kind === "income" &&
-                                t.from_id === e.id &&
-                                t.occurred_on.startsWith(month),
-                            )
-                            .map((t) => t.amount_cents),
-                        )
-                      : budget(state, e.id, month).spent;
-                const b =
-                  key === "categories" ? budget(state, e.id, month) : null;
-                const valid = selected && direction(state, selected, e.id);
-                return `<div class="entity-wrap"><button class="entity-card ${selected === e.id ? "selected" : ""} ${valid ? "valid-target" : ""}" data-entity="${esc(e.id)}" data-key="${key}" ${key !== "categories" ? 'draggable="true"' : ""} aria-pressed="${selected === e.id}"><span class="entity-mark mark-${idx}">${esc(e.name.slice(0, 1).toLocaleUpperCase("es"))}</span>${key !== "categories" ? '<span class="drag-grip" aria-hidden="true">⠿</span>' : ""}<span class="entity-name">${esc(e.name)}</span><strong>${money(value)}</strong><span class="entity-caption">${b ? (b.remaining === null ? "Sin límite" : b.remaining < 0 ? `${money(-b.remaining)} de exceso` : `${money(b.remaining)} disponibles`) : key === "sources" ? "recibido este mes" : "saldo actual"}${e.exclude_from_total ? " · excluida" : ""}</span>${b?.limit !== null && b ? `<progress max="${Math.max(b.limit, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)} de ${money(b.limit)}"></progress>` : ""}</button><button class="entity-edit" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}">···</button></div>`;
-              })
-              .join("") ||
-            `<button class="empty-card" data-action="add" data-key="${key}">+ Crea tu primera ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}</button>`
-          }</div></section>`;
+                : balance;
+          const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
+          return `<section class="entity-section row-${idx}"><div class="section-heading"><div><span class="step">0${idx + 1}</span><h2>${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}</h2></div><span class="section-total">${key === "accounts" ? "Saldo actual" : "Este mes"} <strong>${money(total)}</strong></span></div><div class="entity-grid">${active(
+            key,
+          )
+            .map((e) => {
+              const value =
+                key === "accounts"
+                  ? bs[e.id]
+                  : key === "sources"
+                    ? sum(
+                        posted(state)
+                          .filter(
+                            (t) =>
+                              t.kind === "income" &&
+                              t.from_id === e.id &&
+                              t.occurred_on.startsWith(month),
+                          )
+                          .map((t) => t.amount_cents),
+                      )
+                    : budget(state, e.id, month).spent;
+              const b =
+                key === "categories" ? budget(state, e.id, month) : null;
+              const valid = selected && direction(state, selected, e.id);
+              return `<div class="entity-wrap"><button class="entity-card ${selected === e.id ? "selected" : ""} ${valid ? "valid-target" : ""}" data-entity="${esc(e.id)}" data-key="${key}" aria-pressed="${selected === e.id}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><button class="entity-edit" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}">···</button></div>`;
+            })
+            .join(
+              "",
+            )}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}"><span class="entity-name">${createLabel}</span><span class="entity-mark" aria-hidden="true">+</span></button></div></section>`;
         }).join(
           "",
         )}<p class="footnote">BOB · Las transferencias mueven saldo entre cuentas. No suman ingresos ni gastos.</p>`;
@@ -1242,110 +1267,181 @@
       selected = id;
       render();
     }
-    let dragFrom = null,
-      pointer = null,
-      suppressClick = false;
-    document.addEventListener("dragstart", (e) => {
-      const card = e.target.closest('[draggable="true"]');
-      if (!card) return;
-      dragFrom = card.dataset.entity;
-      e.dataTransfer.setData("text/plain", dragFrom);
-      e.dataTransfer.effectAllowed = "link";
-    });
-    document.addEventListener("dragover", (e) => {
-      const card = e.target.closest("[data-entity]");
-      if (card && direction(state, dragFrom, card.dataset.entity)) {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "link";
+    let pointer = null,
+      settling = false,
+      suppressClick = false,
+      clickTimer;
+    const vibrate = () => {
+      try {
+        navigator.vibrate?.(15);
+      } catch {
+        /* Optional on Safari and PWAs. */
       }
-    });
-    document.addEventListener("drop", (e) => {
-      const card = e.target.closest("[data-entity]");
-      if (card && direction(state, dragFrom, card.dataset.entity)) {
-        e.preventDefault();
-        movement(dragFrom, card.dataset.entity);
+    };
+    const dropTarget = (p, x, y) => {
+      const card = document.elementFromPoint(x, y)?.closest("[data-entity]");
+      return card && direction(state, p.from, card.dataset.entity)
+        ? card
+        : null;
+    };
+    function paintPointer(p) {
+      p.frame = null;
+      // Viewport coordinates stay stable while the page is locked.
+      p.clone.style.transform = `translate3d(${p.x - 24}px, ${p.y - 64}px, 0) scale(1.4)`;
+      const target = dropTarget(p, p.x, p.y);
+      if (target !== p.target) {
+        p.target?.classList.remove("drop-target");
+        target?.classList.add("drop-target");
+        p.target = target;
       }
-      dragFrom = null;
-    });
-    document.addEventListener("dragend", () => {
-      dragFrom = null;
-    });
-    // Touch: hold briefly to drag; regular taps and scrolling remain native.
+    }
+    function startPointer(p) {
+      if (pointer !== p || p.dragging) return;
+      clearTimeout(p.timer);
+      p.dragging = true;
+      p.origin = p.card.querySelector(".entity-mark").getBoundingClientRect();
+      p.clone = p.card.querySelector(".entity-mark").cloneNode(true);
+      p.clone.classList.add("drag-clone");
+      p.clone.setAttribute("aria-hidden", "true");
+      p.clone.style.setProperty(
+        "--row-color",
+        getComputedStyle(p.card).getPropertyValue("--row-color"),
+      );
+      document.body.append(p.clone);
+      p.card.classList.add("dragging");
+      document.querySelectorAll("[data-entity]").forEach((card) => {
+        card.classList.toggle(
+          "valid-target",
+          !!direction(state, p.from, card.dataset.entity),
+        );
+        card.classList.toggle(
+          "invalid-target",
+          card !== p.card && !direction(state, p.from, card.dataset.entity),
+        );
+      });
+      p.scrollX = window.scrollX;
+      p.scrollY = window.scrollY;
+      // Fixed body also prevents rubber-band page scrolling in installed iOS PWAs.
+      document.body.style.top = `-${p.scrollY}px`;
+      document.body.style.left = `-${p.scrollX}px`;
+      document.documentElement.classList.add("is-dragging");
+      p.card.setPointerCapture(p.id);
+      paintPointer(p);
+      vibrate();
+    }
     document.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse") return;
-      const card = e.target.closest('[draggable="true"]');
+      if (pointer || settling || !e.isPrimary || e.button !== 0) return;
+      const card = e.target.closest(
+        '[data-entity]:not([data-key="categories"])',
+      );
       if (!card) return;
-      pointer = {
+      const p = (pointer = {
         id: e.pointerId,
         from: card.dataset.entity,
+        card,
+        startX: e.clientX,
+        startY: e.clientY,
         x: e.clientX,
         y: e.clientY,
         dragging: false,
-        card,
-      };
-      pointer.timer = setTimeout(
-        () => {
-          if (!pointer) return;
-          pointer.dragging = true;
-          card.classList.add("dragging");
-          card.setPointerCapture(e.pointerId);
-          navigator.vibrate?.(15);
-        },
-        e.target.closest(".drag-grip") ? 0 : 280,
-      );
+      });
+      p.timer = setTimeout(() => startPointer(p), 150);
     });
     document.addEventListener(
       "pointermove",
       (e) => {
-        if (!pointer || e.pointerId !== pointer.id) return;
-        if (
-          !pointer.dragging &&
-          Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 8
-        ) {
-          clearTimeout(pointer.timer);
-          pointer = null;
-          return;
-        }
-        if (pointer.dragging) {
+        const p = pointer;
+        if (!p || e.pointerId !== p.id) return;
+        p.x = e.clientX;
+        p.y = e.clientY;
+        if (!p.dragging && Math.hypot(p.x - p.startX, p.y - p.startY) > 6)
+          startPointer(p);
+        if (p.dragging) {
           e.preventDefault();
-          document
-            .querySelectorAll(".drop-target")
-            .forEach((c) => c.classList.remove("drop-target"));
-          const target = document
-            .elementFromPoint(e.clientX, e.clientY)
-            ?.closest("[data-entity]");
-          if (target && direction(state, pointer.from, target.dataset.entity))
-            target.classList.add("drop-target");
+          if (!p.frame) p.frame = requestAnimationFrame(() => paintPointer(p));
         }
       },
       { passive: false },
     );
-    function endPointer(e) {
-      if (!pointer) return;
+    // Safari decides native scrolling at pointerdown, so source circles declare
+    // touch-action:none in CSS before the gesture. Gaps and headings still scroll.
+    document.addEventListener(
+      "touchmove",
+      (e) => {
+        if (pointer?.dragging) e.preventDefault();
+      },
+      { passive: false },
+    );
+    async function endPointer(e) {
       const p = pointer;
-      clearTimeout(p.timer);
+      if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
       pointer = null;
-      p.card.classList.remove("dragging");
-      document
-        .querySelectorAll(".drop-target")
-        .forEach((c) => c.classList.remove("drop-target"));
+      clearTimeout(p.timer);
       if (!p.dragging) return;
+      settling = true;
       suppressClick = true;
-      setTimeout(() => {
-        suppressClick = false;
-      }, 350);
-      const target = document
-        .elementFromPoint(e.clientX, e.clientY)
-        ?.closest("[data-entity]");
-      if (
-        e.type === "pointerup" &&
-        target &&
-        direction(state, p.from, target.dataset.entity)
-      )
-        movement(p.from, target.dataset.entity);
+      clearTimeout(clickTimer);
+      cancelAnimationFrame(p.frame);
+      const target =
+        e.type === "pointerup" ? dropTarget(p, e.clientX, e.clientY) : null;
+      const rect =
+        target?.querySelector(".entity-mark").getBoundingClientRect() ||
+        p.origin;
+      if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
+      p.target?.classList.remove("drop-target");
+      if (target) vibrate();
+      const reduced = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      try {
+        const animation = p.clone.animate(
+          [
+            { transform: p.clone.style.transform },
+            { transform: `translate3d(${rect.x}px, ${rect.y}px, 0) scale(1)` },
+          ],
+          {
+            duration: reduced ? 0 : target ? 150 : 200,
+            easing: "ease-out",
+            fill: "forwards",
+          },
+        );
+        await animation.finished;
+      } finally {
+        p.clone.remove();
+        document
+          .querySelectorAll(
+            ".dragging, .valid-target, .invalid-target, .drop-target",
+          )
+          .forEach((card) =>
+            card.classList.remove(
+              "dragging",
+              "valid-target",
+              "invalid-target",
+              "drop-target",
+            ),
+          );
+        document.documentElement.classList.remove("is-dragging");
+        document.body.style.top = "";
+        document.body.style.left = "";
+        window.scrollTo(p.scrollX, p.scrollY);
+        settling = false;
+        // A new tap must work immediately after settling; suppress only the drag click.
+        clickTimer = setTimeout(() => {
+          suppressClick = false;
+        }, 0);
+      }
+      selected = null;
+      render();
+      if (target) movement(p.from, target.dataset.entity);
     }
     document.addEventListener("pointerup", endPointer);
     document.addEventListener("pointercancel", endPointer);
+    document.addEventListener("lostpointercapture", endPointer);
+    window.addEventListener("blur", endPointer);
+    document.addEventListener("contextmenu", (e) => {
+      if (e.target.closest('[data-entity]:not([data-key="categories"])'))
+        e.preventDefault();
+    });
     document.addEventListener("change", async (e) => {
       try {
         if (e.target.id === "month" && monthOK(e.target.value)) {

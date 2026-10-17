@@ -148,9 +148,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.getByRole("button", { name: "Inicio", exact: true }).click();
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
-    // Actual touch events on the grip exercise pointer capture and iPhone drag/drop.
+    // Real touch input exercises the circle, long press, clone and pointer capture.
     await card("Banco").scrollIntoViewIfNeeded();
-    const grip = await card("Banco").locator(".drag-grip").boundingBox();
+    const grip = await card("Banco").locator(".entity-mark").boundingBox();
     const target = await card("Efectivo").boundingBox();
     const cdp = await context.newCDPSession(page);
     const point = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
@@ -158,7 +158,30 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       type: "touchStart",
       touchPoints: [point],
     });
-    await page.waitForTimeout(320);
+    await page.locator(".drag-clone").waitFor();
+    assert.equal(
+      await card("Banco").evaluate((e) => e.classList.contains("dragging")),
+      true,
+    );
+    assert.equal(
+      await card("Efectivo").evaluate((e) =>
+        e.classList.contains("valid-target"),
+      ),
+      true,
+    );
+    assert.equal(
+      await card("Trabajo").evaluate((e) =>
+        e.classList.contains("invalid-target"),
+      ),
+      true,
+    );
+    assert.equal(
+      await page
+        .locator(".drag-clone")
+        .evaluate((e) => getComputedStyle(e).opacity),
+      "1",
+    );
+    const lockedScroll = await page.evaluate(() => document.body.style.top);
     for (let i = 1; i <= 6; i++) {
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
@@ -170,6 +193,25 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         ],
       });
     }
+    await page.waitForTimeout(30);
+    assert.equal(
+      await card("Efectivo").evaluate((e) =>
+        e.classList.contains("drop-target"),
+      ),
+      true,
+    );
+    assert.equal(
+      await page.evaluate(() => document.body.style.top),
+      lockedScroll,
+    );
+    const cloneBox = await page.locator(".drag-clone").boundingBox();
+    assert.ok(Math.abs(cloneBox.width - 67.2) < 1);
+    assert.ok(
+      Math.abs(
+        cloneBox.x + cloneBox.width / 2 - (target.x + target.width / 2),
+      ) < 2,
+    );
+    await page.screenshot({ path: "/tmp/gastalo-drag.png" });
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchEnd",
       touchPoints: [],
@@ -180,8 +222,19 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       "Efectivo",
     );
     await page.getByRole("button", { name: "Cancelar", exact: true }).click();
-    // Real HTML drag/drop opens a preselected form; cancellation leaves balances intact.
-    await card("Banco").dragTo(card("Comida"));
+    // Mouse uses the same Pointer Events path; >6px starts without a hold.
+    const bankCircle = await card("Banco")
+      .locator(".entity-mark")
+      .boundingBox();
+    const foodCircle = await card("Comida")
+      .locator(".entity-mark")
+      .boundingBox();
+    await page.mouse.move(bankCircle.x + 24, bankCircle.y + 24);
+    await page.mouse.down();
+    await page.mouse.move(bankCircle.x + 32, bankCircle.y + 24);
+    await page.locator(".drag-clone").waitFor();
+    await page.mouse.move(foodCircle.x + 24, foodCircle.y + 24, { steps: 8 });
+    await page.mouse.up();
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
     assert.equal(
       await page.locator('#dialog [name="from"] option:checked').innerText(),
@@ -199,6 +252,64 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       false,
       "No horizontal overflow on iPhone",
     );
+    // Outside drop and pointer cancellation return the clone and leave no form or lock.
+    for (const cancel of [false, true]) {
+      const box = await card("Banco").locator(".entity-mark").boundingBox();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await page.locator(".drag-clone").waitFor();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: 3, y: 120 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: cancel ? "touchCancel" : "touchEnd",
+        touchPoints: [],
+      });
+      await page.locator(".drag-clone").waitFor({ state: "detached" });
+      assert.equal(
+        await page.locator("#dialog").evaluate((e) => e.open),
+        false,
+      );
+      assert.equal(
+        await page
+          .locator("html")
+          .evaluate((e) => e.classList.contains("is-dragging")),
+        false,
+      );
+    }
+    // Category grids stay compact, wrap to new rows and always retain four columns.
+    for (let i = 2; i <= 20; i++)
+      await add("categories", `Categoría ${i} nombre largo`);
+    const categoryGrid = page.locator(".row-2 .entity-grid");
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert.equal(
+        await categoryGrid.evaluate(
+          (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
+        ),
+        4,
+      );
+      assert.equal(
+        await categoryGrid.evaluate((e) => e.scrollWidth > e.clientWidth),
+        false,
+      );
+      assert.ok((await categoryGrid.boundingBox()).height < 700);
+      assert.equal(
+        (await card("Comida").locator(".entity-mark").boundingBox()).width,
+        48,
+      );
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+      );
+    }
+    await page.locator(".row-2").scrollIntoViewIfNeeded();
+    assert.ok((await page.locator(".home-totals").boundingBox()).y <= 1);
     await page.screenshot({ path: "/tmp/gastalo-mobile.png", fullPage: true });
     await page.evaluate(async () => {
       await navigator.serviceWorker.ready;
