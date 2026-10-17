@@ -52,8 +52,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         .locator(".entity-card")
         .filter({ has: page.locator(".entity-name", { hasText: text }) });
     async function transaction(from, to, amount, note = "") {
-      await card(from).tap();
-      await card(to).tap();
+      await page.locator('[data-action="movement"]').first().click();
+      const fromId = await card(from).getAttribute("data-entity");
+      const toId = await card(to).getAttribute("data-entity");
+      await page.locator('#dialog [name="from"]').selectOption(fromId);
+      await page.locator('#dialog [name="to"]').selectOption(toId);
       await page.locator('#dialog [name="amount"]').fill(amount);
       await page.locator('#dialog [name="note"]').fill(note);
       await page.locator('#dialog [name="newTag"]').fill("Personal");
@@ -70,6 +73,91 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.match(await card("Banco").innerText(), /900,10/);
     assert.match(await card("Efectivo").innerText(), /74,50/);
+    assert.equal(
+      await page.locator(".entity-edit, .entity-section h2").count(),
+      0,
+    );
+    assert.ok(
+      (await page.locator(".compact-month").boundingBox()).height <= 36,
+    );
+    assert.equal(
+      await page
+        .locator(".home-totals .stat")
+        .first()
+        .evaluate((e) => getComputedStyle(e).borderTopWidth),
+      "0px",
+    );
+    const consultedMonth = await page.locator("#month").inputValue();
+    await page.locator(".month-picker input").click();
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", { name: "Mes anterior", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Mes siguiente", exact: true })
+      .click();
+    assert.equal(await page.locator("#month").inputValue(), consultedMonth);
+    // A tap opens each entity, without opening a movement form.
+    for (const [name, caption, count] of [
+      ["Trabajo", "Ingresos por mes", 1],
+      ["Banco", "Saldo al cierre de cada mes", 2],
+      ["Comida", "Gastos por mes", 1],
+    ]) {
+      await card(name).tap();
+      await page.getByRole("heading", { name, exact: true }).waitFor();
+      assert.equal(
+        await page.locator("#dialog").evaluate((e) => e.open),
+        false,
+      );
+      assert.equal(
+        await page.locator(".entity-history .transaction").count(),
+        count,
+      );
+      await page.getByRole("heading", { name: caption, exact: true }).waitFor();
+      assert.equal(await page.locator(".entity-chart tbody tr").count(), 12);
+      if (name === "Comida")
+        assert.match(
+          await page.locator(".transaction-end > strong").innerText(),
+          /^−Bs /,
+        );
+      if (name === "Trabajo")
+        assert.match(
+          await page.locator(".transaction-end > strong").innerText(),
+          /^\+Bs /,
+        );
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+      );
+      await page.locator('.detail-toolbar [data-action="edit-entity"]').click();
+      assert.equal(
+        await page.locator('#dialog [name="name"]').inputValue(),
+        name,
+      );
+      await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+      if (name === "Trabajo") {
+        await page.locator('[data-action="delete-transaction"]').click();
+        await page
+          .getByText("No hay movimientos en este período.", { exact: true })
+          .waitFor();
+        assert.equal(
+          await page.locator(".entity-history .transaction").count(),
+          0,
+        );
+        assert.match(await page.locator(".detail-totals").innerText(), /0,00/);
+        await page.locator('#toast [data-action="undo"]').click();
+        await page.locator(".entity-history .transaction").waitFor();
+        assert.equal(
+          await page.locator(".entity-history .transaction").count(),
+          1,
+        );
+      }
+      await page
+        .getByRole("button", { name: "Volver a Inicio", exact: true })
+        .click();
+    }
     await page.getByRole("button", { name: "Límites", exact: true }).click();
     await page
       .getByRole("button", { name: "Editar límite de este mes" })
@@ -167,6 +255,45 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.getByRole("button", { name: "Inicio", exact: true }).click();
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
+    // Entity detail has its own scope, month switching and signed account history.
+    await card("Comida").tap();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 1);
+    await page
+      .getByRole("button", { name: "Todo el historial", exact: true })
+      .click();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 2);
+    await page
+      .getByRole("button", { name: "Mes anterior", exact: true })
+      .click();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 0);
+    await page
+      .getByRole("button", { name: "Mes siguiente", exact: true })
+      .click();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 1);
+    await page
+      .getByRole("button", { name: "Volver a Inicio", exact: true })
+      .click();
+    await card("Banco").tap();
+    const incomeRow = page
+      .locator(".transaction")
+      .filter({ hasText: "Ingreso" });
+    await incomeRow.locator('[data-action="delete-transaction"]').click();
+    await incomeRow.waitFor({ state: "detached" });
+    assert.equal(await page.locator(".entity-history .transaction").count(), 1);
+    assert.match(await page.locator(".detail-totals").innerText(), /850,00/);
+    await page.locator('#toast [data-action="undo"]').click();
+    await incomeRow.waitFor();
+    assert.match(
+      await page.locator(".detail-totals").innerText(),
+      /1\.850,00|1850,00/,
+    );
+    await page.screenshot({
+      path: "/tmp/gastalo-account-detail.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Volver a Inicio", exact: true })
+      .click();
     // Real touch input exercises the circle, long press, clone and pointer capture.
     await card("Banco").scrollIntoViewIfNeeded();
     const grip = await card("Banco").locator(".entity-mark").boundingBox();
@@ -370,7 +497,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: mobile CRUD, tap/drag, budgets, filters, reports, JSON/CSV, reload, concurrent tabs, offline persistence, desktop layout.",
+      "PASS: entity history/charts/deletion, notices, mobile CRUD, pointer drag, budgets, filters, reports, JSON/CSV, reload, concurrent tabs, offline persistence, desktop layout.",
     );
   } finally {
     await browser.close();

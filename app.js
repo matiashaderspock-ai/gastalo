@@ -177,6 +177,33 @@
       return { month: m, ...report(state, m, filters) };
     });
   }
+  // Read-only monthly history: flows for sources/categories, closing balance for accounts.
+  function entityEvolution(state, id, month) {
+    const type = TYPES.find((key) => state[key].some((e) => e.id === id));
+    assert(type, "Entidad inexistente.");
+    const item = state[type].find((e) => e.id === id);
+    const ts = filterTransactions(state, { entities: [id] });
+    return Array.from({ length: 12 }, (_, i) => {
+      const m = shiftMonth(month, i - 11);
+      const end = shiftMonth(m, 1) + "-01";
+      const value =
+        type === "accounts"
+          ? sum([
+              item.opening_date < end ? item.opening_balance_cents : 0,
+              ...ts
+                .filter((t) => t.occurred_on < end)
+                .map((t) =>
+                  t.to_id === id ? t.amount_cents : -t.amount_cents,
+                ),
+            ])
+          : sum(
+              ts
+                .filter((t) => t.occurred_on.startsWith(m))
+                .map((t) => t.amount_cents),
+            );
+      return { month: m, value };
+    });
+  }
   function validateState(s) {
     assert(
       s && s.schemaVersion === SCHEMA_VERSION,
@@ -576,6 +603,7 @@
     report,
     budget,
     evolution,
+    entityEvolution,
     validateState,
     backup,
     restore,
@@ -620,7 +648,9 @@
       revision = 0,
       db,
       view = "home",
-      selected = null,
+      detailId = null,
+      detailScope = "month",
+      homeScroll = 0,
       undo = null,
       pendingImport = null,
       historyLimit = 100,
@@ -707,7 +737,6 @@
             );
         });
         state = next;
-        selected = null;
         revision++;
         undo = reversible ? before : null;
         render();
@@ -848,7 +877,7 @@
         );
       };
       update(t?.to_id || to);
-      fromSelect.onchange = () => update("");
+      fromSelect.onchange = () => update(to);
     }
     function editEntity(key, id = null) {
       const e = id ? state[key].find((e) => e.id === id) : null;
@@ -935,8 +964,11 @@
     function stat(label, amount, cls = "") {
       return `<div class="stat ${cls}"><span>${label}</span><strong><small>Bs</small>${money(amount).slice(3)}</strong></div>`;
     }
-    function monthNav() {
-      return `<div class="month-nav"><button data-action="prev" aria-label="Mes anterior">←</button><label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label><button data-action="next" aria-label="Mes siguiente">→</button></div>`;
+    function monthNav(compact = false) {
+      const picker = compact
+        ? `<label class="month-picker"><span aria-hidden="true">${esc(new Intl.DateTimeFormat("es-BO", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(month + "-15T12:00:00Z")))}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
+        : `<label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label>`;
+      return `<div class="month-nav ${compact ? "compact-month" : ""}"><button data-action="prev" aria-label="Mes anterior">‹</button>${picker}<button data-action="next" aria-label="Mes siguiente">›</button></div>`;
     }
     // Original, monochrome row symbols; no external icon assets.
     function rowIcon(key) {
@@ -962,18 +994,12 @@
           .filter((b) => b.month === month && b.limit_cents !== null)
           .map((b) => b.limit_cents),
       );
-      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance", balance)}${stat("Gastos del mes", r.expense)}${stat("Presupuesto del mes", monthlyBudget)}</section>
-        <div class="home-toolbar">${monthNav()}<button class="primary" data-action="movement">+ Movimiento</button></div>
-        <div class="flow-help"><span id="flow-message" role="status">${selected ? `Ahora elige el destino de ${esc(name(selected))}.` : "Arrastra un círculo o toca origen y destino."}</span>${selected ? '<button data-action="cancel-selection">Cancelar</button>' : ""}</div>
+      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance", balance)}${stat("Gastos del mes", r.expense)}${stat("Presupuesto", monthlyBudget)}</section>
+        <div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
+        <p class="home-hint">Toca para ver el historial · Arrastra para mover</p>
         ${TYPES.map((key, idx) => {
-          const total =
-            key === "sources"
-              ? r.income
-              : key === "categories"
-                ? r.expense
-                : balance;
           const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
-          return `<section class="entity-section row-${idx}"><div class="section-heading"><div><span class="step">0${idx + 1}</span><h2>${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}</h2></div><span class="section-total">${key === "accounts" ? "Saldo actual" : "Este mes"} <strong>${money(total)}</strong></span></div><div class="entity-grid">${active(
+          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${active(
             key,
           )
             .map((e) => {
@@ -994,8 +1020,7 @@
                     : budget(state, e.id, month).spent;
               const b =
                 key === "categories" ? budget(state, e.id, month) : null;
-              const valid = selected && direction(state, selected, e.id);
-              return `<div class="entity-wrap"><button class="entity-card ${selected === e.id ? "selected" : ""} ${valid ? "valid-target" : ""}" data-entity="${esc(e.id)}" data-key="${key}" aria-pressed="${selected === e.id}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><button class="entity-edit" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}">···</button></div>`;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button></div>`;
             })
             .join(
               "",
@@ -1025,6 +1050,84 @@
           .join("")}</select></label>
         <label class="wide">Buscar en nota<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="Ej. almuerzo"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">Aplicar filtros</button><button data-action="clear-filters">Ver todo</button></div></details>`;
     }
+    function transactionRow(t, contextId = null) {
+      const sign = !contextId
+        ? ""
+        : t.kind === "expense"
+          ? "−"
+          : t.kind === "income" || t.to_id === contextId
+            ? "+"
+            : "−";
+      return `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+    }
+    function entityChart(id, type) {
+      const series = entityEvolution(state, id, month);
+      const low = Math.min(0, ...series.map((p) => p.value));
+      const high = Math.max(0, ...series.map((p) => p.value));
+      const range = high - low || 1;
+      const x = (i) => 90 + i * 45;
+      const y = (value) => 150 - ((value - low) / range) * 130;
+      const points = series.map((p, i) => `${x(i)},${y(p.value)}`).join(" L ");
+      const caption =
+        type === "accounts"
+          ? "Saldo al cierre de cada mes"
+          : type === "sources"
+            ? "Ingresos por mes"
+            : "Gastos por mes";
+      const ticks = [...new Set([high, Math.round((high + low) / 2), low])];
+      const axisNumber = new Intl.NumberFormat("es-BO", {
+        notation: "compact",
+        maximumFractionDigits: 1,
+      });
+      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><svg viewBox="0 0 610 190" role="img" aria-labelledby="chart-title chart-description"><title id="chart-title">${caption} · ${esc(name(id))}</title><desc id="chart-description">${series.map((p) => `${p.month}: ${money(p.value)}`).join("; ")}. Datos disponibles en la tabla siguiente.</desc>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${series[i].month.slice(5)}/${series[i].month.slice(2, 4)}</text>`).join("")}</svg><details class="chart-data"><summary>Ver datos del gráfico</summary><table><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p) => `<tr><td>${p.month}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></details></section>`;
+    }
+    function detail() {
+      const type = TYPES.find((key) =>
+        state[key].some((e) => e.id === detailId),
+      );
+      if (!type)
+        return '<p class="empty">Esta entidad ya no está disponible.</p><button data-view="home">Volver a Inicio</button>';
+      const item = entity(detailId);
+      const all = filterTransactions(state, { entities: [detailId] }).sort(
+        (a, b) =>
+          b.occurred_on.localeCompare(a.occurred_on) ||
+          b.created_at.localeCompare(a.created_at),
+      );
+      const ts = all.filter(
+        (t) => detailScope === "all" || t.occurred_on.startsWith(month),
+      );
+      const monthly = all.filter((t) => t.occurred_on.startsWith(month));
+      const incoming = sum(
+        monthly
+          .filter((t) => t.to_id === detailId || t.kind === "income")
+          .map((t) => t.amount_cents),
+      );
+      const outgoing = sum(
+        monthly
+          .filter((t) => t.from_id === detailId || t.kind === "expense")
+          .map((t) => t.amount_cents),
+      );
+      const groups = new Map();
+      for (const t of ts.slice(0, historyLimit)) {
+        if (!groups.has(t.occurred_on)) groups.set(t.occurred_on, []);
+        groups.get(t.occurred_on).push(t);
+      }
+      const summary =
+        type === "accounts"
+          ? stat("Saldo actual", balances(state)[detailId]) +
+            stat("Entradas del mes", incoming) +
+            stat("Salidas del mes", outgoing)
+          : type === "sources"
+            ? stat("Ingresos del mes", incoming)
+            : stat("Gastos del mes", outgoing) +
+              (budget(state, detailId, month).limit !== null
+                ? stat(
+                    "Presupuesto del mes",
+                    budget(state, detailId, month).limit,
+                  )
+                : "");
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-toolbar"><button data-action="back-home" aria-label="Volver a Inicio">‹</button><div><span class="detail-kind">${{ sources: "Fuente de ingreso", accounts: "Cuenta", categories: "Categoría de gasto" }[type]}</span><h1>${esc(item.name)}</h1></div><button data-action="edit-entity" data-key="${type}" data-id="${esc(detailId)}">Editar</button></div><div class="detail-period">${monthNav(true)}<button data-action="entity-movement">+ Movimiento</button></div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${esc(new Intl.DateTimeFormat("es-BO", { dateStyle: "long", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z")))}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+    }
     function history() {
       const ts = filterTransactions(state, filters).sort(
         (a, b) =>
@@ -1040,10 +1143,7 @@
       return `<div class="page-heading"><div class="eyebrow">CADA MOVIMIENTO CUENTA</div><h1>Historial</h1><p>Consulta, edita o borra movimientos individuales.</p></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
         ts
           .slice(0, historyLimit)
-          .map(
-            (t) =>
-              `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`,
-          )
+          .map((t) => transactionRow(t))
           .join("") ||
         '<p class="empty">No hay movimientos con estos filtros.</p>'
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
@@ -1102,14 +1202,24 @@
       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Haz respaldos frecuentes: borrar los datos de Safari o perder el dispositivo puede borrar el historial. No hay sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
     }
     function render() {
-      $("#main").innerHTML = { home, history, budgets, reports, settings }[
-        view
-      ]();
+      $("#main").innerHTML = {
+        home,
+        detail,
+        history,
+        budgets,
+        reports,
+        settings,
+      }[view]();
       document.querySelectorAll("nav button").forEach((button) => {
-        button.classList.toggle("active", button.dataset.view === view);
+        button.classList.toggle(
+          "active",
+          button.dataset.view === (view === "detail" ? "home" : view),
+        );
         button.setAttribute(
           "aria-current",
-          button.dataset.view === view ? "page" : "false",
+          button.dataset.view === (view === "detail" ? "home" : view)
+            ? "page"
+            : "false",
         );
       });
       $("#undo-button").hidden = !undo;
@@ -1121,7 +1231,6 @@
         `<p>${esc(source)}</p><dl class="import-summary"><div><dt>Movimientos aceptados</dt><dd>${next.transactions.length}</dd></div><div><dt>Filas pendientes</dt><dd>${next.review.length}</dd></div><div><dt>Cuentas</dt><dd>${next.accounts.length}</dd></div><div><dt>Categorías</dt><dd>${next.categories.length}</dd></div></dl><p>Se reemplazarán los datos actuales (${state.transactions.length} movimientos). Puedes descargar un respaldo antes de continuar.</p><button type="button" data-action="export">Descargar respaldo actual</button><label class="check"><input name="confirm" type="checkbox" required>Entiendo que se reemplazarán los datos de este dispositivo.</label>${actions("Importar y reemplazar")}`,
         async () => {
           await commit(pendingImport, "Importación guardada");
-          selected = null;
           pendingImport = null;
         },
       );
@@ -1141,7 +1250,6 @@
         id = button.dataset.id;
       if (button.dataset.view) {
         view = button.dataset.view;
-        selected = null;
         historyLimit = 100;
         render();
         window.scrollTo(0, 0);
@@ -1154,9 +1262,25 @@
         if (undo) await commit(copy(undo), "Cambio deshecho");
         return;
       }
-      if (action === "cancel-selection") {
-        selected = null;
+      if (action === "back-home") {
+        view = "home";
+        render();
+        window.scrollTo(0, homeScroll);
+        [...document.querySelectorAll("[data-entity]")]
+          .find((card) => card.dataset.entity === detailId)
+          ?.focus({ preventScroll: true });
+        return;
+      }
+      if (action === "detail-scope") {
+        detailScope = button.dataset.scope;
+        historyLimit = 100;
         return render();
+      }
+      if (action === "entity-movement") {
+        return movement(
+          state.categories.some((c) => c.id === detailId) ? "" : detailId,
+          state.categories.some((c) => c.id === detailId) ? detailId : "",
+        );
       }
       if (action === "movement") return movement();
       if (action === "add") return editEntity(button.dataset.key);
@@ -1177,7 +1301,8 @@
       }
       if (action === "prev" || action === "next") {
         month = shiftMonth(month, action === "prev" ? -1 : 1);
-        selected = null;
+        detailScope = "month";
+        historyLimit = 100;
         return render();
       }
       if (action === "more") {
@@ -1249,30 +1374,27 @@
       }
     }
     document.addEventListener("click", (e) => {
+      if (e.target.matches(".month-picker input")) {
+        try {
+          e.target.showPicker?.();
+        } catch {
+          // Native input interaction remains available on browsers without showPicker.
+        }
+      }
       const button = e.target.closest("[data-action], [data-view]");
       if (button) handleAction(button).catch((error) => notify(error.message));
       const card = e.target.closest("[data-entity]");
-      if (card && !suppressClick) choose(card.dataset.entity);
+      if (card && !suppressClick) openEntity(card.dataset.entity);
     });
-    function choose(id) {
-      if (selected === id) {
-        selected = null;
-        render();
-        return;
-      }
-      if (selected && direction(state, selected, id)) {
-        const from = selected;
-        selected = null;
-        render();
-        movement(from, id);
-        return;
-      }
-      if (state.categories.some((c) => c.id === id)) {
-        notify("Elige primero una cuenta de origen.");
-        return;
-      }
-      selected = id;
+    function openEntity(id) {
+      homeScroll = window.scrollY;
+      detailId = id;
+      detailScope = "month";
+      historyLimit = 100;
+      view = "detail";
       render();
+      window.scrollTo(0, 0);
+      $("#main").focus();
     }
     let pointer = null,
       settling = false,
@@ -1437,7 +1559,6 @@
           suppressClick = false;
         }, 0);
       }
-      selected = null;
       render();
       if (target) movement(p.from, target.dataset.entity);
     }
@@ -1453,7 +1574,8 @@
       try {
         if (e.target.id === "month" && monthOK(e.target.value)) {
           month = e.target.value;
-          selected = null;
+          detailScope = "month";
+          historyLimit = 100;
           render();
         }
         if (e.target.id === "csv-file" || e.target.id === "json-file") {
