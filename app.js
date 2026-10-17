@@ -1027,7 +1027,7 @@
         expense = sum(
           ts.filter((t) => t.kind === "expense").map((t) => t.amount_cents),
         );
-      return `<div class="page-heading"><div class="eyebrow">CADA MOVIMIENTO CUENTA</div><h1>Historial</h1><p>Encuentra, corrige y sigue adelante.</p></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
+      return `<div class="page-heading"><div class="eyebrow">CADA MOVIMIENTO CUENTA</div><h1>Historial</h1><p>Consulta, edita o borra movimientos individuales.</p></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
         ts
           .slice(0, historyLimit)
           .map(
@@ -1061,7 +1061,7 @@
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
-      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Reportes</h1><p>Ingresos, gastos y decisiones con perspectiva.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
+      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Reportes</h1><p>Totales por categoría y evolución mensual de ingresos y gastos.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
       <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
         r.categories
           .filter((c) => c.spent)
@@ -1077,7 +1077,7 @@
     function settings() {
       return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Datos y ajustes</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
       <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
-      <section class="panel"><h2>Traer tu historial de CoinKeeper</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
+      <section class="panel"><h2>Trae tu historial desde otra app</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
           .slice(0, historyLimit)
