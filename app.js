@@ -185,6 +185,24 @@
         (to.type === "categories" || to.type === "accounts"))
     );
   }
+  // Decide before capturing the pointer or blocking native page scrolling.
+  function gestureIntent({
+    dx, dy, elapsedMs, onCircle, canDrag, canPan, pointerType,
+  }) {
+    const vertical = Math.abs(dy),
+      horizontal = Math.abs(dx);
+    if (vertical > 10 && elapsedMs < 150) return "scroll";
+    if (Math.hypot(dx, dy) <= 6) return "pending";
+    if (!onCircle) return "scroll";
+    if (
+      canPan && horizontal > vertical * 1.25 &&
+      (pointerType !== "mouse" || !canDrag) && (elapsedMs < 150 || !canDrag)
+    )
+      return "pan";
+    if (!canDrag) return "scroll";
+    if (vertical >= horizontal && elapsedMs < 150) return "pending";
+    return "drag";
+  }
   function direction(state, fromId, toId) {
     const resolve = (id) => {
       const type = TYPES.find((key) => state[key].some((e) => e.id === id));
@@ -274,6 +292,11 @@
       spent,
       remaining: limit === null ? null : sum([limit, -spent]),
     };
+  }
+  function budgetStatus(limit, spent) {
+    if (limit === null) return null;
+    const remaining = sum([limit, -spent]);
+    return { amount_cents: Math.abs(remaining), exceeded: remaining < 0 };
   }
   function evolution(state, month, filters = {}) {
     return Array.from({ length: 12 }, (_, i) => {
@@ -709,10 +732,12 @@
     emptyState,
     direction,
     canDrop,
+    gestureIntent,
     balances,
     filterTransactions,
     report,
     budget,
+    budgetStatus,
     evolution,
     entityEvolution,
     validateState,
@@ -1200,7 +1225,8 @@
                     : budget(state, e.id, month).spent;
               const b =
                 key === "categories" ? budget(state, e.id, month) : null;
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key, e)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+              const available = b ? budgetStatus(b.limit, b.spent) : null;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark">${rowIcon(key, e)}</span><strong title="${money(value)}">${money(value)}</strong>${b?.limit !== null && b ? `<span class="entity-caption" title="Presupuesto: ${money(b.limit)}">${money(b.limit)} límite</span><span class="entity-caption entity-availability${available.exceeded ? " budget-excess" : ""}" title="${money(available.amount_cents)} ${available.exceeded ? "de exceso" : "disponible"}">${money(available.amount_cents)} ${available.exceeded ? "de exceso" : "disponible"}</span>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",
@@ -1692,7 +1718,9 @@
         strip: card.closest(".entity-strip"),
         scrollStart: card.closest(".entity-strip")?.scrollLeft || 0,
         startedAt: performance.now(),
+        onCircle: !!e.target.closest(".entity-mark"),
         allowDrag: !editingEntities && card.dataset.key !== "categories",
+        pageScrollStart: window.scrollY,
       });
       p.timer = editingEntities
         ? null
@@ -1718,23 +1746,37 @@
         }
         const dx = p.x - p.startX,
           dy = p.y - p.startY;
-        if (!p.dragging && !p.scrolling && Math.hypot(dx, dy) > 6) {
-          const canScroll =
-            p.strip && p.strip.scrollWidth > p.strip.clientWidth;
-          if (
-            canScroll &&
-            Math.abs(dx) > Math.abs(dy) * 1.25 &&
-            (e.pointerType !== "mouse" || !p.allowDrag) &&
-            (performance.now() - p.startedAt < 150 || !p.allowDrag)
-          ) {
+        if (!p.dragging && !p.scrolling && !p.verticalScrolling) {
+          const intent = gestureIntent({
+            dx,
+            dy,
+            elapsedMs: performance.now() - p.startedAt,
+            onCircle: p.onCircle,
+            canDrag: p.allowDrag,
+            canPan: !!p.strip && p.strip.scrollWidth > p.strip.clientWidth,
+            pointerType: e.pointerType,
+          });
+          if (intent === "scroll") {
+            clearTimeout(p.timer);
+            if (p.onCircle && p.card.dataset.key !== "categories") {
+              // touch-action is fixed at pointerdown. A cancelled circle drag
+              // pans the page explicitly; the rest of the card scrolls natively.
+              p.verticalScrolling = true;
+              p.card.setPointerCapture(p.id);
+            } else {
+              pointer = null;
+              return;
+            }
+          } else if (intent === "pan") {
             clearTimeout(p.timer);
             p.scrolling = true;
             p.card.setPointerCapture(p.id);
-          } else if (!p.allowDrag) {
-            clearTimeout(p.timer);
-            pointer = null;
-            return;
-          } else startPointer(p);
+          } else if (intent === "drag") startPointer(p);
+        }
+        if (p.verticalScrolling) {
+          e.preventDefault();
+          window.scrollTo(window.scrollX, p.pageScrollStart - dy);
+          return;
         }
         if (p.scrolling) {
           e.preventDefault();
@@ -1762,7 +1804,7 @@
       if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
       pointer = null;
       clearTimeout(p.timer);
-      if (p.editing || p.scrolling) {
+      if (p.editing || p.scrolling || p.verticalScrolling) {
         suppressClick = true;
         if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
         clickTimer = setTimeout(() => {

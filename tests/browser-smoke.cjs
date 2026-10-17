@@ -342,6 +342,23 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await go("Inicio");
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
+    assert.match(await card("Comida").innerText(), /174,50 disponible/);
+    assert.match(await card("Comida").innerText(), /200,00 límite/);
+    await go("Límites");
+    await page.getByRole("button", { name: "Editar límite de este mes" }).click();
+    await page.locator('#dialog [name="limit"]').fill("20");
+    await page.locator('#dialog button[type="submit"]').click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    await go("Inicio");
+    assert.match(await card("Comida").innerText(), /5,50 de exceso/);
+    assert.equal(await card("Comida").locator(".budget-excess").evaluate(
+      e => getComputedStyle(e).color), "rgb(188, 52, 52)");
+    await go("Límites");
+    await page.getByRole("button", { name: "Editar límite de este mes" }).click();
+    await page.locator('#dialog [name="limit"]').fill("200");
+    await page.locator('#dialog button[type="submit"]').click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    await go("Inicio");
     // Entity detail has its own scope, month switching and signed account history.
     await card("Comida").tap();
     assert.equal(await page.locator(".entity-history .transaction").count(), 1);
@@ -533,7 +550,32 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await add("categories", `Categoría ${i} nombre largo`);
     // Additional sources/accounts stay on one row and can be swiped independently.
     for (let i = 2; i <= 6; i++) await add("sources", `Fuente extra ${i}`);
-    for (let i = 3; i <= 6; i++) await add("accounts", `Cuenta extra ${i}`);
+    for (let i = 3; i <= 33; i++) await add("accounts", `Cuenta extra ${i}`);
+    assert.equal(await page.locator('.row-1 .entity-card').count(), 33);
+    assert.equal(await card("Categoría 2 nombre largo").locator(".entity-caption").count(), 0);
+    // Native vertical scrolling begins on names, amounts and card padding, even
+    // with 33 horizontally scrollable accounts. A circle also yields early motion.
+    for (const selector of [".entity-name", "strong", ".entity-mark", ""]) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const box = await (selector ? card("Banco").locator(selector) : card("Banco")).boundingBox();
+      const before = await page.evaluate(() => scrollY);
+      const point = { x: box.x + (selector ? box.width / 2 : 2), y: box.y + box.height / 2 };
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+      // First move must cancel pending drag before the 150 ms threshold.
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove", touchPoints: [{ x: point.x, y: point.y - 14 }],
+      });
+      for (let delta = 40; delta <= 120; delta += 40) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove", touchPoints: [{ x: point.x, y: point.y - delta }],
+        });
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      assert.ok(await page.evaluate(() => scrollY) > before + 30, `vertical page scroll from ${selector}`);
+      assert.equal(await page.locator(".drag-clone, .entity-detail").count(), 0);
+      assert.equal(await page.locator("#entity-edit-bar").isVisible(), false);
+    }
+
     async function swipeRow(row) {
       const strip = page.locator(`.row-${row} .entity-strip`);
       await strip.scrollIntoViewIfNeeded();
@@ -690,7 +732,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
+      "PASS: vertical scroll with 33 accounts, budget availability/excess, header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();

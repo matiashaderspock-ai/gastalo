@@ -551,7 +551,7 @@ main:focus {
 .entity-add:hover {
   background: transparent;
 }
-.entity-card:not([data-key="categories"]) {
+.entity-card:not([data-key="categories"]) .entity-mark {
   touch-action: none;
   cursor: grab;
 }
@@ -605,6 +605,13 @@ main:focus {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.entity-availability {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.entity-caption.budget-excess {
+  color: #bc3434;
 }
 .entity-card.valid-target .entity-mark {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--row-color) 16%, transparent);
