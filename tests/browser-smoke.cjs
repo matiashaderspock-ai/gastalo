@@ -129,10 +129,12 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.getByRole("button", { name: "Listo", exact: true }).click();
       assert.equal(await page.locator(".entity-pencil:visible").count(), 0);
     }
-    const addColumns = await page
-      .locator(".entity-add .entity-mark")
-      .evaluateAll((nodes) => nodes.map((e) => e.getBoundingClientRect().x));
-    assert.ok(addColumns.every((x) => Math.abs(x - addColumns[0]) < 1));
+    assert.equal(await page.locator('.entity-add').count(), 3);
+    assert.ok((await page.locator('.entity-add').allTextContents()).every(text => !text.trim()));
+    assert.ok(await page.locator('.entity-add .entity-mark').evaluateAll(marks => marks.every(mark => {
+      const style = getComputedStyle(mark);
+      return mark.getBoundingClientRect().width === 40 && style.borderStyle === 'solid' && style.borderWidth === '1px';
+    })));
     async function transaction(from, to, amount, note = "") {
       await page.locator('[data-action="movement"]').first().click();
       const fromId = await card(from).getAttribute("data-entity");
@@ -659,6 +661,40 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       assert.ok(positions.every((y) => Math.abs(y - positions[0]) < 1));
       await swipeRow(row);
     }
+    // The create control follows every entity and is reached by swiping the row.
+    for (const row of [0, 1]) {
+      const strip = page.locator(`.row-${row} .entity-strip`);
+      await strip.scrollIntoViewIfNeeded();
+      assert.equal(await strip.locator(':scope > .entity-add').count(), 1);
+      assert.ok(await strip.evaluate(e => e.lastElementChild.matches('.entity-add')));
+      const add = strip.locator('.entity-add');
+      const stripBox = await strip.boundingBox();
+      assert.ok((await add.boundingBox()).x >= stripBox.x + stripBox.width, 'Create is initially off-screen after more than three entities');
+      for (let swipe = 0; swipe < 15; swipe++) {
+        const visible = await strip.evaluate(e => {
+          const a = e.querySelector('.entity-add').getBoundingClientRect(), b = e.getBoundingClientRect();
+          return a.left >= b.left && a.right <= b.right + 1;
+        });
+        if (visible) break;
+        const grip = await strip.locator('.entity-card .entity-mark').evaluateAll(marks => {
+          const b = marks[0].closest('.entity-strip').getBoundingClientRect();
+          return marks.map(e => e.getBoundingClientRect()).filter(r => r.left >= b.left + 5 && r.right < b.right - 5).at(-1).toJSON();
+        });
+        const point = {x: grip.x + grip.width / 2, y: grip.y + grip.height / 2};
+        await cdp.send('Input.dispatchTouchEvent', {type:'touchStart', touchPoints:[point]});
+        await cdp.send('Input.dispatchTouchEvent', {type:'touchMove', touchPoints:[{x: point.x - stripBox.width * 0.65, y: point.y}]});
+        await cdp.send('Input.dispatchTouchEvent', {type:'touchEnd', touchPoints:[]});
+      }
+      assert.ok(await strip.evaluate(e => {
+        const a = e.querySelector('.entity-add').getBoundingClientRect(), b = e.getBoundingClientRect();
+        return a.left >= b.left && a.right <= b.right + 1;
+      }), 'Swiping reveals the final create button');
+      assert.equal(await page.locator('.drag-clone, .entity-detail').count(), 0);
+      await add.tap();
+      await page.getByRole('heading', {name: row === 0 ? 'Crear fuente' : 'Crear cuenta', exact:true}).waitFor();
+      await page.getByRole('button', {name:'Cancelar', exact:true}).click();
+      await strip.evaluate(e => e.scrollLeft = 0);
+    }
     // A brief hold still permits a horizontal transfer in an overflowing account row.
     await card("Banco").scrollIntoViewIfNeeded();
     const bank = await card("Banco").locator(".entity-mark").boundingBox();
@@ -718,7 +754,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         .last()
         .evaluate((e) => e.getBoundingClientRect().y);
       assert.ok(
-        Math.abs(corner.x + corner.width - gridBox.x - gridBox.width) < 1,
+        Math.abs(corner.x - gridBox.x) < 1,
       );
       assert.ok(corner.y >= lastCategoryY);
       for (const row of [0, 1]) {
@@ -781,7 +817,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: vertical scroll with 33 accounts, budget icon fill thresholds, header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
+      "PASS: vertical scroll with 33 accounts, budget icon fill thresholds, header menu, long-press tools, icons, amount focus, subtle create buttons at scrollable row ends and category grid end, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();
