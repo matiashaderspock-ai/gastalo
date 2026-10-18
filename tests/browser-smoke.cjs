@@ -24,27 +24,114 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.goto(base);
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
     assert.equal(await page.title(), "gástalo");
-    async function add(key, name) {
+    assert.deepEqual(
+      await page.locator(".home-totals .stat > span").allTextContents(),
+      ["Balance actual", "Gastos efectuados", "Gastos planeados"],
+    );
+    async function go(name, target = page) {
+      await target.locator("#app-menu > summary").click();
+      await target.getByRole("button", { name, exact: true }).click();
+      assert.equal(
+        await target.locator("#app-menu").evaluate((e) => e.open),
+        false,
+      );
+    }
+    const menuBox = await page.locator("#app-menu > summary").boundingBox();
+    const brandBox = await page.locator(".brand").boundingBox();
+    assert.ok(menuBox.x + menuBox.width <= brandBox.x, "Menu is left of the brand");
+    // Header disclosure exposes all five views, and supports Escape and outside click.
+    await page.locator("#app-menu > summary").click();
+    assert.equal(await page.locator("#app-menu nav button").count(), 5);
+    await page.keyboard.press("Escape");
+    assert.equal(
+      await page.locator("#app-menu").evaluate((e) => e.open),
+      false,
+    );
+    await page.locator("#app-menu > summary").click();
+    await page.locator(".home-totals .stat").last().click();
+    assert.equal(
+      await page.locator("#app-menu").evaluate((e) => e.open),
+      false,
+    );
+    assert.equal(
+      await page.locator("nav").evaluate((e) => getComputedStyle(e).position),
+      "absolute",
+    );
+    const cdp = await context.newCDPSession(page);
+    async function add(key, name, icon = "") {
       await page
         .locator(`[data-action="add"][data-key="${key}"]`)
         .first()
         .click();
       await page.locator('#dialog [name="name"]').fill(name);
+      if (icon) {
+        await page.locator('[data-action="toggle-icons"]').click();
+        await page.locator(`#icon-picker [data-icon="${icon}"]`).click();
+      }
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
     }
-    await add("sources", "Trabajo");
+    // A replacement notice gets its own full lifetime; old timers cannot hide it.
+    await page.clock.install();
+    await add("sources", "Trabajo", "work");
+    assert.ok((await page.locator("#toast").boundingBox()).height <= 44);
+    await page.clock.fastForward(2000);
     await add("accounts", "Banco");
+    await page.clock.fastForward(1100);
+    assert.equal(await page.locator("#toast").isVisible(), true);
+    await page.clock.fastForward(2000);
+    assert.equal(await page.locator("#toast").isVisible(), false);
     await add("accounts", "Efectivo");
+    await page.locator('#toast [data-action="dismiss"]').click();
+    assert.equal(await page.locator("#toast").isVisible(), false);
     await add("categories", "Comida");
     const card = (text) =>
       page
         .locator(".entity-card")
         .filter({ has: page.locator(".entity-name", { hasText: text }) });
+    async function hold(name) {
+      await card(name).scrollIntoViewIfNeeded();
+      const box = await card(name).locator(".entity-mark").boundingBox();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await page.locator("#entity-edit-bar").waitFor();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+      assert.equal(await page.locator(".drag-clone").count(), 0);
+      assert.equal(await page.locator(".entity-pencil:visible").count(), 4);
+    }
+    // Stationary holds edit every entity type; the pencil opens the icon chooser.
+    for (const name of ["Trabajo", "Banco", "Comida"]) {
+      await hold(name);
+      if (name === "Comida") {
+        await page
+          .getByRole("button", { name: "Editar Comida", exact: true })
+          .click();
+        await page.locator('[data-action="toggle-icons"]').click();
+        assert.equal(await page.locator("#icon-picker button").count(), 24);
+        await page.locator('#icon-picker [data-icon="food"]').click();
+        await page.locator('#dialog button[type="submit"]').click();
+        await page.locator("#dialog").waitFor({ state: "hidden" });
+      }
+      await page.getByRole("button", { name: "Listo", exact: true }).click();
+      assert.equal(await page.locator(".entity-pencil:visible").count(), 0);
+    }
+    const addColumns = await page
+      .locator(".entity-add .entity-mark")
+      .evaluateAll((nodes) => nodes.map((e) => e.getBoundingClientRect().x));
+    assert.ok(addColumns.every((x) => Math.abs(x - addColumns[0]) < 1));
     async function transaction(from, to, amount, note = "") {
-      await card(from).tap();
-      await card(to).tap();
+      await page.locator('[data-action="movement"]').first().click();
+      const fromId = await card(from).getAttribute("data-entity");
+      const toId = await card(to).getAttribute("data-entity");
+      await page.locator('#dialog [name="from"]').selectOption(fromId);
+      await page.locator('#dialog [name="to"]').selectOption(toId);
       await page.locator('#dialog [name="amount"]').fill(amount);
+      await page.locator(".movement-extras > summary").click();
       await page.locator('#dialog [name="note"]').fill(note);
       await page.locator('#dialog [name="newTag"]').fill("Personal");
       await page.locator('#dialog button[type="submit"]').click();
@@ -60,7 +147,106 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.match(await card("Banco").innerText(), /900,10/);
     assert.match(await card("Efectivo").innerText(), /74,50/);
-    await page.getByRole("button", { name: "Límites", exact: true }).click();
+    // The X archives the entity while retaining its movements and balance; Undo restores it.
+    await hold("Banco");
+    await page
+      .getByRole("button", { name: "Eliminar Banco", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Quitar de Inicio", exact: true })
+      .click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(await card("Banco").count(), 0);
+    assert.match(await page.locator(".home-totals").innerText(), /974,60/);
+    await page.locator('#toast [data-action="undo"]').click();
+    await card("Banco").waitFor();
+    await page.getByRole("button", { name: "Listo", exact: true }).click();
+    assert.equal(
+      await page.locator(".entity-edit, .entity-section h2").count(),
+      0,
+    );
+    assert.ok(
+      (await page.locator(".compact-month").boundingBox()).height <= 36,
+    );
+    assert.equal(
+      await page
+        .locator(".home-totals .stat")
+        .first()
+        .evaluate((e) => getComputedStyle(e).borderTopWidth),
+      "0px",
+    );
+    const consultedMonth = await page.locator("#month").inputValue();
+    await page.locator(".month-picker input").click();
+    await page.keyboard.press("Escape");
+    await page
+      .getByRole("button", { name: "Mes anterior", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Mes siguiente", exact: true })
+      .click();
+    assert.equal(await page.locator("#month").inputValue(), consultedMonth);
+    // A tap opens each entity, without opening a movement form.
+    for (const [name, caption, count] of [
+      ["Trabajo", "Ingresos por mes", 1],
+      ["Banco", "Saldo al cierre de cada mes", 2],
+      ["Comida", "Gastos por mes", 1],
+    ]) {
+      await card(name).tap();
+      await page.getByRole("heading", { name, exact: true }).waitFor();
+      assert.equal(
+        await page.locator("#dialog").evaluate((e) => e.open),
+        false,
+      );
+      assert.equal(
+        await page.locator(".entity-history .transaction").count(),
+        count,
+      );
+      await page.getByRole("heading", { name: caption, exact: true }).waitFor();
+      assert.equal(await page.locator(".entity-chart tbody tr").count(), 12);
+      if (name === "Comida")
+        assert.match(
+          await page.locator(".transaction-end > strong").innerText(),
+          /^−Bs /,
+        );
+      if (name === "Trabajo")
+        assert.match(
+          await page.locator(".transaction-end > strong").innerText(),
+          /^\+Bs /,
+        );
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+      );
+      await page.locator('.detail-toolbar [data-action="edit-entity"]').click();
+      assert.equal(
+        await page.locator('#dialog [name="name"]').inputValue(),
+        name,
+      );
+      await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+      if (name === "Trabajo") {
+        await page.locator('[data-action="delete-transaction"]').click();
+        await page
+          .getByText("No hay movimientos en este período.", { exact: true })
+          .waitFor();
+        assert.equal(
+          await page.locator(".entity-history .transaction").count(),
+          0,
+        );
+        assert.match(await page.locator(".detail-totals").innerText(), /0,00/);
+        await page.locator('#toast [data-action="undo"]').click();
+        await page.locator(".entity-history .transaction").waitFor();
+        assert.equal(
+          await page.locator(".entity-history .transaction").count(),
+          1,
+        );
+      }
+      await page
+        .getByRole("button", { name: "Volver a Inicio", exact: true })
+        .click();
+    }
+    await go("Límites");
     await page
       .getByRole("button", { name: "Editar límite de este mes" })
       .click();
@@ -74,7 +260,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByRole("button", { name: "Mes anterior", exact: true })
       .click();
     assert.match(await page.locator(".budget-card").innerText(), /174,50/);
-    await page.getByRole("button", { name: "Historial", exact: true }).click();
+    await go("Historial");
     assert.equal(await page.locator(".transaction").count(), 3);
     await page.locator("#f-text").fill("almuerzo");
     await page.getByRole("button", { name: "Aplicar filtros" }).click();
@@ -84,16 +270,25 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.match(await page.locator(".transaction-end").innerText(), /30,00/);
+    // Undo notices last eight seconds; the header keeps Undo available afterward.
+    await page.clock.fastForward(3100);
+    assert.equal(
+      await page.locator('#toast [data-action="undo"]').isVisible(),
+      true,
+    );
+    await page.clock.fastForward(5000);
+    assert.equal(await page.locator("#toast").isVisible(), false);
+    assert.equal(await page.locator("#undo-button").isVisible(), true);
     await page.locator('[data-action="delete-transaction"]').click();
     await page.getByText("No hay movimientos con estos filtros.").waitFor();
     await page.locator('#toast [data-action="undo"]').click();
     await page.locator(".transaction").waitFor();
     await page.getByRole("button", { name: "Ver todo" }).click();
-    await page.getByRole("button", { name: "Reportes", exact: true }).click();
+    await go("Reportes");
     assert.equal(await page.locator(".timeline-month").count(), 12);
     assert.match(await page.locator(".stats").innerText(), /1000,10|1\.000,10/);
     assert.match(await page.locator(".stats").innerText(), /30,00/);
-    await page.getByRole("button", { name: "Datos", exact: true }).click();
+    await go("Datos");
     const downloadWait = page.waitForEvent("download");
     await page
       .getByRole("button", { name: "Descargar respaldo JSON", exact: true })
@@ -102,6 +297,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const json = fs.readFileSync(await download.path(), "utf8");
     const exported = A.restore(json);
     assert.equal(exported.transactions.length, 3);
+    assert.equal(exported.sources[0].icon, "work");
+    assert.equal(exported.categories[0].icon, "food");
     assert.equal(exported.transactions[2].amount_cents, 3000);
     await page.locator("#json-file").setInputFiles({
       name: "backup.json",
@@ -129,7 +326,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByText("Otra pestaña cambió tus datos. Recarga antes de guardar.")
       .waitFor();
     await stale.close();
-    await page.getByRole("button", { name: "Datos", exact: true }).click();
+    await go("Datos");
     await page.locator("#import-month").fill("2026-01");
     await page
       .locator("#csv-file")
@@ -145,20 +342,108 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page
       .getByRole("heading", { name: "Revisión de importación · 1" })
       .waitFor();
-    await page.getByRole("button", { name: "Inicio", exact: true }).click();
+    await go("Inicio");
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
-    // Actual touch events on the grip exercise pointer capture and iPhone drag/drop.
+    async function assertBudgetMark(tone, fill) {
+      const mark = card("Comida").locator(".entity-mark");
+      assert.equal(await mark.evaluate((e, tone) => e.classList.contains(`budget-${tone}`), tone), true);
+      assert.equal(await mark.evaluate(e => e.style.getPropertyValue("--budget-fill")), `${fill}%`);
+      assert.match(await mark.evaluate(e => getComputedStyle(e).backgroundImage), /linear-gradient/);
+      const iconColor = await mark.evaluate(e => {
+        const style = document.createElement("span").style;
+        style.color = getComputedStyle(e).getPropertyValue("--budget-color");
+        return style.color;
+      });
+      assert.equal(await card("Comida").locator("strong").evaluate(e => getComputedStyle(e).color), iconColor);
+      assert.doesNotMatch(await card("Comida").innerText(), /límite|disponible|exceso/);
+    }
+    await assertBudgetMark("green", 12.75);
+    for (const [limit, tone, fill] of [["30", "orange", 85], ["25.50", "orange", 100], ["20", "red", 100], ["0", "red", 100], ["", "gray", 0], ["200", "green", 12.75]]) {
+      await go("Límites");
+      await page.getByRole("button", { name: "Editar límite de este mes" }).click();
+      await page.locator('#dialog [name="limit"]').fill(limit);
+      await page.locator('#dialog button[type="submit"]').click();
+      await page.locator("#dialog").waitFor({ state: "hidden" });
+      await go("Inicio");
+      await assertBudgetMark(tone, fill);
+    }
+    // Entity detail has its own scope, month switching and signed account history.
+    await card("Comida").tap();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 1);
+    await page
+      .getByRole("button", { name: "Todo el historial", exact: true })
+      .click();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 2);
+    await page
+      .getByRole("button", { name: "Mes anterior", exact: true })
+      .click();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 0);
+    await page
+      .getByRole("button", { name: "Mes siguiente", exact: true })
+      .click();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 1);
+    await page
+      .getByRole("button", { name: "Volver a Inicio", exact: true })
+      .click();
+    await card("Banco").tap();
+    const incomeRow = page
+      .locator(".transaction")
+      .filter({ hasText: "Ingreso" });
+    await incomeRow.locator('[data-action="delete-transaction"]').click();
+    await incomeRow.waitFor({ state: "detached" });
+    assert.equal(await page.locator(".entity-history .transaction").count(), 1);
+    assert.match(await page.locator(".detail-totals").innerText(), /850,00/);
+    await page.locator('#toast [data-action="undo"]').click();
+    await incomeRow.waitFor();
+    assert.match(
+      await page.locator(".detail-totals").innerText(),
+      /1\.850,00|1850,00/,
+    );
+    await page.screenshot({
+      path: "/tmp/gastalo-account-detail.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Volver a Inicio", exact: true })
+      .click();
+    // Real touch motion on the inner SVG exercises capture transfer and the moving clone.
     await card("Banco").scrollIntoViewIfNeeded();
-    const grip = await card("Banco").locator(".drag-grip").boundingBox();
+    const grip = await card("Banco").locator(".entity-mark").boundingBox();
     const target = await card("Efectivo").boundingBox();
-    const cdp = await context.newCDPSession(page);
     const point = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [point],
     });
-    await page.waitForTimeout(320);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: point.x + 8, y: point.y }],
+    });
+    await page.locator(".drag-clone").waitFor();
+    assert.equal(
+      await card("Banco").evaluate((e) => e.classList.contains("dragging")),
+      true,
+    );
+    assert.equal(
+      await card("Efectivo").evaluate((e) =>
+        e.classList.contains("valid-target"),
+      ),
+      true,
+    );
+    assert.equal(
+      await card("Trabajo").evaluate((e) =>
+        e.classList.contains("invalid-target"),
+      ),
+      true,
+    );
+    assert.equal(
+      await page
+        .locator(".drag-clone")
+        .evaluate((e) => getComputedStyle(e).opacity),
+      "1",
+    );
+    const lockedScroll = await page.evaluate(() => document.body.style.top);
     for (let i = 1; i <= 6; i++) {
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
@@ -170,19 +455,62 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         ],
       });
     }
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll(".drop-target .entity-name")].some(
+        (e) => e.textContent === "Efectivo",
+      ),
+    );
+    assert.equal(
+      await card("Efectivo").evaluate((e) =>
+        e.classList.contains("drop-target"),
+      ),
+      true,
+    );
+    assert.equal(
+      await page.evaluate(() => document.body.style.top),
+      lockedScroll,
+    );
+    // The target can react one frame before the final clone position is painted.
+    await page.waitForFunction((x) => {
+      const box = document.querySelector(".drag-clone").getBoundingClientRect();
+      return Math.abs(box.x + box.width / 2 - x) < 2;
+    }, target.x + target.width / 2);
+    const cloneBox = await page.locator(".drag-clone").boundingBox();
+    assert.ok(Math.abs(cloneBox.width - 67.2) < 1);
+    assert.ok(
+      Math.abs(
+        cloneBox.x + cloneBox.width / 2 - (target.x + target.width / 2),
+      ) < 2,
+    );
+    await page.screenshot({ path: "/tmp/gastalo-drag.png" });
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchEnd",
       touchPoints: [],
     });
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
+    await page.waitForFunction(() => document.activeElement?.name === "amount");
+    assert.ok((await page.locator("#dialog").boundingBox()).height < 360);
     assert.equal(
       await page.locator('#dialog [name="to"] option:checked').innerText(),
       "Efectivo",
     );
     await page.getByRole("button", { name: "Cancelar", exact: true }).click();
-    // Real HTML drag/drop opens a preselected form; cancellation leaves balances intact.
-    await card("Banco").dragTo(card("Comida"));
+    // Mouse uses the same Pointer Events path; >6px starts without a hold.
+    const bankCircle = await card("Banco")
+      .locator(".entity-mark")
+      .boundingBox();
+    const foodCircle = await card("Comida")
+      .locator(".entity-mark")
+      .boundingBox();
+    await page.mouse.move(bankCircle.x + 24, bankCircle.y + 24);
+    await page.mouse.down();
+    await page.mouse.move(bankCircle.x + 32, bankCircle.y + 24);
+    await page.locator(".drag-clone").waitFor();
+    await page.mouse.move(foodCircle.x + 24, foodCircle.y + 24, { steps: 8 });
+    await page.mouse.up();
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
+    await page.waitForFunction(() => document.activeElement?.name === "amount");
+    assert.ok((await page.locator("#dialog").boundingBox()).height < 360);
     assert.equal(
       await page.locator('#dialog [name="from"] option:checked').innerText(),
       "Banco",
@@ -199,6 +527,185 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       false,
       "No horizontal overflow on iPhone",
     );
+    // Outside drop and pointer cancellation return the clone and leave no form or lock.
+    for (const cancel of [false, true]) {
+      const box = await card("Banco").locator(".entity-mark").boundingBox();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: box.x + 32, y: box.y + 24 }],
+      });
+      await page.locator(".drag-clone").waitFor();
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: 3, y: 120 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: cancel ? "touchCancel" : "touchEnd",
+        touchPoints: [],
+      });
+      await page.locator(".drag-clone").waitFor({ state: "detached" });
+      assert.equal(
+        await page.locator("#dialog").evaluate((e) => e.open),
+        false,
+      );
+      assert.equal(
+        await page
+          .locator("html")
+          .evaluate((e) => e.classList.contains("is-dragging")),
+        false,
+      );
+    }
+    // Category grids stay compact, wrap to new rows and always retain four columns.
+    for (let i = 2; i <= 20; i++)
+      await add("categories", `Categoría ${i} nombre largo`);
+    // Additional sources/accounts stay on one row and can be swiped independently.
+    for (let i = 2; i <= 6; i++) await add("sources", `Fuente extra ${i}`);
+    for (let i = 3; i <= 33; i++) await add("accounts", `Cuenta extra ${i}`);
+    assert.equal(await page.locator('.row-1 .entity-card').count(), 33);
+    assert.equal(await card("Categoría 2 nombre largo").locator(".entity-caption").count(), 0);
+    assert.equal(await card("Categoría 2 nombre largo").locator(".budget-gray").count(), 1);
+    // Native vertical scrolling begins on names, amounts and card padding, even
+    // with 33 horizontally scrollable accounts. A circle also yields early motion.
+    for (const selector of [".entity-name", "strong", ".entity-mark", ""]) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const box = await (selector ? card("Banco").locator(selector) : card("Banco")).boundingBox();
+      const before = await page.evaluate(() => scrollY);
+      const point = { x: box.x + (selector ? box.width / 2 : 2), y: box.y + box.height / 2 };
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+      // First move must cancel pending drag before the 150 ms threshold.
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove", touchPoints: [{ x: point.x, y: point.y - 14 }],
+      });
+      for (let delta = 40; delta <= 120; delta += 40) {
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchMove", touchPoints: [{ x: point.x, y: point.y - delta }],
+        });
+      }
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      assert.ok(await page.evaluate(() => scrollY) > before + 30, `vertical page scroll from ${selector}`);
+      assert.equal(await page.locator(".drag-clone, .entity-detail").count(), 0);
+      assert.equal(await page.locator("#entity-edit-bar").isVisible(), false);
+    }
+
+    async function swipeRow(row) {
+      const strip = page.locator(`.row-${row} .entity-strip`);
+      await strip.scrollIntoViewIfNeeded();
+      const box = await strip.locator(".entity-mark").nth(1).boundingBox();
+      const before = await page.evaluate(() => scrollY);
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x: box.x - 56, y: box.y + 24 }],
+      });
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: [],
+      });
+      assert.ok((await strip.evaluate((e) => e.scrollLeft)) > 30);
+      assert.equal(
+        await page.locator(".drag-clone, .entity-detail").count(),
+        0,
+      );
+      assert.equal(await page.evaluate(() => scrollY), before);
+      await strip.evaluate((e) => (e.scrollLeft = 0));
+    }
+    for (const row of [0, 1]) {
+      const strip = page.locator(`.row-${row} .entity-strip`);
+      assert.ok(await strip.evaluate((e) => e.scrollWidth > e.clientWidth));
+      const positions = await strip
+        .locator(".entity-wrap")
+        .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().y));
+      assert.ok(positions.every((y) => Math.abs(y - positions[0]) < 1));
+      await swipeRow(row);
+    }
+    // A brief hold still permits a horizontal transfer in an overflowing account row.
+    await card("Banco").scrollIntoViewIfNeeded();
+    const bank = await card("Banco").locator(".entity-mark").boundingBox();
+    const cash = await card("Efectivo").locator(".entity-mark").boundingBox();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: bank.x + 24, y: bank.y + 24 }],
+    });
+    await page.waitForTimeout(180);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: cash.x + 24, y: cash.y + 24 }],
+    });
+    await page.locator(".drag-clone").waitFor();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await page
+      .getByRole("heading", { name: "Nuevo movimiento", exact: true })
+      .waitFor();
+    assert.equal(
+      await page.locator('#dialog [name="to"] option:checked').innerText(),
+      "Efectivo",
+    );
+    await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+    // Editing mode also allows exploration of entities that are off-screen.
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: bank.x + 24, y: bank.y + 24 }],
+    });
+    await page.locator("#entity-edit-bar").waitFor();
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await swipeRow(1);
+    await page.getByRole("button", { name: "Listo", exact: true }).click();
+    const categoryGrid = page.locator(".row-2 .entity-grid");
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      assert.equal(
+        await categoryGrid.evaluate(
+          (e) => getComputedStyle(e).gridTemplateColumns.split(" ").length,
+        ),
+        4,
+      );
+      assert.equal(
+        await categoryGrid.evaluate((e) => e.scrollWidth > e.clientWidth),
+        false,
+      );
+      assert.ok((await categoryGrid.boundingBox()).height < 700);
+      const corner = await page.locator(".row-2 .entity-add").boundingBox();
+      const gridBox = await categoryGrid.boundingBox();
+      const lastCategoryY = await categoryGrid
+        .locator(".entity-wrap")
+        .last()
+        .evaluate((e) => e.getBoundingClientRect().y);
+      assert.ok(
+        Math.abs(corner.x + corner.width - gridBox.x - gridBox.width) < 1,
+      );
+      assert.ok(corner.y >= lastCategoryY);
+      for (const row of [0, 1]) {
+        const tops = await page
+          .locator(`.row-${row} .entity-strip .entity-wrap`)
+          .evaluateAll((es) => es.map((e) => e.getBoundingClientRect().y));
+        assert.ok(tops.every((y) => Math.abs(y - tops[0]) < 1));
+      }
+      assert.equal(
+        (await card("Comida").locator(".entity-mark").boundingBox()).width,
+        48,
+      );
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth > innerWidth,
+        ),
+        false,
+      );
+    }
+    await page.locator(".entity-section.row-2").scrollIntoViewIfNeeded();
+    assert.ok((await page.locator(".home-totals").boundingBox()).y <= 1);
     await page.screenshot({ path: "/tmp/gastalo-mobile.png", fullPage: true });
     await page.evaluate(async () => {
       await navigator.serviceWorker.ready;
@@ -221,7 +728,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const dp = await desktop.newPage();
     await dp.goto(base);
     await dp.getByRole("heading", { name: "Un mes más claro." }).waitFor();
-    await dp.getByRole("button", { name: "Datos", exact: true }).click();
+    await go("Datos", dp);
     await dp.locator("#import-month").fill("2026-01");
     await dp
       .locator("#csv-file")
@@ -229,7 +736,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await dp.locator('#dialog [name="confirm"]').check();
     await dp.getByRole("button", { name: "Importar y reemplazar" }).click();
     await dp.locator("#dialog").waitFor({ state: "hidden" });
-    await dp.getByRole("button", { name: "Inicio", exact: true }).click();
+    await go("Inicio", dp);
     await dp.locator("#month").fill("2026-01");
     await dp.screenshot({ path: "/tmp/gastalo-desktop.png", fullPage: true });
     assert.equal(
@@ -240,7 +747,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: mobile CRUD, tap/drag, budgets, filters, reports, JSON/CSV, reload, concurrent tabs, offline persistence, desktop layout.",
+      "PASS: vertical scroll with 33 accounts, budget icon fill thresholds, header menu, long-press tools, icons, amount focus, category corner and horizontal rows, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();
