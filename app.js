@@ -304,6 +304,17 @@
       tone: used * 100n <= total * 65n ? "green" : "orange",
     };
   }
+  function eraseEntity(state, key, id) {
+    assert(TYPES.includes(key) && state[key].some((e) => e.id === id),
+      "Entidad inexistente.");
+    const next = copy(state);
+    next[key] = next[key].filter((e) => e.id !== id);
+    next.transactions = next.transactions.filter(
+      (t) => t.from_id !== id && t.to_id !== id,
+    );
+    next.budgets = next.budgets.filter((b) => b.category_id !== id);
+    return validateState(next);
+  }
   function evolution(state, month, filters = {}) {
     return Array.from({ length: 12 }, (_, i) => {
       const m = shiftMonth(month, i - 11);
@@ -744,6 +755,7 @@
     report,
     budget,
     budgetVisual,
+    eraseEntity,
     evolution,
     entityEvolution,
     validateState,
@@ -1150,7 +1162,8 @@
       const picker = compact
         ? `<label class="month-picker"><span aria-hidden="true">${esc(new Intl.DateTimeFormat("es-BO", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(month + "-15T12:00:00Z")))}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
         : `<label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label>`;
-      return `<div class="month-nav ${compact ? "compact-month" : ""}"><button data-action="prev" aria-label="Mes anterior">‹</button>${picker}<button data-action="next" aria-label="Mes siguiente">›</button></div>`;
+      const arrow = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+      return `<div class="month-nav ${compact ? "compact-month" : ""}"><button data-action="prev" aria-label="Mes anterior">${arrow("m14 6-6 6 6 6")}</button>${picker}<button data-action="next" aria-label="Mes siguiente">${arrow("m10 6 6 6-6 6")}</button></div>`;
     }
     function iconSvg(iconKey) {
       return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ENTITY_ICONS[iconKey].path}</svg>`;
@@ -1178,19 +1191,39 @@
       if ($("#entity-edit-bar")) $("#entity-edit-bar").hidden = !editing;
     }
     function removeEntity(key, id) {
+      const count = state.transactions.filter(
+        (t) => t.from_id === id || t.to_id === id,
+      ).length;
       modal(
         "Quitar " + name(id),
-        `<p>Se quitará de Inicio. Sus movimientos y saldos se conservan en el historial. Puedes restaurarla en Datos.</p>${actions("Quitar de Inicio")}`,
-        async () => {
-          const next = copy(state);
-          next[key].find((e) => e.id === id).archived_at =
-            new Date().toISOString();
-          await commit(next, "Entidad quitada de Inicio", true);
+        `<fieldset class="remove-options"><legend>¿Qué quieres hacer?</legend><label class="check"><input type="radio" name="removal" value="archive" checked>Quitar de Inicio y conservar historial</label><p class="muted">Conserva movimientos y saldos. Puedes restaurarla en Datos.</p><label class="check"><input type="radio" name="removal" value="erase">Eliminar completamente</label></fieldset><div id="erase-warning" hidden><p>Se eliminará la entidad, sus ${count} movimientos de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.</p><label class="check"><input type="checkbox" name="confirmErase" disabled>Confirmo que quiero eliminar la entidad y su historial.</label></div>${actions("Quitar de Inicio")}`,
+        async (data) => {
+          if (data.get("removal") === "erase") {
+            assert(data.get("confirmErase"), "Confirma la eliminación del historial.");
+            await commit(eraseEntity(state, key, id), "Entidad e historial eliminados", true);
+            filters.entities = filters.entities.filter((entityId) => entityId !== id);
+          } else {
+            const next = copy(state);
+            next[key].find((e) => e.id === id).archived_at =
+              new Date().toISOString();
+            await commit(next, "Entidad quitada de Inicio", true);
+          }
         },
         { compact: true, focusSelector: 'button[data-action="close"]' },
       );
+      document.querySelectorAll('[name="removal"]').forEach((radio) => {
+        radio.onchange = () => {
+          const erase = $('#dialog [name="removal"]:checked').value === "erase";
+          $("#erase-warning").hidden = !erase;
+          const confirmation = $('#dialog [name="confirmErase"]');
+          confirmation.disabled = !erase;
+          confirmation.required = erase;
+          $('#modal-form button[type="submit"]').textContent =
+            erase ? "Eliminar completamente" : "Quitar de Inicio";
+        };
+      });
     }
-    function home() {
+    function homeTotals() {
       const r = report(state, month),
         bs = balances(state);
       const balance = sum(
@@ -1203,9 +1236,11 @@
           .filter((b) => b.month === month && b.limit_cents !== null)
           .map((b) => b.limit_cents),
       );
-      return `<h1 class="sr-only">Un mes más claro.</h1><section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", monthlyBudget)}</section>
-        <div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
-        <p class="home-hint">Toca para ver · Mantén para editar · Arrastra para mover</p>
+      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", monthlyBudget)}</section>`;
+    }
+    function home() {
+      const bs = balances(state);
+      return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
@@ -1239,14 +1274,14 @@
                     ? "Presupuesto excedido"
                     : `${progress.fill}% del presupuesto utilizado`
                 : "";
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${money(value)}</strong>${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}">×</button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${money(value)}</strong>${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",
             )}${carousel ? "</div>" : ""}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}"><span class="entity-name">${createLabel}</span><span class="entity-mark" aria-hidden="true">+</span></button></div></section>`;
         }).join(
           "",
-        )}<p class="footnote">BOB · Las transferencias mueven saldo entre cuentas. No suman ingresos ni gastos.</p>`;
+        )}`;
     }
     function filterPanel() {
       return `<details class="panel filters" open><summary>Filtros compartidos con reportes</summary><div class="form-grid">
@@ -1421,6 +1456,7 @@
       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Haz respaldos frecuentes: borrar los datos de Safari o perder el dispositivo puede borrar el historial. No hay sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
     }
     function render() {
+      $("#header-totals").innerHTML = view === "home" ? homeTotals() : "";
       $("#main").classList.toggle(
         "editing-entities",
         editingEntities && view === "home",
