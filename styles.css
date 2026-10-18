@@ -767,9 +767,11 @@ html.is-dragging {
 }
 .detail-toolbar h1 {
   margin: 2px 0 0;
-  font-size: 24px;
+  font-size: 20px;
   letter-spacing: -0.03em;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .detail-kind {
   font-size: 11px;
@@ -780,11 +782,18 @@ html.is-dragging {
   border: 0;
   padding: 6px 8px;
   font-size: 12px;
+  min-height: 36px;
 }
 .detail-toolbar > button:first-child {
+  display: grid;
+  place-items: center;
   font-size: 30px;
   min-width: 36px;
   padding: 0;
+}
+.detail-toolbar > button:first-child svg {
+  width: 20px;
+  height: 20px;
 }
 .detail-period {
   display: flex;
@@ -915,6 +924,54 @@ html.is-dragging {
 }
 .entity-history .transaction-end {
   max-width: none;
+}
+.transaction-swipe {
+  position: relative;
+  overflow: hidden;
+  background: #bf3540;
+  touch-action: pan-y pinch-zoom;
+}
+.transaction-swipe > .transaction {
+  position: relative;
+  background: var(--paper);
+  transform: translateX(var(--swipe-offset, 0px));
+  transition: transform 160ms ease;
+}
+.transaction-swipe.is-swiping > .transaction {
+  transition: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.transaction-swipe-delete {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 84px;
+  min-height: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  background: #bf3540;
+  color: white;
+  font-size: 13px;
+  visibility: hidden;
+}
+.transaction-swipe.is-revealed > .transaction-swipe-delete {
+  visibility: visible;
+}
+.transaction-swipe.is-revealed .transaction-end [data-action="delete-transaction"] {
+  visibility: hidden;
+}
+.transaction-swipe:not(:last-child) {
+  border-bottom: 1px solid var(--line);
+}
+.transaction-swipe-delete:hover {
+  background: #a82b35;
+  color: white;
+}
+@media (prefers-reduced-motion: reduce) {
+  .transaction-swipe > .transaction {
+    transition: none;
+  }
 }
 .page-heading {
   padding: 20px 0 8px;

@@ -203,6 +203,10 @@
     if (vertical >= horizontal && elapsedMs < 150) return "pending";
     return "drag";
   }
+  function transactionSwipeOutcome(offset, width) {
+    if (offset >= -32) return "closed";
+    return -offset >= Math.max(140, width * 0.65) ? "delete" : "revealed";
+  }
   function direction(state, fromId, toId) {
     const resolve = (id) => {
       const type = TYPES.find((key) => state[key].some((e) => e.id === id));
@@ -750,6 +754,7 @@
     direction,
     canDrop,
     gestureIntent,
+    transactionSwipeOutcome,
     balances,
     filterTransactions,
     report,
@@ -1240,7 +1245,7 @@
     }
     function home() {
       const bs = balances(state);
-      return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar">${monthNav(true)}<button data-action="movement">+ Movimiento</button></div>
+      return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar"><button data-action="movement">+ Movimiento</button>${monthNav(true)}</div>
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
@@ -1312,7 +1317,10 @@
           : t.kind === "income" || t.to_id === contextId
             ? "+"
             : "−";
-      return `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      return contextId
+        ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
+        : row;
     }
     function entityChart(id, type) {
       const series = entityEvolution(state, id, month);
@@ -1335,13 +1343,18 @@
       });
       return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><svg viewBox="0 0 610 190" role="img" aria-labelledby="chart-title chart-description"><title id="chart-title">${caption} · ${esc(name(id))}</title><desc id="chart-description">${series.map((p) => `${p.month}: ${money(p.value)}`).join("; ")}. Datos disponibles en la tabla siguiente.</desc>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${series[i].month.slice(5)}/${series[i].month.slice(2, 4)}</text>`).join("")}</svg><details class="chart-data"><summary>Ver datos del gráfico</summary><table><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p) => `<tr><td>${p.month}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></details></section>`;
     }
+    function detailHeader() {
+      const type = TYPES.find((key) => state[key].some((e) => e.id === detailId));
+      const item = entity(detailId);
+      if (!type || !item) return "";
+      return `<div class="detail-toolbar"><button data-action="back-home" aria-label="Volver a Inicio"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button><div><span class="detail-kind">${{ sources: "Fuente de ingreso", accounts: "Cuenta", categories: "Categoría de gasto" }[type]}</span><h1 title="${esc(item.name)}">${esc(item.name)}</h1></div><button data-action="edit-entity" data-key="${type}" data-id="${esc(detailId)}">Editar</button></div>`;
+    }
     function detail() {
       const type = TYPES.find((key) =>
         state[key].some((e) => e.id === detailId),
       );
       if (!type)
         return '<p class="empty">Esta entidad ya no está disponible.</p><button data-view="home">Volver a Inicio</button>';
-      const item = entity(detailId);
       const all = filterTransactions(state, { entities: [detailId] }).sort(
         (a, b) =>
           b.occurred_on.localeCompare(a.occurred_on) ||
@@ -1380,7 +1393,7 @@
                     budget(state, detailId, month).limit,
                   )
                 : "");
-      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-toolbar"><button data-action="back-home" aria-label="Volver a Inicio">‹</button><div><span class="detail-kind">${{ sources: "Fuente de ingreso", accounts: "Cuenta", categories: "Categoría de gasto" }[type]}</span><h1>${esc(item.name)}</h1></div><button data-action="edit-entity" data-key="${type}" data-id="${esc(detailId)}">Editar</button></div><div class="detail-period">${monthNav(true)}<button data-action="entity-movement">+ Movimiento</button></div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${esc(new Intl.DateTimeFormat("es-BO", { dateStyle: "long", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z")))}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${esc(new Intl.DateTimeFormat("es-BO", { dateStyle: "long", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z")))}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
     }
     function history() {
       const ts = filterTransactions(state, filters).sort(
@@ -1456,7 +1469,9 @@
       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Haz respaldos frecuentes: borrar los datos de Safari o perder el dispositivo puede borrar el historial. No hay sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
     }
     function render() {
-      $("#header-totals").innerHTML = view === "home" ? homeTotals() : "";
+      resetTransactionSwipe();
+      $("#header-totals").innerHTML = view === "home" ? homeTotals()
+        : view === "detail" ? detailHeader() : "";
       $("#main").classList.toggle(
         "editing-entities",
         editingEntities && view === "home",
@@ -1503,6 +1518,14 @@
       link.download = `gastalo-${today()}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    async function deleteTransaction(id) {
+      const next = copy(state),
+        t = next.transactions.find((t) => t.id === id);
+      if (!t || t.status === "deleted") return;
+      t.status = "deleted";
+      t.deleted_at = t.updated_at = new Date().toISOString();
+      await commit(next, "Movimiento borrado", true);
     }
     async function handleAction(button) {
       const action = button.dataset.action,
@@ -1575,13 +1598,8 @@
           state.transactions.find((t) => t.id === id),
         );
       if (action === "budget") return editBudget(id);
-      if (action === "delete-transaction") {
-        const next = copy(state),
-          t = next.transactions.find((t) => t.id === id);
-        t.status = "deleted";
-        t.deleted_at = t.updated_at = new Date().toISOString();
-        return commit(next, "Movimiento borrado", true);
-      }
+      if (action === "delete-transaction" || action === "swipe-delete-transaction")
+        return deleteTransaction(id);
       if (action === "prev" || action === "next") {
         month = shiftMonth(month, action === "prev" ? -1 : 1);
         detailScope = "month";
@@ -1700,6 +1718,107 @@
         /* Optional on Safari and PWAs. */
       }
     };
+    let transactionSwipe = null,
+      openTransactionRow = null,
+      swipeClickSuppressed = false;
+    function showTransactionSwipe(row, offset) {
+      row.style.setProperty("--swipe-offset", `${offset}px`);
+      row.classList.toggle("is-revealed", offset < 0);
+      const button = row.querySelector(".transaction-swipe-delete");
+      button.tabIndex = offset < 0 ? 0 : -1;
+      button.setAttribute("aria-hidden", String(offset >= 0));
+    }
+    function closeTransactionRow() {
+      if (openTransactionRow) showTransactionSwipe(openTransactionRow, 0);
+      openTransactionRow = null;
+    }
+    function resetTransactionSwipe() {
+      const p = transactionSwipe;
+      transactionSwipe = null;
+      if (p) {
+        cancelAnimationFrame(p.frame);
+        p.row.classList.remove("is-swiping");
+        if (p.front.hasPointerCapture(p.id)) p.front.releasePointerCapture(p.id);
+        showTransactionSwipe(p.row, 0);
+      }
+      closeTransactionRow();
+    }
+    document.addEventListener("pointerdown", (e) => {
+      if (!e.isPrimary || e.button !== 0 || transactionSwipe) return;
+      const row = e.target.closest("[data-swipe-transaction]");
+      if (openTransactionRow && openTransactionRow !== row) closeTransactionRow();
+      if (!row || e.target.closest(".transaction-swipe-delete, a, input, select, textarea")) return;
+      transactionSwipe = {
+        id: e.pointerId, row, front: row.querySelector(".transaction"),
+        startX: e.clientX, startY: e.clientY,
+        startOffset: row === openTransactionRow ? -84 : 0,
+        offset: row === openTransactionRow ? -84 : 0,
+        width: row.getBoundingClientRect().width, dragging: false,
+      };
+    });
+    document.addEventListener("pointermove", (e) => {
+      const p = transactionSwipe;
+      if (!p || e.pointerId !== p.id) return;
+      const dx = e.clientX - p.startX, dy = e.clientY - p.startY;
+      if (!p.dragging) {
+        if (Math.abs(dy) > 8 && Math.abs(dy) >= Math.abs(dx)) {
+          transactionSwipe = null;
+          return;
+        }
+        if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.25) return;
+        p.dragging = true;
+        p.row.classList.add("is-swiping");
+        p.front.setPointerCapture(p.id);
+      }
+      e.preventDefault();
+      p.offset = Math.max(-p.width, Math.min(0, p.startOffset + dx));
+      if (!p.frame) p.frame = requestAnimationFrame(() => {
+        p.frame = null;
+        showTransactionSwipe(p.row, p.offset);
+      });
+    }, { passive: false });
+    function endTransactionSwipe(e) {
+      const p = transactionSwipe;
+      if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
+      if (e.type === "lostpointercapture" && p.front.hasPointerCapture(p.id)) return;
+      transactionSwipe = null;
+      cancelAnimationFrame(p.frame);
+      p.row.classList.remove("is-swiping");
+      if (p.front.hasPointerCapture(p.id)) p.front.releasePointerCapture(p.id);
+      if (!p.dragging) {
+        if (p.startOffset < 0) closeTransactionRow();
+        return;
+      }
+      swipeClickSuppressed = true;
+      setTimeout(() => { swipeClickSuppressed = false; }, 0);
+      const outcome = e.type === "pointerup"
+        ? transactionSwipeOutcome(p.offset, p.width) : "closed";
+      if (outcome === "delete") {
+        showTransactionSwipe(p.row, -p.width);
+        openTransactionRow = p.row;
+        vibrate();
+        deleteTransaction(p.row.dataset.swipeTransaction).catch((error) => {
+          closeTransactionRow();
+          notify(error.message);
+        });
+      } else {
+        showTransactionSwipe(p.row, outcome === "revealed" ? -84 : 0);
+        openTransactionRow = outcome === "revealed" ? p.row : null;
+      }
+    }
+    document.addEventListener("pointerup", endTransactionSwipe);
+    document.addEventListener("pointercancel", endTransactionSwipe);
+    document.addEventListener("lostpointercapture", endTransactionSwipe);
+    window.addEventListener("blur", resetTransactionSwipe);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") resetTransactionSwipe();
+    });
+    document.addEventListener("click", (e) => {
+      if (swipeClickSuppressed && e.target.closest("[data-swipe-transaction]")) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    }, true);
     const dropTarget = (p, x, y) => {
       const card = document.elementFromPoint(x, y)?.closest("[data-entity]");
       return card && direction(state, p.from, card.dataset.entity)
@@ -1844,7 +1963,8 @@
     document.addEventListener(
       "touchmove",
       (e) => {
-        if (pointer?.dragging || pointer?.scrolling) e.preventDefault();
+        if (pointer?.dragging || pointer?.scrolling || transactionSwipe?.dragging)
+          e.preventDefault();
       },
       { passive: false },
     );
