@@ -99,15 +99,17 @@ p {
   margin: 24px 0;
 }
 .app-header {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 20;
   gap: 8px;
   max-width: 1160px;
   margin: auto;
   padding: 6px 28px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
+  background: var(--paper);
   padding-top: max(6px, env(safe-area-inset-top));
 }
 .brand {
@@ -136,17 +138,19 @@ p {
   color: var(--orange);
 }
 .header-end {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 10px;
 }
-.currency-chip {
-  font-size: 0.75rem;
-  border: 1px solid #cad2c5;
-  padding: 4px 8px;
-  border-radius: 30px;
-  letter-spacing: 0.08em;
+.app-footer {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
 }
 #offline {
   font-size: 0.75rem;
@@ -210,7 +214,7 @@ p {
 main {
   max-width: 1160px;
   margin: auto;
-  padding: 0 28px 60px;
+  padding: 0 28px 12px;
   min-height: 70vh;
 }
 main:focus {
@@ -327,6 +331,12 @@ main:focus {
   font-size: 1.1rem;
   min-width: 44px;
 }
+.month-nav button svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  margin: auto;
+}
 .month-nav input {
   width: 180px;
   padding: 9px;
@@ -361,11 +371,8 @@ main:focus {
   flex: 1;
 }
 .home-totals {
-  position: sticky;
-  top: env(safe-area-inset-top, 0px);
-  z-index: 5;
-  margin: 0 -4px;
-  padding: 4px;
+  margin: 0;
+  padding: 0;
   background: var(--paper);
   border-bottom: 0;
   gap: 8px;
@@ -373,7 +380,7 @@ main:focus {
 .home-totals .stat {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: center;
   padding: 6px 0;
   border: 0;
   border-radius: 0;
@@ -381,11 +388,12 @@ main:focus {
 }
 .home-totals .stat span {
   font-size: 10px;
-  min-height: 0;
+  min-height: 24px;
+  line-height: 12px;
   margin-bottom: 3px;
 }
 .home-totals .stat strong {
-  font-size: clamp(16px, 2vw, 22px);
+  font-size: clamp(13px, 3.5vw, 22px);
   font-variant-numeric: tabular-nums;
 }
 .home-totals .stat small {
@@ -406,19 +414,16 @@ main:focus {
   border: 0;
   background: transparent;
 }
-.home-hint {
-  margin: 2px 0 8px;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 16px;
-}
 .compact-month {
   margin: 4px 0;
   gap: 0;
+  display: inline-grid;
+  grid-template-columns: 28px auto 28px;
+  align-items: center;
 }
 .compact-month button {
   min-height: 36px;
-  min-width: 32px;
+  min-width: 28px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -428,7 +433,8 @@ main:focus {
   position: relative;
   display: grid;
   place-items: center;
-  width: 102px;
+  width: auto;
+  padding: 0 2px;
   height: 36px;
   margin: 0;
   font-size: 12px;
@@ -673,15 +679,23 @@ main:focus {
 .entity-tools .entity-remove {
   top: 18px;
   left: 0;
-  font-size: 20px;
+  padding: 3px;
 }
 .entity-tools .entity-pencil {
   top: 42px;
   right: 4px;
 }
-.entity-pencil svg {
+.entity-tools svg {
   width: 16px;
   height: 16px;
+}
+.remove-options {
+  padding: 0;
+  border: 0;
+}
+.remove-options p {
+  margin: 0 0 12px 26px;
+  font-size: 12px;
 }
 #entity-edit-bar {
   display: flex;

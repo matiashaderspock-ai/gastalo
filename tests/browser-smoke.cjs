@@ -38,7 +38,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }
     const menuBox = await page.locator("#app-menu > summary").boundingBox();
     const brandBox = await page.locator(".brand").boundingBox();
-    assert.ok(menuBox.x + menuBox.width <= brandBox.x, "Menu is left of the brand");
+    const totalsBox = await page.locator(".home-totals").boundingBox();
+    assert.ok(menuBox.x + menuBox.width <= totalsBox.x, "Totals sit beside the menu");
+    assert.ok(Math.abs(menuBox.y + menuBox.height / 2 - totalsBox.y - totalsBox.height / 2) < 1);
+    assert.ok(brandBox.y >= (await page.locator("#main").boundingBox()).y + (await page.locator("#main").boundingBox()).height);
+    assert.equal(await page.locator(".currency-chip, .home-hint, #main .footnote").count(), 0);
     // Header disclosure exposes all five views, and supports Escape and outside click.
     await page.locator("#app-menu > summary").click();
     assert.equal(await page.locator("#app-menu nav button").count(), 5);
@@ -103,6 +107,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       });
       assert.equal(await page.locator(".drag-clone").count(), 0);
       assert.equal(await page.locator(".entity-pencil:visible").count(), 4);
+      const centered = await page.locator(".entity-remove:visible").evaluateAll(buttons => buttons.every(button => {
+        const b = button.getBoundingClientRect(), s = button.querySelector("svg").getBoundingClientRect();
+        return Math.abs(b.x + b.width / 2 - s.x - s.width / 2) < 0.5 && Math.abs(b.y + b.height / 2 - s.y - s.height / 2) < 0.5;
+      }));
+      assert.equal(centered, true, "The delete X is centered in its circle");
     }
     // Stationary holds edit every entity type; the pencil opens the icon chooser.
     for (const name of ["Trabajo", "Banco", "Comida"]) {
@@ -185,6 +194,31 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByRole("button", { name: "Mes siguiente", exact: true })
       .click();
     assert.equal(await page.locator("#month").inputValue(), consultedMonth);
+    const monthLayout = await page.locator(".compact-month").evaluate(e => {
+      const [prev, picker, next] = [...e.children].map(c => c.getBoundingClientRect());
+      return { leftGap: picker.x - prev.right, rightGap: next.x - picker.right,
+        centered: Math.abs(prev.y + prev.height / 2 - picker.y - picker.height / 2) < 1 && Math.abs(next.y + next.height / 2 - picker.y - picker.height / 2) < 1 };
+    });
+    assert.ok(monthLayout.leftGap <= 2 && monthLayout.rightGap <= 2 && monthLayout.centered);
+    // Complete deletion is distinct from archive, requires confirmation and supports Undo.
+    await hold("Banco");
+    await page.getByRole("button", { name: "Eliminar Banco", exact: true }).click();
+    await page.locator('#dialog [name="removal"][value="erase"]').check();
+    assert.equal(await page.locator('#dialog [name="confirmErase"]').isVisible(), true);
+    assert.match(await page.locator("#erase-warning").innerText(), /2 movimientos/);
+    await page.getByRole("button", {name:"Eliminar completamente", exact:true}).click();
+    assert.equal(await page.locator("#dialog").evaluate(e=>e.open), true, "No deletion without confirmation");
+    await page.locator('#dialog [name="confirmErase"]').check();
+    await page.getByRole("button", {name:"Eliminar completamente", exact:true}).click();
+    await page.locator("#dialog").waitFor({state:"hidden"});
+    assert.equal(await card("Banco").count(), 0);
+    assert.match(await card("Efectivo").innerText(), /25,50/);
+    await go("Historial");
+    assert.equal(await page.locator(".transaction").count(), 1);
+    await page.locator('#toast [data-action="undo"]').click();
+    await page.waitForFunction(() => document.querySelectorAll(".transaction").length === 3);
+    assert.equal(await page.locator(".transaction").count(), 3);
+    await go("Inicio");
     // A tap opens each entity, without opening a movement form.
     for (const [name, caption, count] of [
       ["Trabajo", "Ingresos por mes", 1],
@@ -567,7 +601,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     for (let i = 3; i <= 33; i++) await add("accounts", `Cuenta extra ${i}`);
     assert.equal(await page.locator('.row-1 .entity-card').count(), 33);
     assert.equal(await card("Categoría 2 nombre largo").locator(".entity-caption").count(), 0);
-    assert.equal(await card("Categoría 2 nombre largo").locator(".budget-gray").count(), 1);
+    assert.equal(await card("Categoría 2 nombre largo").locator(".entity-mark.budget-gray").count(), 1);
     // Native vertical scrolling begins on names, amounts and card padding, even
     // with 33 horizontally scrollable accounts. A circle also yields early motion.
     for (const selector of [".entity-name", "strong", ".entity-mark", ""]) {
@@ -705,7 +739,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       );
     }
     await page.locator(".entity-section.row-2").scrollIntoViewIfNeeded();
-    assert.ok((await page.locator(".home-totals").boundingBox()).y <= 1);
+    assert.ok((await page.locator(".app-header").boundingBox()).y <= 1);
     await page.screenshot({ path: "/tmp/gastalo-mobile.png", fullPage: true });
     await page.evaluate(async () => {
       await navigator.serviceWorker.ready;
