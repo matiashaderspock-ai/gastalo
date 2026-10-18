@@ -1278,7 +1278,7 @@
             })
             .join(
               "",
-            )}${carousel ? "</div>" : ""}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}"><span class="entity-name">${createLabel}</span><span class="entity-mark" aria-hidden="true">+</span></button></div></section>`;
+            )}<button class="entity-add" data-action="add" data-key="${key}" aria-label="${createLabel}" title="${createLabel}"><span class="entity-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>${carousel ? "</div>" : ""}</div></section>`;
         }).join(
           "",
         )}`;

@@ -508,14 +508,14 @@ main:focus {
   gap: 8px 6px;
   padding: 0;
 }
-/* Three visible entities; creation stays in the fourth column. */
+/* Entity rows and their final create button scroll together. */
 .entity-strip {
-  grid-column: 1 / span 3;
+  grid-column: 1 / -1;
   grid-row: 1;
   min-width: 0;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: calc((100% - 12px) / 3);
+  grid-auto-columns: calc((100% - 18px) / 4);
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -647,11 +647,8 @@ main:focus {
   visibility: hidden;
 }
 .entity-add {
-  grid-column: 4;
-  grid-row: 1;
-}
-.row-2 .entity-add {
-  grid-row: auto;
+  align-self: start;
+  padding-top: 22px;
 }
 .entity-tools {
   display: none;
@@ -712,16 +709,22 @@ main:focus {
   font-size: 12px;
   padding: 4px 12px;
 }
-.entity-add .entity-name {
-  padding: 0;
-  color: var(--muted);
-}
 .entity-add .entity-mark {
+  flex-basis: 40px;
+  width: 40px;
+  height: 40px;
   background: transparent;
-  border: 2px dashed var(--row-color);
-  color: var(--row-color);
-  font-size: 26px;
-  font-weight: 400;
+  border: 1px solid #d5dcd3;
+  color: #8b988c;
+}
+.entity-add .entity-mark svg {
+  width: 18px;
+  height: 18px;
+}
+.entity-add:hover .entity-mark,
+.entity-add:focus-visible .entity-mark {
+  border-color: #8b988c;
+  color: var(--ink);
 }
 .drag-clone {
   position: fixed;
