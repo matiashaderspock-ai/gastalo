@@ -381,7 +381,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await go("Inicio");
     await page.locator("#month").fill("2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
-    async function assertBudgetMark(tone, fill) {
+    async function assertBudgetMark(tone, fill, planned = "200,00") {
       const mark = card("Comida").locator(".entity-mark");
       assert.equal(await mark.evaluate((e, tone) => e.classList.contains(`budget-${tone}`), tone), true);
       assert.equal(await mark.evaluate(e => e.style.getPropertyValue("--budget-fill")), `${fill}%`);
@@ -393,16 +393,30 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       });
       assert.equal(await card("Comida").locator("strong").evaluate(e => getComputedStyle(e).color), iconColor);
       assert.doesNotMatch(await card("Comida").innerText(), /límite|disponible|exceso/);
+      const caption = card("Comida").locator(".entity-planned");
+      if (planned === null) assert.equal(await caption.count(), 0);
+      else {
+        assert.equal(await caption.innerText(), planned);
+        assert.equal(await caption.evaluate(e => getComputedStyle(e).fontSize), "10px");
+        assert.equal(await caption.evaluate(e => getComputedStyle(e).color), "rgb(105, 118, 109)");
+        const current = await card("Comida").locator("strong").boundingBox();
+        assert.ok((await caption.boundingBox()).y >= current.y + current.height);
+      }
     }
     await assertBudgetMark("green", 12.75);
-    for (const [limit, tone, fill] of [["30", "orange", 85], ["25.50", "orange", 100], ["20", "red", 100], ["0", "red", 100], ["", "gray", 0], ["200", "green", 12.75]]) {
+    assert.equal(await page.locator('.row-0 .entity-planned, .row-1 .entity-planned').count(), 0);
+    await page.locator("#month").fill("2026-02");
+    assert.equal(await card("Comida").locator(".entity-planned").count(), 0);
+    await page.locator("#month").fill("2026-01");
+    await assertBudgetMark("green", 12.75);
+    for (const [limit, tone, fill, planned] of [["30", "orange", 85, "30,00"], ["25.50", "orange", 100, "25,50"], ["20", "red", 100, "20,00"], ["0", "red", 100, "0,00"], ["", "gray", 0, null], ["200", "green", 12.75, "200,00"]]) {
       await go("Límites");
       await page.getByRole("button", { name: "Editar límite de este mes" }).click();
       await page.locator('#dialog [name="limit"]').fill(limit);
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
       await go("Inicio");
-      await assertBudgetMark(tone, fill);
+      await assertBudgetMark(tone, fill, planned);
     }
     // Entity detail has its own scope, month switching and signed account history.
     await card("Comida").tap();
@@ -602,7 +616,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     for (let i = 2; i <= 6; i++) await add("sources", `Fuente extra ${i}`);
     for (let i = 3; i <= 33; i++) await add("accounts", `Cuenta extra ${i}`);
     assert.equal(await page.locator('.row-1 .entity-card').count(), 33);
-    assert.equal(await card("Categoría 2 nombre largo").locator(".entity-caption").count(), 0);
+    assert.equal(await card("Categoría 2 nombre largo").locator(".entity-planned").count(), 0);
     assert.equal(await card("Categoría 2 nombre largo").locator(".entity-mark.budget-gray").count(), 1);
     // Native vertical scrolling begins on names, amounts and card padding, even
     // with 33 horizontally scrollable accounts. A circle also yields early motion.
