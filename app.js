@@ -670,7 +670,7 @@
       return fetcher(url, { ...options, signal });
     };
     const localCount = JSON.parse(payload).transactions.filter((t) => t.status === "posted").length;
-    // Check the contents from the same GET as the SHA, including conflict retries.
+    // Check contents with their SHA (via Git Blobs for large files), including conflict retries.
     // Remote contents never enter the app state; unreadable backups are not overwritten.
     for (let attempt = 0; attempt < 2; attempt++) {
       const metadata = await request();
@@ -678,11 +678,19 @@
         throw { status: metadata.status };
       let sha;
       if (metadata.status !== 404) {
-        const remote = await metadata.json();
+        let remote = await metadata.json();
         sha = remote.sha;
-        assert(sha && remote.encoding === "base64", "No se pudo leer el respaldo remoto.");
+        assert(sha, "No se pudo leer el respaldo remoto.");
+        if (remote.encoding === "none" || remote.content === "") {
+          const { url, options } = syncRequest(config);
+          const blob = await fetcher(url.split("/contents/")[0] + "/git/blobs/" + encodeURIComponent(sha),
+            { ...options, signal });
+          if (!blob.ok) throw { status: blob.status };
+          remote = await blob.json();
+        }
+        assert(remote.encoding === "base64" && typeof remote.content === "string", "No se pudo leer el respaldo remoto.");
         const data = restore(new TextDecoder("utf-8", { fatal: true }).decode(
-          Uint8Array.from(atob(remote.content), (c) => c.charCodeAt(0)),
+          Uint8Array.from(atob(remote.content.replace(/[\r\n]/g, "")), (c) => c.charCodeAt(0)),
         ));
         const remoteCount = data.transactions.filter((t) => t.status === "posted").length;
         if ((config.checkAfterReset || (localCount === 0 && remoteCount > 0) ||
