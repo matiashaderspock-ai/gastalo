@@ -296,6 +296,20 @@
     if (offset >= -32) return "closed";
     return -offset >= Math.max(140, width * 0.65) ? "delete" : "revealed";
   }
+  function scrollEntityStrip({ x, y, left, right, top, bottom,
+    scrollLeft, scrollWidth, clientWidth }, elapsedMs) {
+    const max = Math.max(0, scrollWidth - clientWidth);
+    const current = Math.max(0, Math.min(max, scrollLeft));
+    if (!max || right <= left || x < left || x > right || y < top || y > bottom)
+      return current;
+    const edge = Math.min(48, (right - left) / 3);
+    let strength = 0;
+    if (x < left + edge) strength = -Math.pow(1 - (x - left) / edge, 2);
+    else if (x > right - edge) strength = Math.pow(1 - (right - x) / edge, 2);
+    // Bound elapsed time so a delayed frame cannot jump past several entities.
+    const distance = strength * 0.7 * Math.max(0, Math.min(32, elapsedMs));
+    return Math.max(0, Math.min(max, current + distance));
+  }
   function direction(state, fromId, toId) {
     const resolve = (id) => {
       const type = TYPES.find((key) => state[key].some((e) => e.id === id));
@@ -928,6 +942,7 @@
     canDrop,
     gestureIntent,
     transactionSwipeOutcome,
+    scrollEntityStrip,
     balances,
     filterTransactions,
     report,
@@ -2243,9 +2258,10 @@
       p.frame = null;
       // Viewport coordinates stay stable while the page is locked.
       p.clone.style.transform = `translate3d(${p.x - 24}px, ${p.y - 64}px, 0) scale(1.4)`;
+      const now = performance.now(), elapsedMs = now - (p.lastFrame ?? now);
+      p.lastFrame = now;
       if (p.reorder) {
-        const now = performance.now(), distance = Math.min(32, now - (p.lastFrame || now)) * 0.4;
-        p.lastFrame = now;
+        const distance = Math.min(32, elapsedMs) * 0.4;
         if (p.strip) {
           const box = p.strip.getBoundingClientRect();
           if (p.y >= box.top - 20 && p.y <= box.bottom + 20) {
@@ -2256,7 +2272,18 @@
         const top = $(".app-header").getBoundingClientRect().bottom + 32;
         const direction = p.y < top ? -1 : p.y > innerHeight - 48 ? 1 : 0;
         if (direction) window.scrollBy(0, direction * distance);
+      } else if (["sources", "accounts"].includes(p.card.dataset.key)) {
+        // Accounts are the horizontally scrollable destination for income and transfers.
+        const strip = $(".row-1 .entity-strip");
+        if (strip) {
+          const box = strip.getBoundingClientRect();
+          strip.scrollLeft = scrollEntityStrip({ x: p.x, y: p.y,
+            left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+            scrollLeft: strip.scrollLeft, scrollWidth: strip.scrollWidth,
+            clientWidth: strip.clientWidth }, elapsedMs);
+        }
       }
+      // Hit-test after scrolling so newly revealed entities receive the highlight.
       const target = dropTarget(p, p.x, p.y);
       if (p.reorder && target && target !== p.card) {
         const from = p.order.indexOf(p.card.closest(".entity-wrap"));
@@ -2270,7 +2297,7 @@
         target?.classList.add("drop-target");
         p.target = target;
       }
-      if (p.reorder && pointer === p) p.frame = requestAnimationFrame(() => paintPointer(p));
+      if (pointer === p) p.frame = requestAnimationFrame(() => paintPointer(p));
     }
     async function saveEntityOrder(key, ids, focusId) {
       const scrolls = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
