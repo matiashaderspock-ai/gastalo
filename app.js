@@ -101,6 +101,102 @@
       label: "Seguro",
       path: '<path d="m12 2 9 4v6c0 5-9 10-9 10S3 17 3 12V6l9-4Zm-4 10 3 3 5-6"/>',
     },
+    groceries: {
+      label: "Supermercado",
+      path: '<path d="M2 3h3l3 13h11l3-9H6M9 20h.01M18 20h.01M10 7V4m5 3V4"/>',
+    },
+    fuel: {
+      label: "Combustible",
+      path: '<path d="M3 21h12M5 21V4h8v17M5 10h8m0 3h3v5a2 2 0 0 0 4 0V8l-3-3m1 1v4h2"/>',
+    },
+    parking: {
+      label: "Estacionamiento",
+      path: '<rect x="3" y="3" width="18" height="18" rx="4"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/>',
+    },
+    taxi: {
+      label: "Taxi",
+      path: '<path d="M9 6V3h6v3M4 11l2-5h12l2 5M3 11h18v7H3v-7Zm2 7v3m14-3v3M6 14h2m8 0h2"/>',
+    },
+    electricity: {
+      label: "Electricidad",
+      path: '<path d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z"/>',
+    },
+    water: {
+      label: "Agua",
+      path: '<path d="M12 2S5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13ZM8 15a4 4 0 0 0 4 4"/>',
+    },
+    gas: {
+      label: "Gas",
+      path: '<path d="M13 2c2 7-4 7-3 12-3-1-4-3-4-5-5 7-1 13 6 13 8 0 12-10 1-20Zm-1 12c-5 5-2 8 1 7 3-1 2-4-1-7Z"/>',
+    },
+    internet: {
+      label: "Internet",
+      path: '<path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M8 16a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/>',
+    },
+    clothing: {
+      label: "Ropa",
+      path: '<path d="m8 3-6 4 3 5 3-2v11h8V10l3 2 3-5-6-4a4 4 0 0 1-8 0Z"/>',
+    },
+    beauty: {
+      label: "Cuidado personal",
+      path: '<circle cx="5" cy="6" r="3"/><circle cx="5" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3M12 12l-4-4"/>',
+    },
+    pharmacy: {
+      label: "Farmacia",
+      path: '<path d="m9 5-4 4a6 6 0 0 0 10 10l4-4A6 6 0 0 0 9 5Zm-2 2 10 10"/>',
+    },
+    dental: {
+      label: "Dentista",
+      path: '<path d="M12 5C3-1 2 7 5 13c1 2 1 8 3 8s2-7 4-7 2 7 4 7 2-6 3-8c3-6 2-14-7-8Zm0 0 3 2"/>',
+    },
+    baby: {
+      label: "Bebé",
+      path: '<circle cx="12" cy="13" r="9"/><path d="M12 4c4-3 5 3 1 3M8 12h.01M16 12h.01M9 16c2 2 4 2 6 0"/>',
+    },
+    family: {
+      label: "Familia",
+      path: '<circle cx="8" cy="6" r="3"/><circle cx="18" cy="8" r="2"/><path d="M2 21v-4a6 6 0 0 1 12 0v4m2-7a4 4 0 0 1 6 3v4"/>',
+    },
+    cinema: {
+      label: "Cine",
+      path: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4m-4 8h4m10-8h4m-4 8h4m-14-4h10"/>',
+    },
+    games: {
+      label: "Videojuegos",
+      path: '<path d="M7 7h10c4 0 7 13 3 13l-5-4H9l-5 4C0 20 3 7 7 7ZM7 10v4m-2-2h4m7-1h.01M18 14h.01M12 7V3"/>',
+    },
+    drinks: {
+      label: "Salidas y bebidas",
+      path: '<path d="m3 3 9 10 9-10H3Zm9 10v8m-5 0h10M7 7h10"/>',
+    },
+    books: {
+      label: "Libros",
+      path: '<path d="M12 6C8 3 5 3 2 4v16c3-1 6-1 10 2 4-3 7-3 10-2V4c-3-1-6-1-10 2Zm0 0v16"/>',
+    },
+    repair: {
+      label: "Reparaciones",
+      path: '<path d="M21 3a6 6 0 0 1-8 8l-9 9a2 2 0 0 1-3-3l9-9a6 6 0 0 1 8-8l-4 4 3 3 4-4Z"/>',
+    },
+    furniture: {
+      label: "Muebles",
+      path: '<path d="M5 11V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v5M5 16v-3a2 2 0 0 0-4 0v6h22v-6a2 2 0 0 0-4 0v3H5Zm-2 3v3m18-3v3"/>',
+    },
+    laundry: {
+      label: "Lavandería",
+      path: '<rect x="3" y="2" width="18" height="20" rx="2"/><circle cx="12" cy="14" r="5"/><path d="M3 7h18M6 4.5h.01M9 4.5h.01M8 14c3-3 5 3 8 0"/>',
+    },
+    charity: {
+      label: "Donaciones",
+      path: '<path d="M12 11 6 6a3 3 0 0 1 6-3 3 3 0 0 1 6 3l-6 5ZM2 16h4l4-3h5a2 2 0 0 1 0 4h-4m6-1 3-2a2 2 0 0 1 2 3l-7 5H8l-6-3"/>',
+    },
+    taxes: {
+      label: "Impuestos",
+      path: '<path d="M5 2h10l4 4v16H5V2Zm10 0v5h4M8 10h8m-7 9 6-6"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="18" r="1"/>',
+    },
+    subscriptions: {
+      label: "Suscripciones",
+      path: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3V9ZM7 2h10M7 22h10"/>',
+    },
   };
   function entityIconKey(item, type) {
     return Object.hasOwn(ENTITY_ICONS, item?.icon)
@@ -1324,6 +1420,7 @@
             });
           await commit(next, "Presupuesto guardado");
         },
+        { compact: true, focusSelector: '[name="limit"]' },
       );
     }
     function stat(label, amount, cls = "") {
@@ -1344,14 +1441,22 @@
     }
     function iconChooser(key, item) {
       const selectedIcon = entityIconKey(item, key);
-      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" role="group" aria-label="Elegir icono" hidden>${Object.entries(
-        ENTITY_ICONS,
-      )
-        .map(
-          ([id, icon]) =>
-            `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`,
-        )
-        .join("")}</div></fieldset>`;
+      const icons = Object.entries(ENTITY_ICONS);
+      const pages = [icons.slice(0, 24), icons.slice(24)];
+      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="Elegir icono: dos páginas de 24">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="Página ${index + 1} de 2">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" title="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>Desliza para ver más</span><div role="group" aria-label="Páginas de iconos">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="Página de iconos ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
+    }
+    function showIconPage(index) {
+      const pages = $(".icon-pages");
+      pages.scrollTo({ left: index * pages.clientWidth, behavior: "instant" });
+      updateIconPage();
+    }
+    function updateIconPage() {
+      const pages = $(".icon-pages");
+      if (!pages || !pages.clientWidth) return;
+      const index = Math.round(pages.scrollLeft / pages.clientWidth);
+      document.querySelectorAll('[data-action="icon-page"]').forEach((button) => {
+        button.setAttribute("aria-current", String(Number(button.dataset.page) === index));
+      });
     }
     function setEntityEditing(editing) {
       editingEntities = editing;
@@ -1584,7 +1689,7 @@
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
     }
     function budgets() {
-      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><h1>Límites de categoría</h1><p>Un límite para cada categoría, un comienzo en cada mes.</p>${monthNav()}</div><section class="budget-grid">${
+      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Un límite para cada categoría, un comienzo en cada mes.</p></div><section class="budget-grid">${
         state.categories
           .filter(
             (c) =>
@@ -1596,7 +1701,7 @@
           )
           .map((c) => {
             const b = budget(state, c.id, month);
-            return `<article class="panel budget-card"><h2>${esc(c.name)}</h2><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl><button data-action="budget" data-id="${esc(c.id)}">Editar límite de este mes</button></article>`;
+            return `<article class="panel budget-card"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)} este mes">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl></article>`;
           })
           .join("") ||
         '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'
@@ -1606,7 +1711,7 @@
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
-      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Gráficos</h1><p>Totales por categoría y evolución mensual de ingresos y gastos.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
+      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><div class="page-title"><h1>Gráficos</h1>${monthNav(true)}</div><p>Totales por categoría y evolución mensual de ingresos y gastos.</p></div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
       <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
         r.categories
           .filter((c) => c.spent)
@@ -1646,6 +1751,7 @@
     }
     function render() {
       resetTransactionSwipe();
+      $("#main").classList.toggle("compact-page", ["history", "budgets", "reports", "settings"].includes(view));
       $("#header-totals").innerHTML = view === "home" ? homeTotals()
         : view === "detail" ? detailHeader() : "";
       $("#main").classList.toggle(
@@ -1713,7 +1819,7 @@
         historyLimit = 100;
         render();
         window.scrollTo(0, 0);
-        $("#main").focus();
+        $("#main").focus({ preventScroll: true });
         return;
       }
       if (action === "finish-editing") return setEntityEditing(false);
@@ -1723,8 +1829,13 @@
         const picker = $("#icon-picker");
         picker.hidden = !picker.hidden;
         button.setAttribute("aria-expanded", String(!picker.hidden));
+        if (!picker.hidden) {
+          const selected = $('#dialog [name="icon"]').value;
+          showIconPage(Math.floor(Object.keys(ENTITY_ICONS).indexOf(selected) / 24));
+        }
         return;
       }
+      if (action === "icon-page") return showIconPage(Number(button.dataset.page));
       if (action === "select-icon") {
         $('#dialog [name="icon"]').value = button.dataset.icon;
         $(".icon-preview .entity-mark").innerHTML = iconSvg(
@@ -1858,6 +1969,14 @@
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") void runSync();
+    });
+    document.addEventListener("scroll", (e) => {
+      if (e.target.matches?.(".icon-pages")) updateIconPage();
+    }, true);
+    document.addEventListener("keydown", (e) => {
+      if (!e.target.matches(".icon-pages") || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+      e.preventDefault();
+      showIconPage(e.key === "ArrowRight" || e.key === "End" ? 1 : 0);
     });
     document.addEventListener("click", (e) => {
       if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;

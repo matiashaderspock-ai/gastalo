@@ -7,6 +7,8 @@ PWA personal de gastos en BOB. HTML/CSS y un `app.js` vanilla, sin dependencias 
 - Presupuestos independientes por mes, cero distinto de sin límite, sin arrastre. Inicio muestra el consumo del presupuesto como un relleno del círculo desde abajo: gris al iniciar, verde hasta 65%, naranja hasta 100% y rojo al excederlo. El importe planeado de cada categoría aparece pequeño y gris debajo del gasto actual; sin presupuesto no se añade esa línea. Copiar límites anteriores es explícito y no sobreescribe los existentes.
 - Reportes en BOB, gráfico y tabla por categoría y últimos 12 meses. Los filtros se comparten con historial; las transferencias no suman ingresos ni gastos.
 - Importación CoinKeeper CSV con vista previa y revisión de filas; importación/exportación de respaldo JSON `schemaVersion: 1`. Importar **reemplaza** el conjunto completo, nunca concatena ni duplica importaciones repetidas. Exporta un respaldo antes de reemplazarlo.
+- Historial, límites, reportes y datos usan tarjetas y formularios compactos. Límites y reportes comparten el selector de mes de Inicio; cada categoría permite editar el límite desde «Editar», junto al título.
+- Selector de 48 iconos en dos páginas de 24: desliza horizontalmente o usa los botones de página o el teclado. Se conservan las 24 claves originales y la selección viaja en los respaldos JSON. Los nuevos símbolos cubren categorías habituales de gasto, tomando como referencia [Actual Budget](https://actualbudget.org/docs/getting-started/starting-fresh/) y [Wallet](https://support.budgetbakers.com/hc/en-us/articles/7077082048146-All-about-Categories-and-Subcategories).
 
 ## Usar y desarrollar
 
@@ -29,6 +31,7 @@ npm install --prefix /tmp/gastalo-browser playwright
 # Con el servidor en el puerto 4173:
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-smoke.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-entity-swipe.cjs
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-compact-icons.cjs
 # GASTALO_URL permite probar un subdirectorio; CHROMIUM_PATH cambia el ejecutable.
 ```
 

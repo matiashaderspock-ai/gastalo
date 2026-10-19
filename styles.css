@@ -1787,12 +1787,32 @@ dialog::backdrop {
   height: 40px;
 }
 .icon-picker {
+  min-width: 0;
+  padding: 6px 0;
+}
+.icon-pages {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  border-radius: 8px;
+}
+.icon-pages::-webkit-scrollbar {
+  display: none;
+}
+.icon-page {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
-  padding: 6px 0;
+  min-width: 0;
+  padding: 4px;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
-.icon-picker button {
+.icon-page button {
   display: grid;
   place-items: center;
   min-width: 0;
@@ -1809,4 +1829,297 @@ dialog::backdrop {
   width: 24px;
   height: 24px;
   color: var(--row-color);
+}
+.icon-pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.icon-pagination > div {
+  display: flex;
+  gap: 4px;
+}
+.icon-pagination button {
+  min-height: 28px;
+  min-width: 28px;
+  padding: 3px 6px;
+  font-size: 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+}
+.icon-pagination button[aria-current="true"] {
+  background: #e6ecdf;
+  color: var(--ink);
+}
+/* Dense secondary pages share the compact spacing used on Inicio. */
+.compact-page .page-heading {
+  padding: 10px 0 8px;
+}
+.compact-page .eyebrow {
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+.compact-page h1 {
+  font-size: clamp(26px, 4vw, 34px);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+.compact-page p {
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+.compact-page .page-heading > p {
+  font-size: 13px;
+  margin-bottom: 0;
+}
+.page-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0 8px;
+}
+.page-title .compact-month {
+  margin: 0;
+}
+.compact-page .compact-month button {
+  min-height: 36px;
+  padding: 0;
+}
+.compact-page .panel {
+  padding: 12px;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+.compact-page h2 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+.compact-page .panel p {
+  font-size: 13px;
+}
+.compact-page label {
+  margin: 6px 0;
+  font-size: 12px;
+  line-height: 1.3;
+  min-width: 0;
+}
+.compact-page input,
+.compact-page select,
+.compact-page textarea {
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 8px;
+  margin-top: 3px;
+  border-radius: 8px;
+}
+.compact-page select[multiple] {
+  height: 76px;
+}
+.compact-page .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+}
+.compact-page button {
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+.compact-page summary {
+  min-height: 32px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.compact-page .filters summary {
+  padding: 0 0 4px;
+  min-height: 24px;
+}
+.compact-page .filters .form-grid {
+  margin-top: 0;
+}
+.compact-page .inline-actions {
+  margin-top: 4px;
+  gap: 6px;
+}
+.compact-page .stats {
+  gap: 8px;
+  margin: 10px 0;
+}
+.compact-page .stat {
+  padding: 10px;
+  border-radius: 10px;
+}
+.compact-page .stat span {
+  font-size: 11px;
+  line-height: 1.3;
+  min-height: 0;
+  margin-bottom: 4px;
+}
+.compact-page .stat strong {
+  font-size: clamp(15px, 2.2vw, 22px);
+}
+.compact-page .positive strong {
+  color: var(--green);
+}
+.compact-page .stat small {
+  margin-bottom: 2px;
+}
+.compact-page .section-heading {
+  justify-content: space-between;
+  margin-bottom: 0;
+}
+.compact-page .section-heading h2 {
+  margin: 0;
+}
+.compact-page .transaction {
+  padding: 8px 0;
+  gap: 8px;
+}
+.compact-page .transaction-symbol {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 18px;
+}
+.compact-page .transaction-info > span,
+.compact-page .transaction-end > div {
+  margin-top: 2px;
+}
+.compact-page .transaction-info p {
+  margin: 4px 0;
+}
+.compact-page .transaction-end button {
+  min-height: 28px;
+  font-size: 11px;
+  padding: 4px;
+}
+.compact-page .tags {
+  margin-top: 3px;
+}
+.compact-page .tags:empty {
+  display: none;
+}
+.compact-page .empty {
+  padding: 10px 0;
+  margin: 0;
+}
+.compact-page .budget-grid {
+  gap: 8px;
+}
+.compact-page .budget-card {
+  margin: 0;
+}
+.budget-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.compact-page .budget-heading h2 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.compact-page .budget-heading button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 28px;
+  padding: 4px 0 4px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 500;
+}
+.budget-heading button:hover {
+  text-decoration: underline;
+}
+.compact-page .budget-spent {
+  font-size: clamp(19px, 2.5vw, 25px);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.compact-page .budget-spent span {
+  display: inline-block;
+  margin: 0 0 0 5px;
+  font-size: 11px;
+}
+.compact-page progress {
+  margin: 8px 0;
+  height: 5px;
+}
+.compact-page .budget-card dl {
+  margin: 0;
+}
+.compact-page dl > div {
+  margin: 4px 0;
+  gap: 6px;
+  font-size: 12px;
+}
+.compact-page .footnote {
+  margin: 8px 0;
+  font-size: 12px;
+}
+.compact-page td,
+.compact-page th {
+  padding: 8px 6px;
+}
+.compact-page .distribution {
+  margin: 10px 0;
+}
+.compact-page .distribution > div {
+  margin: 8px 0;
+  gap: 8px;
+}
+.compact-page .bar-track {
+  height: 10px;
+}
+.compact-page .legend {
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.compact-page .timeline {
+  height: 145px;
+  margin: 10px 0;
+  gap: 6px;
+}
+.compact-page .columns {
+  height: 120px;
+}
+.compact-page .timeline-month > span {
+  margin-top: 4px;
+}
+.compact-page .file-label {
+  margin-top: 8px;
+}
+.compact-page .file-label input {
+  padding: 6px;
+  font-size: 13px;
+}
+.compact-page .review-row {
+  padding: 8px 0;
+}
+.compact-page .manage-row {
+  padding: 4px 0;
+  gap: 8px;
+  font-size: 13px;
+}
+.compact-dialog p {
+  margin: 6px 0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+@media (max-width: 360px) {
+  .compact-page .form-grid {
+    grid-template-columns: 1fr;
+  }
 }

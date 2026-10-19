@@ -37,5 +37,12 @@ test("solo se aceptan claves del catálogo propio, nunca SVG o rutas arbitrarias
     s.accounts[0].icon = icon;
     assert.throws(() => A.validateState(s), /Icono de entidad inválido/);
   }
-  assert.equal(Object.keys(A.ENTITY_ICONS).length, 24);
+  assert.equal(Object.keys(A.ENTITY_ICONS).length, 48);
+});
+test("todos los iconos ampliados se conservan al respaldar y restaurar categorías", () => {
+  const s = load();
+  for (const icon of Object.keys(A.ENTITY_ICONS).slice(24)) {
+    s.categories[0].icon = icon;
+    assert.equal(A.restore(A.backup(s)).categories[0].icon, icon);
+  }
 });
