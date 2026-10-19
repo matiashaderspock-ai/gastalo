@@ -6,9 +6,22 @@ on:
 permissions:
   contents: read
 jobs:
+  label-guard:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/label-guard.yml
   test:
+    # A queued auto-merge cannot outrun labeling: the required check finishes afterwards.
+    needs: label-guard
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Require successful label guard
+        if: github.event_name == 'pull_request' && needs.label-guard.result != 'success'
+        run: exit 1
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:

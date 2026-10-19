@@ -25,6 +25,10 @@ En iPhone: abrir en Safari → Compartir → **Agregar a inicio**. Tras la prime
 
 GitHub Actions ejecuta las pruebas en cada PR. El workflow Pages prueba y publica solo desde `main` (o ejecución manual de esa rama); en Settings → Pages seleccionar **GitHub Actions** como origen. Este PR no publica mientras no se fusione.
 
+Los PR de `matiashaderspock-ai` activan squash auto-merge y esperan el check obligatorio `test`.
+Cambios de sincronización, borrado, reset o política de merge reciben `needs-matias` y requieren revisión y merge manual de Matias.
+La etiqueta pausa el auto-merge; `test` espera al guard antes de dar verde y nunca deja de ser obligatorio.
+
 Cada cambio de JS/CSS debe subir juntos `?v=` de ambos assets en `index.html`, ambos paths en `FILES` y `CACHE` de `sw.js`. El service worker usa network-first con timeout y fallback al shell precargado, respeta el subdirectorio de Pages y activa actualizaciones cuando se cierran las ventanas anteriores.
 
 Prueba opcional de navegador (Chromium instalado; emulación de iPhone, no dispositivo físico):
