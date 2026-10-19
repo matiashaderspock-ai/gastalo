@@ -2244,3 +2244,5 @@ dialog::backdrop {
     grid-template-columns: 1fr;
   }
 }
+
+/* Auto-merge acceptance fixture: no visual change. */
