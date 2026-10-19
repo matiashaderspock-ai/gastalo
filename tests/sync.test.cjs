@@ -14,11 +14,9 @@ const state = () => A.importCSV(
   fs.readFileSync(__dirname + "/fixtures/coinkeeper.csv", "utf8"),
   "2026-01", "fixture", now,
 );
-const response = (status, sha) => ({
+const response = (status, sha, remote = A.emptyState()) => ({
   status, ok: status >= 200 && status < 300,
-  json: async () => ({ sha, get content() {
-    assert.fail("Remote content must never be consumed");
-  } }),
+  json: async () => ({ sha, encoding: "base64", content: A.utf8Base64(A.backup(remote, now)) }),
 });
 
 test("payload SHA-256 ignores exported_at and detects every transaction change", async () => {
@@ -47,6 +45,8 @@ test("sync decision skips absent token, offline and identical hash", () => {
   assert.equal(A.shouldSync({ ...config, lastHash: "same" }, true, "same"), false);
   assert.equal(A.shouldSync({ ...config, lastHash: "old" }, true, "changed"), true);
   assert.equal(A.shouldSync(config, true, "first"), true);
+  assert.equal(A.shouldSync({ ...config, paused: true }, true, "changed"), false);
+  assert.equal(A.shouldSync({ ...config, lastHash: "same", checkAfterReset: true }, true, "same"), true);
 });
 
 test("Contents API request encodes URL and includes required headers and safe fetch options", () => {
@@ -118,7 +118,7 @@ test("backup/restore and erase use financial state, never the separate sync_conf
   assert.equal(A.backup(records.get("main").data).includes(config.token), false);
 });
 
-test("upload GETs only SHA before PUT; 404 creates file without SHA", async () => {
+test("upload checks the backup with its SHA before PUT; 404 creates file without SHA", async () => {
   const payload = A.backup(state(), now);
   for (const sha of [undefined, "old-sha"]) {
     const calls = [], signal = new AbortController().signal;
@@ -169,4 +169,110 @@ test("auth and network failures stop without consuming response error text", asy
   await assert.rejects(A.uploadBackup(config, A.backup(state()), undefined, async () => {
     throw new TypeError(config.token);
   }), (e) => A.syncErrorMessage(e.status) === "Sin conexión, se reintentará");
+});
+
+test("conflict retries recheck counts before another PUT", async () => {
+  const calls = [];
+  await assert.rejects(A.uploadBackup(config, A.backup(A.emptyState()), undefined, async (url, options) => {
+    calls.push(options.method);
+    if (options.method === "PUT") return response(409);
+    return response(200, calls.length === 1 ? "old" : "new", calls.length === 1 ? A.emptyState() : state());
+  }), error => error.replacementRequired && error.remoteCount === 4 && error.localCount === 0);
+  assert.deepEqual(calls, ["GET", "PUT", "GET"]);
+});
+
+test("unreadable remote backups and aborted GETs cannot reach PUT", async () => {
+  for (const remote of [{ sha: "sha" }, { sha: "sha", encoding: "base64", content: "invalid!" }]) {
+    const calls = [];
+    await assert.rejects(A.uploadBackup(config, A.backup(state()), undefined, async (url, options) => {
+      calls.push(options.method);
+      return { ok: true, status: 200, json: async () => remote };
+    }));
+    assert.deepEqual(calls, ["GET"]);
+  }
+  const controller = new AbortController(), calls = [];
+  await assert.rejects(A.uploadBackup(config, A.backup(state()), controller.signal, async (url, options) => {
+    calls.push(options.method);
+    controller.abort();
+    return response(200, "sha");
+  }), { name: "AbortError" });
+  assert.deepEqual(calls, ["GET"]);
+});
+
+test("Contents encoding none uses the blob's posted count for a >1 MB backup and requires approval", async () => {
+  const remote = state();
+  remote.transactions[0].note = "Café, año 🪴 " + "x".repeat(3900000);
+  remote.transactions[1].status = "deleted";
+  const payload = A.backup(remote, now);
+  assert.ok(Buffer.byteLength(payload) > 1000000);
+  const content = Buffer.from(payload).toString("base64").replace(/.{76}/g, "$&\r\n");
+  for (const approved of [false, true]) {
+    const calls = [], signal = new AbortController().signal;
+    const fetcher = async (url, options) => {
+      calls.push({ url, options });
+      if (url.includes("/contents/") && options.method === "GET")
+        return { ok: true, status: 200, json: async () => ({ sha: "large-sha", encoding: "none", content: "", git_url: "https://example.invalid/untrusted" }) };
+      if (url.includes("/git/blobs/"))
+        return { ok: true, status: 200, json: async () => ({ encoding: "base64", content }) };
+      return response(200);
+    };
+    const upload = A.uploadBackup(config, A.backup(A.emptyState()), signal, fetcher, approved ? "large-sha" : undefined);
+    if (approved) await upload;
+    else await assert.rejects(upload, e => e.replacementRequired && e.localCount === 0 && e.remoteCount === 3 && e.sha === "large-sha");
+    assert.deepEqual(calls.map(c => c.options.method), approved ? ["GET", "GET", "PUT"] : ["GET", "GET"]);
+    assert.equal(calls[1].url, "https://api.github.com/repos/example/backup-demo/git/blobs/large-sha");
+    assert.deepEqual(calls[1].options, calls[0].options, "Blob GET keeps auth, safe options and abort signal");
+    assert.ok(calls.every(c => new URL(c.url).host === "api.github.com"));
+    if (approved) assert.equal(JSON.parse(calls[2].options.body).sha, "large-sha");
+  }
+});
+
+test("empty Contents content falls back to the blob and normal growth uploads without approval", async () => {
+  const calls = [];
+  await A.uploadBackup(config, A.backup(state()), undefined, async (url, options) => {
+    calls.push({ url, options });
+    if (url.includes("/contents/") && options.method === "GET")
+      return { ok: true, status: 200, json: async () => ({ sha: "empty-content-sha", encoding: "base64", content: "" }) };
+    return response(200, "empty-content-sha", state());
+  });
+  assert.deepEqual(calls.map(c => c.options.method), ["GET", "GET", "PUT"]);
+  assert.equal(calls[1].url, "https://api.github.com/repos/example/backup-demo/git/blobs/empty-content-sha");
+  assert.equal(JSON.parse(calls[2].options.body).sha, "empty-content-sha");
+});
+
+test("failing or unreadable blob GETs never PUT", async () => {
+  for (const failure of [404, 403, "network", "encoding", "base64", "utf8", "schema", "abort"]) {
+    const calls = [], controller = new AbortController();
+    const upload = A.uploadBackup(config, A.backup(state()), controller.signal, async (url, options) => {
+      calls.push(options.method);
+      if (url.includes("/contents/"))
+        return { ok: true, status: 200, json: async () => ({ sha: "large-sha", encoding: "none", content: "" }) };
+      if (typeof failure === "number") return { ok: false, status: failure, json: () => assert.fail("Do not read error bodies") };
+      if (failure === "network") throw new TypeError("Synthetic network failure");
+      if (failure === "abort") { controller.abort(); return response(200, "large-sha"); }
+      return { ok: true, status: 200, json: async () => ({
+        encoding: failure === "encoding" ? "none" : "base64",
+        content: failure === "base64" ? "invalid!" : failure === "utf8" ? "/w==" : "e30=",
+      }) };
+    });
+    await assert.rejects(upload, e => typeof failure !== "number" || e.status === failure);
+    assert.deepEqual(calls, ["GET", "GET"], failure);
+  }
+});
+
+test("conflicts refetch blob contents at the new SHA and require fresh replacement approval", async () => {
+  const calls = [];
+  let reads = 0;
+  await assert.rejects(A.uploadBackup(config, A.backup(A.emptyState()), undefined, async (url, options) => {
+    calls.push({ url, method: options.method });
+    if (options.method === "PUT") return response(409);
+    if (url.includes("/contents/")) {
+      reads++;
+      return { ok: true, status: 200, json: async () => ({ sha: reads === 1 ? "approved-sha" : "new-sha", encoding: "none", content: "" }) };
+    }
+    return response(200, reads === 1 ? "approved-sha" : "new-sha", state());
+  }, "approved-sha"), e => e.replacementRequired && e.remoteCount === 4 && e.sha === "new-sha");
+  assert.deepEqual(calls.map(c => c.method), ["GET", "GET", "PUT", "GET", "GET"]);
+  assert.ok(calls[1].url.endsWith("/git/blobs/approved-sha"));
+  assert.ok(calls[4].url.endsWith("/git/blobs/new-sha"));
 });

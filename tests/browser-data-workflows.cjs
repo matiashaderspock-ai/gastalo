@@ -12,7 +12,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
   try {
     const context = await browser.newContext({ ...devices["iPhone 13"], locale: "es-BO", acceptDownloads: true });
     const syncCalls = [];
-    let holdRead = false, releaseRead, readStarted;
+    let holdRead = false, releaseRead, readStarted, remoteBackup = A.emptyState(), largeContents = false, blobReads = 0;
     await context.route("https://api.github.com/**", async route => {
       const method = route.request().method();
       syncCalls.push(method);
@@ -20,7 +20,13 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         readStarted();
         await new Promise(resolve => { releaseRead = resolve; });
       }
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sha: "test-backup" }) }).catch(() => {});
+      if (method === "PUT") remoteBackup = A.restore(Buffer.from(route.request().postDataJSON().content, "base64").toString("utf8"));
+      const blob = new URL(route.request().url()).pathname.endsWith("/git/blobs/test-backup");
+      if (blob) blobReads++;
+      const body = largeContents && method === "GET" && !blob
+        ? { sha: "test-backup", encoding: "none", content: "" } // Contents API shape for files >1 MB.
+        : { sha: "test-backup", encoding: "base64", content: A.utf8Base64(A.backup(remoteBackup)).replace(/.{76}/g, "$&\n") };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) }).catch(() => {});
     });
     const page = await context.newPage(), errors = [];
     page.on("pageerror", e => errors.push(e.message));
@@ -155,20 +161,41 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('[name="confirm-reset"]').check();
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
+    holdRead = false;
     releaseRead();
     const requestCount = syncCalls.length;
     await page.clock.fastForward(31000);
     const reset = await records();
     assert.deepEqual(reset.main, { revision: revision + 1, data: A.emptyState() });
-    assert.equal(reset.sync_config, undefined, "Reset deletes the saved token and sync metadata");
+    assert.equal(reset.sync_config.token, "synthetic-reset-test-changed", "Reset preserves the saved token by default");
+    assert.equal(reset.sync_config.checkAfterReset, true);
     assert.equal(syncCalls.length, requestCount, "No empty backup is uploaded after reset");
-    assert.equal(await page.locator("#sync-status").innerText(), "Sincronización desactivada");
+    assert.equal(await page.locator("#sync-token").getAttribute("placeholder"), "••••nged");
     assert.equal(await page.locator("#undo-button").isVisible(), false);
+    largeContents = true;
     await page.reload();
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
     assert.equal(await page.locator(".entity-card").count(), 0);
     assert.deepEqual((await records()).main.data, A.emptyState());
+    await page.getByRole("heading", { name: "Confirmar reemplazo del respaldo" }).waitFor();
+    assert.match(await page.locator("#dialog-body").innerText(), /tiene 4 movimientos y aquí hay 0/);
+    assert.equal(blobReads, 1, "Large backup guard counts movements from Git Blobs");
+    await page.screenshot({ path: "/tmp/gastalo-sync-guard.png" });
+    const putsBefore = syncCalls.filter(method => method === "PUT").length;
+    await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await page.clock.fastForward(31000);
+    assert.equal((await records()).sync_config.paused, true);
+    assert.equal(syncCalls.filter(method => method === "PUT").length, putsBefore);
+    await go("Importar/Exportar");
+    await page.getByRole("button", { name: "Sincronizar ahora", exact: true }).click();
+    await page.getByRole("heading", { name: "Confirmar reemplazo del respaldo" }).waitFor();
+    await page.getByRole("button", { name: "Reemplazar", exact: true }).click();
+    await page.clock.runFor(100);
+    await page.waitForFunction(() => document.querySelector("#sync-status").textContent.includes("Última sincronización"));
+    assert.equal(syncCalls.filter(method => method === "PUT").length, putsBefore + 1);
+    assert.equal(blobReads, 3, "Manual retry and explicit replacement both re-read the blob");
+    assert.deepEqual(remoteBackup, A.emptyState());
     assert.deepEqual(errors, []);
-    console.log("PASS: multi-year CSV without month, preview/cancel/repeated import, recurring limits and monthly spending, historical edits, zero/unlimited, category edits, reset confirmation/export/cancel/concurrency, local config deletion, in-flight sync cancellation and reload.");
+    console.log("PASS: multi-year CSV without month, preview/cancel/repeated import, recurring limits and monthly spending, historical edits, zero/unlimited, category edits, reset confirmation/export/cancel/concurrency, local config preservation, in-flight sync cancellation, reload and >1 MB Contents/Git Blobs fallback.");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
