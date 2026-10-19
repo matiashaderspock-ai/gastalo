@@ -37,14 +37,17 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       );
     }
     const menuBox = await page.locator("#app-menu > summary").boundingBox();
-    const brandBox = await page.locator(".brand").boundingBox();
+    assert.equal(await page.locator(".brand").isVisible(), false);
+    assert.equal(await page.locator(".app-footer .brand").count(), 0);
     const totalsBox = await page.locator(".home-totals").boundingBox();
     assert.ok(menuBox.x + menuBox.width <= totalsBox.x, "Totals sit beside the menu");
     assert.ok(Math.abs(menuBox.y + menuBox.height / 2 - totalsBox.y - totalsBox.height / 2) < 1);
-    assert.ok(brandBox.y >= (await page.locator("#main").boundingBox()).y + (await page.locator("#main").boundingBox()).height);
     assert.equal(await page.locator(".currency-chip, .home-hint, #main .footnote").count(), 0);
     // Header disclosure exposes all five views, and supports Escape and outside click.
     await page.locator("#app-menu > summary").click();
+    const brandBox = await page.locator(".menu-brand").boundingBox();
+    const firstItemBox = await page.locator("#app-menu nav button").first().boundingBox();
+    assert.ok(brandBox.y + brandBox.height <= firstItemBox.y);
     assert.equal(await page.locator("#app-menu nav button").count(), 5);
     await page.keyboard.press("Escape");
     assert.equal(
