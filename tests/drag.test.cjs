@@ -21,7 +21,7 @@ test("los nombres e importes conservan scroll y nunca inician arrastre", () => {
   for (const [dx,dy] of [[0,7],[0,-20],[20,0],[-20,1]])
     assert.equal(gesture({onCircle:false, dx,dy,canPan:true}), "scroll");
 });
-test("el modo edición y las categorías permiten desplazarse sin arrastrar", () => {
+test("los círculos que no arrastran permiten explorar filas o desplazar la página", () => {
   assert.equal(gesture({canDrag:false, canPan:true, dx:-30}), "pan");
   assert.equal(gesture({canDrag:false, canPan:true, dy:20}), "scroll");
   assert.equal(gesture({canDrag:false, dy:20}), "scroll");

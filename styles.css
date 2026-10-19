@@ -446,6 +446,8 @@ main:focus {
   align-items: center;
 }
 .compact-month button {
+  position: relative;
+  z-index: 1;
   min-height: 32px;
   min-width: 28px;
   padding: 0;
@@ -463,11 +465,16 @@ main:focus {
   margin: 0;
   font-size: 12px;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
 }
 .compact-month .month-picker input {
   position: absolute;
   inset: 0;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 32px;
   height: 32px;
   padding: 0;
@@ -582,7 +589,7 @@ main:focus {
 .entity-add:hover {
   background: transparent;
 }
-.entity-card:not([data-key="categories"]) .entity-mark {
+.entity-card .entity-mark {
   touch-action: none;
   cursor: grab;
 }
@@ -694,6 +701,19 @@ main:focus {
 }
 .editing-entities .entity-card {
   cursor: default;
+}
+.editing-entities .entity-card .entity-mark {
+  cursor: grab;
+}
+html.is-reordering {
+  overscroll-behavior: none;
+}
+.is-reordering body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.is-reordering .entity-add {
+  opacity: 0.35;
 }
 .entity-tools button {
   position: absolute;

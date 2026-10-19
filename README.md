@@ -10,6 +10,8 @@ PWA personal de gastos en BOB. HTML/CSS y un `app.js` vanilla, sin dependencias 
 - «Restablecer todo» borra datos y ajustes locales tras confirmar, permite descargar un respaldo y desactiva la sincronización sin reemplazar el respaldo remoto por datos vacíos.
 - Historial, límites, reportes y datos usan tarjetas y formularios compactos. Límites y reportes comparten el selector de mes de Inicio; cada categoría permite editar el límite desde «Editar», junto al título.
 - Selector de 48 iconos en dos páginas de 24: desliza horizontalmente o usa los botones de página o el teclado. Se conservan las 24 claves originales y la selección viaja en los respaldos JSON. Los nuevos símbolos cubren categorías habituales de gasto, tomando como referencia [Actual Budget](https://actualbudget.org/docs/getting-started/starting-fresh/) y [Wallet](https://support.budgetbakers.com/hc/en-us/articles/7077082048146-All-about-Categories-and-Subcategories).
+- Mantén pulsada una entidad para editar y arrastra su círculo para cambiarla de columna o fila dentro de su grupo. Puedes seguir arrastrando después de la pulsación larga o soltar y mover otro círculo; las posiciones se ajustan mientras lo mueves. Los bordes desplazan las filas y la página para alcanzar entidades fuera de pantalla. «Listo» sale del modo de edición. El orden se guarda, permite Deshacer y viaja en JSON. Con teclado, enfoca una entidad en modo edición y usa Alt + flechas (arriba/abajo avanzan una fila en categorías).
+- En los selectores de mes, las flechas anterior/siguiente cambian el período y solo el centro de mes/año abre el calendario.
 
 ## Usar y desarrollar
 
@@ -35,6 +37,7 @@ NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-entity-swipe.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-compact-icons.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-data-workflows.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-report-pie.cjs
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-reorder-months.cjs
 # GASTALO_URL permite probar un subdirectorio; CHROMIUM_PATH cambia el ejecutable.
 ```
 
