@@ -37,14 +37,17 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       );
     }
     const menuBox = await page.locator("#app-menu > summary").boundingBox();
-    const brandBox = await page.locator(".brand").boundingBox();
+    assert.equal(await page.locator(".brand").isVisible(), false);
+    assert.equal(await page.locator(".app-footer .brand").count(), 0);
     const totalsBox = await page.locator(".home-totals").boundingBox();
     assert.ok(menuBox.x + menuBox.width <= totalsBox.x, "Totals sit beside the menu");
     assert.ok(Math.abs(menuBox.y + menuBox.height / 2 - totalsBox.y - totalsBox.height / 2) < 1);
-    assert.ok(brandBox.y >= (await page.locator("#main").boundingBox()).y + (await page.locator("#main").boundingBox()).height);
     assert.equal(await page.locator(".currency-chip, .home-hint, #main .footnote").count(), 0);
     // Header disclosure exposes all five views, and supports Escape and outside click.
     await page.locator("#app-menu > summary").click();
+    const brandBox = await page.locator(".menu-brand").boundingBox();
+    const firstItemBox = await page.locator("#app-menu nav button").first().boundingBox();
+    assert.ok(brandBox.y + brandBox.height <= firstItemBox.y);
     assert.equal(await page.locator("#app-menu nav button").count(), 5);
     await page.keyboard.press("Escape");
     assert.equal(
@@ -282,7 +285,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         .getByRole("button", { name: "Volver a Inicio", exact: true })
         .click();
     }
-    await go("Límites");
+    await go("Límites de categoría");
     await page
       .getByRole("button", { name: "Editar límite de este mes" })
       .click();
@@ -320,11 +323,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('#toast [data-action="undo"]').click();
     await page.locator(".transaction").waitFor();
     await page.getByRole("button", { name: "Ver todo" }).click();
-    await go("Reportes");
+    await go("Gráficos");
     assert.equal(await page.locator(".timeline-month").count(), 12);
     assert.match(await page.locator(".stats").innerText(), /1000,10|1\.000,10/);
     assert.match(await page.locator(".stats").innerText(), /30,00/);
-    await go("Datos");
+    await go("Importar/Exportar");
     const downloadWait = page.waitForEvent("download");
     await page
       .getByRole("button", { name: "Descargar respaldo JSON", exact: true })
@@ -362,7 +365,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByText("Otra pestaña cambió tus datos. Recarga antes de guardar.")
       .waitFor();
     await stale.close();
-    await go("Datos");
+    await go("Importar/Exportar");
     await page.locator("#import-month").fill("2026-01");
     await page
       .locator("#csv-file")
@@ -410,7 +413,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator("#month").fill("2026-01");
     await assertBudgetMark("green", 12.75);
     for (const [limit, tone, fill, planned] of [["30", "orange", 85, "30,00"], ["25.50", "orange", 100, "25,50"], ["20", "red", 100, "20,00"], ["0", "red", 100, "0,00"], ["", "gray", 0, null], ["200", "green", 12.75, "200,00"]]) {
-      await go("Límites");
+      await go("Límites de categoría");
       await page.getByRole("button", { name: "Editar límite de este mes" }).click();
       await page.locator('#dialog [name="limit"]').fill(limit);
       await page.locator('#dialog button[type="submit"]').click();
@@ -839,7 +842,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const dp = await desktop.newPage();
     await dp.goto(base);
     await dp.getByRole("heading", { name: "Un mes más claro." }).waitFor();
-    await go("Datos", dp);
+    await go("Importar/Exportar", dp);
     await dp.locator("#import-month").fill("2026-01");
     await dp
       .locator("#csv-file")

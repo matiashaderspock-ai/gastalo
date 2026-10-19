@@ -1194,7 +1194,7 @@
       ).length;
       modal(
         "Quitar " + name(id),
-        `<fieldset class="remove-options"><legend>¿Qué quieres hacer?</legend><label class="check"><input type="radio" name="removal" value="archive" checked>Quitar de Inicio y conservar historial</label><p class="muted">Conserva movimientos y saldos. Puedes restaurarla en Datos.</p><label class="check"><input type="radio" name="removal" value="erase">Eliminar completamente</label></fieldset><div id="erase-warning" hidden><p>Se eliminará la entidad, sus ${count} movimientos de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.</p><label class="check"><input type="checkbox" name="confirmErase" disabled>Confirmo que quiero eliminar la entidad y su historial.</label></div>${actions("Quitar de Inicio")}`,
+        `<fieldset class="remove-options"><legend>¿Qué quieres hacer?</legend><label class="check"><input type="radio" name="removal" value="archive" checked>Quitar de Inicio y conservar historial</label><p class="muted">Conserva movimientos y saldos. Puedes restaurarla en Importar/Exportar.</p><label class="check"><input type="radio" name="removal" value="erase">Eliminar completamente</label></fieldset><div id="erase-warning" hidden><p>Se eliminará la entidad, sus ${count} movimientos de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.</p><label class="check"><input type="checkbox" name="confirmErase" disabled>Confirmo que quiero eliminar la entidad y su historial.</label></div>${actions("Quitar de Inicio")}`,
         async (data) => {
           if (data.get("removal") === "erase") {
             assert(data.get("confirmErase"), "Confirma la eliminación del historial.");
@@ -1411,7 +1411,7 @@
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
     }
     function budgets() {
-      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><h1>Presupuestos</h1><p>Un límite para cada categoría, un comienzo en cada mes.</p>${monthNav()}</div><section class="budget-grid">${
+      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><h1>Límites de categoría</h1><p>Un límite para cada categoría, un comienzo en cada mes.</p>${monthNav()}</div><section class="budget-grid">${
         state.categories
           .filter(
             (c) =>
@@ -1433,7 +1433,7 @@
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
-      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Reportes</h1><p>Totales por categoría y evolución mensual de ingresos y gastos.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
+      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><h1>Gráficos</h1><p>Totales por categoría y evolución mensual de ingresos y gastos.</p>${monthNav()}</div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
       <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
         r.categories
           .filter((c) => c.spent)
@@ -1447,7 +1447,7 @@
       <section class="panel"><h2>Doce meses de perspectiva</h2><p class="legend"><span class="income-key">Ingresos</span><span class="expense-key">Gastos</span></p><div class="timeline" role="img" aria-label="Evolución mensual de ingresos y gastos; datos en la tabla siguiente">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}</span></div>`).join("")}</div><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead><tbody>${series.map((m) => `<tr><td>${m.month}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></section><p class="footnote">Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.</p>`;
     }
     function settings() {
-      return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Datos y ajustes</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
+      return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Importar/Exportar</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
       <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
       <section class="panel"><h2>Trae tu historial desde otra app</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
