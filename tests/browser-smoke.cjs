@@ -124,7 +124,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
           .getByRole("button", { name: "Editar Comida", exact: true })
           .click();
         await page.locator('[data-action="toggle-icons"]').click();
-        assert.equal(await page.locator("#icon-picker button").count(), 24);
+        assert.equal(await page.locator('#icon-picker [data-action="select-icon"]').count(), 48);
         await page.locator('#icon-picker [data-icon="food"]').click();
         await page.locator('#dialog button[type="submit"]').click();
         await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -287,7 +287,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }
     await go("Límites de categoría");
     await page
-      .getByRole("button", { name: "Editar límite de este mes" })
+      .getByRole("button", { name: "Editar límite de Comida este mes" })
       .click();
     await page.locator('#dialog [name="limit"]').fill("200");
     await page.locator('#dialog button[type="submit"]').click();
@@ -414,7 +414,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await assertBudgetMark("green", 12.75);
     for (const [limit, tone, fill, planned] of [["30", "orange", 85, "30,00"], ["25.50", "orange", 100, "25,50"], ["20", "red", 100, "20,00"], ["0", "red", 100, "0,00"], ["", "gray", 0, null], ["200", "green", 12.75, "200,00"]]) {
       await go("Límites de categoría");
-      await page.getByRole("button", { name: "Editar límite de este mes" }).click();
+      await page.getByRole("button", { name: "Editar límite de Comida este mes" }).click();
       await page.locator('#dialog [name="limit"]').fill(limit);
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
