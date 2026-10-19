@@ -14,11 +14,9 @@ const state = () => A.importCSV(
   fs.readFileSync(__dirname + "/fixtures/coinkeeper.csv", "utf8"),
   "2026-01", "fixture", now,
 );
-const response = (status, sha) => ({
+const response = (status, sha, remote = A.emptyState()) => ({
   status, ok: status >= 200 && status < 300,
-  json: async () => ({ sha, get content() {
-    assert.fail("Remote content must never be consumed");
-  } }),
+  json: async () => ({ sha, encoding: "base64", content: A.utf8Base64(A.backup(remote, now)) }),
 });
 
 test("payload SHA-256 ignores exported_at and detects every transaction change", async () => {
@@ -47,6 +45,8 @@ test("sync decision skips absent token, offline and identical hash", () => {
   assert.equal(A.shouldSync({ ...config, lastHash: "same" }, true, "same"), false);
   assert.equal(A.shouldSync({ ...config, lastHash: "old" }, true, "changed"), true);
   assert.equal(A.shouldSync(config, true, "first"), true);
+  assert.equal(A.shouldSync({ ...config, paused: true }, true, "changed"), false);
+  assert.equal(A.shouldSync({ ...config, lastHash: "same", checkAfterReset: true }, true, "same"), true);
 });
 
 test("Contents API request encodes URL and includes required headers and safe fetch options", () => {
@@ -118,7 +118,7 @@ test("backup/restore and erase use financial state, never the separate sync_conf
   assert.equal(A.backup(records.get("main").data).includes(config.token), false);
 });
 
-test("upload GETs only SHA before PUT; 404 creates file without SHA", async () => {
+test("upload checks the backup with its SHA before PUT; 404 creates file without SHA", async () => {
   const payload = A.backup(state(), now);
   for (const sha of [undefined, "old-sha"]) {
     const calls = [], signal = new AbortController().signal;
@@ -169,4 +169,32 @@ test("auth and network failures stop without consuming response error text", asy
   await assert.rejects(A.uploadBackup(config, A.backup(state()), undefined, async () => {
     throw new TypeError(config.token);
   }), (e) => A.syncErrorMessage(e.status) === "Sin conexión, se reintentará");
+});
+
+test("conflict retries recheck counts before another PUT", async () => {
+  const calls = [];
+  await assert.rejects(A.uploadBackup(config, A.backup(A.emptyState()), undefined, async (url, options) => {
+    calls.push(options.method);
+    if (options.method === "PUT") return response(409);
+    return response(200, calls.length === 1 ? "old" : "new", calls.length === 1 ? A.emptyState() : state());
+  }), error => error.replacementRequired && error.remoteCount === 4 && error.localCount === 0);
+  assert.deepEqual(calls, ["GET", "PUT", "GET"]);
+});
+
+test("unreadable remote backups and aborted GETs cannot reach PUT", async () => {
+  for (const remote of [{ sha: "sha" }, { sha: "sha", encoding: "base64", content: "invalid!" }]) {
+    const calls = [];
+    await assert.rejects(A.uploadBackup(config, A.backup(state()), undefined, async (url, options) => {
+      calls.push(options.method);
+      return { ok: true, status: 200, json: async () => remote };
+    }));
+    assert.deepEqual(calls, ["GET"]);
+  }
+  const controller = new AbortController(), calls = [];
+  await assert.rejects(A.uploadBackup(config, A.backup(state()), controller.signal, async (url, options) => {
+    calls.push(options.method);
+    controller.abort();
+    return response(200, "sha");
+  }), { name: "AbortError" });
+  assert.deepEqual(calls, ["GET"]);
 });

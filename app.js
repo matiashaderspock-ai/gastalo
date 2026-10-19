@@ -624,7 +624,8 @@
       String.fromCharCode(v)).join(""));
   }
   function shouldSync(config, online, hash) {
-    return !!config.token && online && hash !== config.lastHash;
+    return !!config.token && online && !config.paused &&
+      (config.checkAfterReset || hash !== config.lastHash);
   }
   function syncErrorMessage(status) {
     if (status === 401 || status === 403) return "Token inválido o sin permiso";
@@ -663,17 +664,32 @@
     });
     return { url, options };
   }
-  async function uploadBackup(config, payload, signal, fetcher = globalThis.fetch) {
+  async function uploadBackup(config, payload, signal, fetcher = globalThis.fetch, replacementSha) {
     const request = (data, sha) => {
       const { url, options } = syncRequest(config, data, sha);
       return fetcher(url, { ...options, signal });
     };
-    // Read only the file SHA. Remote contents never enter the app state.
+    const localCount = JSON.parse(payload).transactions.filter((t) => t.status === "posted").length;
+    // Check the contents from the same GET as the SHA, including conflict retries.
+    // Remote contents never enter the app state; unreadable backups are not overwritten.
     for (let attempt = 0; attempt < 2; attempt++) {
       const metadata = await request();
       if (!metadata.ok && metadata.status !== 404)
         throw { status: metadata.status };
-      const sha = metadata.status === 404 ? undefined : (await metadata.json()).sha;
+      let sha;
+      if (metadata.status !== 404) {
+        const remote = await metadata.json();
+        sha = remote.sha;
+        assert(sha && remote.encoding === "base64", "No se pudo leer el respaldo remoto.");
+        const data = restore(new TextDecoder("utf-8", { fatal: true }).decode(
+          Uint8Array.from(atob(remote.content), (c) => c.charCodeAt(0)),
+        ));
+        const remoteCount = data.transactions.filter((t) => t.status === "posted").length;
+        if ((config.checkAfterReset || (localCount === 0 && remoteCount > 0) ||
+            (remoteCount >= 20 && localCount < remoteCount / 2)) && sha !== replacementSha)
+          throw { replacementRequired: true, localCount, remoteCount, sha };
+      }
+      signal?.throwIfAborted();
       const result = await request(payload, sha);
       if (result.ok) return;
       if (attempt === 0 && [409, 422].includes(result.status)) continue;
@@ -1041,10 +1057,30 @@
     }
     function scheduleSync() {
       clearTimeout(syncTimer);
-      if (syncConfig.token) syncTimer = setTimeout(runSync, 30000);
+      if (syncConfig.token && !syncConfig.paused) syncTimer = setTimeout(runSync, 30000);
     }
-    async function runSync() {
-      if (resetting || !syncReady || !syncConfig.token || !navigator.onLine) return;
+    function confirmSyncReplacement(error, config, hash) {
+      if (config !== syncConfig || !config.paused) return;
+      const dialog = $("#dialog");
+      if (dialog.open) {
+        dialog.addEventListener("close", () => confirmSyncReplacement(error, config, hash), { once: true });
+        return;
+      }
+      modal(
+        "Confirmar reemplazo del respaldo",
+        `<p>Tu respaldo en GitHub tiene ${error.remoteCount} movimientos y aquí hay ${error.localCount}. ¿Reemplazarlo con ${error.localCount === 0 ? "datos vacíos" : "los datos de este dispositivo"}?</p><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="danger" type="submit">Reemplazar</button></div>`,
+        async () => {
+          if (config !== syncConfig) return;
+          config.paused = false;
+          await persistSyncConfig(config);
+          // Close the prompt before starting another check; approval is tied to this payload/SHA.
+          setTimeout(() => runSync({ hash, sha: error.sha }), 0);
+        },
+        { compact: true, focusSelector: '[data-action="close"]' },
+      );
+    }
+    async function runSync(replacement) {
+      if (resetting || !syncReady || !syncConfig.token || syncConfig.paused || !navigator.onLine) return;
       if (syncFlight) {
         syncQueued = true;
         return;
@@ -1052,21 +1088,30 @@
       const config = syncConfig, controller = new AbortController();
       syncFlight = controller;
       const timeout = setTimeout(() => controller.abort(), 20000);
+      let hash;
       try {
-        const payload = backup(state), hash = await backupHash(payload);
+        const payload = backup(state);
+        hash = await backupHash(payload);
         if (controller.signal.aborted || config !== syncConfig ||
             !shouldSync(config, navigator.onLine, hash)) return;
-        await uploadBackup(config, payload, controller.signal);
+        await uploadBackup(config, payload, controller.signal, globalThis.fetch,
+          replacement?.hash === hash ? replacement.sha : undefined);
         if (controller.signal.aborted || config !== syncConfig) return;
         config.lastHash = hash;
         config.lastSuccess = new Date().toISOString();
         config.lastError = "";
+        delete config.checkAfterReset;
         await persistSyncConfig(config);
       } catch (error) {
         if (!resetting && config === syncConfig) {
-          config.lastError = syncErrorMessage(error?.status);
+          if (error?.replacementRequired) {
+            config.paused = true;
+            clearTimeout(syncTimer);
+            config.lastError = "Sincronización en pausa. Pulsa «Sincronizar ahora» para reintentar.";
+          } else config.lastError = syncErrorMessage(error?.status);
           // Never display exception/response text: it may echo credentials.
           await persistSyncConfig(config).catch(() => {});
+          if (error?.replacementRequired) confirmSyncReplacement(error, config, hash);
         }
       } finally {
         clearTimeout(timeout);
@@ -1090,6 +1135,7 @@
           token: input.value.trim() || syncConfig.token,
         };
         if (!disable) syncRequest(next);
+        if (!disable) next.paused = false;
         if (["repo", "branch", "path", "token"].some((key) => next[key] !== syncConfig[key])) {
           delete next.lastHash;
           delete next.lastSuccess;
@@ -1162,7 +1208,7 @@
       revision = record?.revision || 0;
       validateState(state);
     }
-    async function commit(next, message, reversible = false, { reset = false } = {}) {
+    async function commit(next, message, reversible = false, { reset = false, eraseSync = false } = {}) {
       assert(!busy, "Espera a que termine el guardado.");
       busy = true;
       if (reset) {
@@ -1185,7 +1231,10 @@
               tx.abort();
             } else {
               store.put({ data: next, revision: revision + 1 }, "main");
-              if (reset) store.delete("sync_config");
+              if (reset) {
+                if (eraseSync) store.delete("sync_config");
+                else store.put({ ...syncConfig, checkAfterReset: true }, "sync_config");
+              }
             }
           };
           tx.oncomplete = resolve;
@@ -1202,7 +1251,7 @@
         state = next;
         revision++;
         if (reset) {
-          syncConfig = defaultSyncConfig();
+          syncConfig = eraseSync ? defaultSyncConfig() : { ...syncConfig, checkAfterReset: true };
           pendingImport = null;
           detailId = null;
           detailScope = "month";
@@ -1269,10 +1318,11 @@
     function resetApp() {
       modal(
         "¿Restablecer todo desde cero?",
-        `<p>Se borrarán todos los movimientos, saldos, fuentes, cuentas, categorías, etiquetas, límites e importaciones de este dispositivo, junto con los ajustes de la aplicación.</p><p>La sincronización quedará desactivada. El respaldo que ya exista en GitHub se conserva.</p><button type="button" data-action="export">Descargar respaldo antes de borrar</button><label class="check"><input name="confirm-reset" type="checkbox" required>Entiendo que se borrarán todos los datos de este dispositivo.</label><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="danger" type="submit">Restablecer todo</button></div>`,
+        `<p>Se borrarán todos los movimientos, saldos, fuentes, cuentas, categorías, etiquetas, límites e importaciones de este dispositivo, junto con los ajustes de la aplicación.</p><p>Se conservarán los ajustes de sincronización y el respaldo que ya exista en GitHub.</p><button type="button" data-action="export">Descargar respaldo antes de borrar</button><label class="check"><input name="erase-sync" type="checkbox">También borrar el token de sincronización</label><p class="muted">Tendrás que crear y pegar un token nuevo</p><label class="check"><input name="confirm-reset" type="checkbox" required>Entiendo que se borrarán todos los datos de este dispositivo.</label><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="danger" type="submit">Restablecer todo</button></div>`,
         async (data) => {
           assert(data.get("confirm-reset") === "on", "Confirma que quieres borrar todos los datos.");
-          await commit(emptyState(), "Aplicación restablecida desde cero", false, { reset: true });
+          await commit(emptyState(), "Aplicación restablecida desde cero", false,
+            { reset: true, eraseSync: data.get("erase-sync") === "on" });
         },
         { compact: true, focusSelector: '[data-action="close"]' },
       );
