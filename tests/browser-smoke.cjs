@@ -287,14 +287,14 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }
     await go("Límites de categoría");
     await page
-      .getByRole("button", { name: "Editar límite de Comida este mes" })
+      .getByRole("button", { name: "Editar límite de Comida" })
       .click();
     await page.locator('#dialog [name="limit"]').fill("200");
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.match(await page.locator(".budget-card").innerText(), /174,50/);
     await page.getByRole("button", { name: "Mes siguiente" }).click();
-    assert.match(await page.locator(".budget-card").innerText(), /Sin límite/);
+    assert.match(await page.locator(".budget-card").innerText(), /200,00/);
     await page
       .getByRole("button", { name: "Mes anterior", exact: true })
       .click();
@@ -366,7 +366,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .waitFor();
     await stale.close();
     await go("Importar/Exportar");
-    await page.locator("#import-month").fill("2026-01");
+    await page.locator(".import-options > summary").click();
+    await page.locator("#import-budget-month").fill("2026-01");
     await page
       .locator("#csv-file")
       .setInputFiles(path.join(__dirname, "fixtures/coinkeeper.csv"));
@@ -409,12 +410,12 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await assertBudgetMark("green", 12.75);
     assert.equal(await page.locator('.row-0 .entity-planned, .row-1 .entity-planned').count(), 0);
     await page.locator("#month").fill("2026-02");
-    assert.equal(await card("Comida").locator(".entity-planned").count(), 0);
+    assert.equal(await card("Comida").locator(".entity-planned").innerText(), "200,00");
     await page.locator("#month").fill("2026-01");
     await assertBudgetMark("green", 12.75);
     for (const [limit, tone, fill, planned] of [["30", "orange", 85, "30,00"], ["25.50", "orange", 100, "25,50"], ["20", "red", 100, "20,00"], ["0", "red", 100, "0,00"], ["", "gray", 0, null], ["200", "green", 12.75, "200,00"]]) {
       await go("Límites de categoría");
-      await page.getByRole("button", { name: "Editar límite de Comida este mes" }).click();
+      await page.getByRole("button", { name: "Editar límite de Comida" }).click();
       await page.locator('#dialog [name="limit"]').fill(limit);
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
@@ -843,7 +844,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await dp.goto(base);
     await dp.getByRole("heading", { name: "Un mes más claro." }).waitFor();
     await go("Importar/Exportar", dp);
-    await dp.locator("#import-month").fill("2026-01");
+    await dp.locator(".import-options > summary").click();
+    await dp.locator("#import-budget-month").fill("2026-01");
     await dp
       .locator("#csv-file")
       .setInputFiles(path.join(__dirname, "fixtures/coinkeeper.csv"));

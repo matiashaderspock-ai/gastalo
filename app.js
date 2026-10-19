@@ -372,11 +372,16 @@
       })),
     };
   }
+  function budgetLimit(state, categoryId, month) {
+    let latest = null;
+    for (const record of state.budgets) {
+      if (record.category_id === categoryId && record.month <= month &&
+          (!latest || record.month > latest.month)) latest = record;
+    }
+    return latest?.limit_cents ?? null;
+  }
   function budget(state, categoryId, month) {
-    const limit =
-      state.budgets.find(
-        (b) => b.category_id === categoryId && b.month === month,
-      )?.limit_cents ?? null;
+    const limit = budgetLimit(state, categoryId, month);
     const spent =
       report(state, month).categories.find((c) => c.id === categoryId)?.spent ||
       0;
@@ -563,10 +568,8 @@
     )) {
       const r = report(s, m);
       for (const c of r.categories) {
-        const b = s.budgets.find(
-          (b) => b.month === m && b.category_id === c.id,
-        );
-        if (b?.limit_cents != null) sum([b.limit_cents, -c.spent]);
+        const limit = budgetLimit(s, c.id, m);
+        if (limit !== null) sum([limit, -c.spent]);
       }
     }
     return s;
@@ -720,14 +723,13 @@
   ];
   function importCSV(
     text,
-    month,
+    month = null,
     fingerprint = "csv",
     now = new Date().toISOString(),
   ) {
-    assert(
-      monthOK(month),
-      "Elige el mes al que pertenece el presupuesto del CSV.",
-    );
+    month = month === "" ? null : month;
+    assert(month === null || monthOK(month), "El mes de los límites del CSV es inválido.");
+    const fallbackDate = month ? month + "-01" : now.slice(0, 10);
     const groups = [];
     let group = [];
     for (const row of csvRecords(text)) {
@@ -787,14 +789,14 @@
         if (key === "accounts") {
           current.set(e.id, cents(row[1]));
           e.opening_balance_cents = 0;
-          e.opening_date = month + "-01";
+          e.opening_date = fallbackDate;
           e.exclude_from_total = false;
         }
         s[key].push(e);
         if (key === "categories") {
           const n = row[1] === "" ? null : cents(row[1]);
           assert(n === null || n >= 0, "Presupuesto negativo.");
-          s.budgets.push({
+          if (month !== null) s.budgets.push({
             id: id(),
             category_id: e.id,
             month,
@@ -887,7 +889,7 @@
     }
     const net = balances(s);
     const earliest =
-      s.transactions.map((t) => t.occurred_on).sort()[0] || month + "-01";
+      s.transactions.map((t) => t.occurred_on).sort()[0] || fallbackDate;
     for (const a of s.accounts) {
       a.opening_balance_cents = sum([current.get(a.id), -net[a.id]]);
       a.opening_date = earliest;
@@ -919,6 +921,7 @@
     filterTransactions,
     report,
     budget,
+    budgetLimit,
     budgetVisual,
     eraseEntity,
     evolution,
@@ -981,13 +984,15 @@
       pendingImport = null,
       historyLimit = 100,
       busy = false;
-    // Separate IndexedDB key: never included in state, backups, imports or erase.
-    let syncConfig = {
+    // Separate IndexedDB key: excluded from financial backups and entity deletion.
+    const defaultSyncConfig = () => ({
       repo: "matiashaderspock-ai/gastalo-data",
       branch: "main",
       path: "gastalo-backup.json",
       token: "",
-    }, syncReady = false, syncFlight = null, syncQueued = false, syncTimer;
+    });
+    let syncConfig = defaultSyncConfig(), syncReady = false, syncFlight = null,
+      syncQueued = false, syncTimer, resetting = false;
     function syncStatus() {
       return syncConfig.lastError || (syncConfig.lastSuccess
         ? "Última sincronización: " + new Intl.DateTimeFormat("es-BO", {
@@ -1012,7 +1017,7 @@
       if (syncConfig.token) syncTimer = setTimeout(runSync, 30000);
     }
     async function runSync() {
-      if (!syncReady || !syncConfig.token || !navigator.onLine) return;
+      if (resetting || !syncReady || !syncConfig.token || !navigator.onLine) return;
       if (syncFlight) {
         syncQueued = true;
         return;
@@ -1031,7 +1036,7 @@
         config.lastError = "";
         await persistSyncConfig(config);
       } catch (error) {
-        if (config === syncConfig) {
+        if (!resetting && config === syncConfig) {
           config.lastError = syncErrorMessage(error?.status);
           // Never display exception/response text: it may echo credentials.
           await persistSyncConfig(config).catch(() => {});
@@ -1081,7 +1086,7 @@
         timeZone: state.profile.timezone,
       }).format(new Date());
     let month = today().slice(0, 7);
-    let filters = {
+    const defaultFilters = () => ({
       start: "",
       end: "",
       entities: [],
@@ -1089,7 +1094,8 @@
       tagMode: "any",
       kind: "",
       text: "",
-    };
+    });
+    let filters = defaultFilters();
     const allEntities = () => [
       ...state.sources,
       ...state.accounts,
@@ -1129,9 +1135,15 @@
       revision = record?.revision || 0;
       validateState(state);
     }
-    async function commit(next, message, reversible = false) {
+    async function commit(next, message, reversible = false, { reset = false } = {}) {
       assert(!busy, "Espera a que termine el guardado.");
       busy = true;
+      if (reset) {
+        resetting = true;
+        syncFlight?.abort();
+        clearTimeout(syncTimer);
+        syncQueued = false;
+      }
       const before = copy(state);
       try {
         validateState(next);
@@ -1144,7 +1156,10 @@
             if ((r.result?.revision || 0) !== revision) {
               conflict = true;
               tx.abort();
-            } else store.put({ data: next, revision: revision + 1 }, "main");
+            } else {
+              store.put({ data: next, revision: revision + 1 }, "main");
+              if (reset) store.delete("sync_config");
+            }
           };
           tx.oncomplete = resolve;
           tx.onerror = () => reject(tx.error);
@@ -1159,11 +1174,22 @@
         });
         state = next;
         revision++;
-        scheduleSync();
+        if (reset) {
+          syncConfig = defaultSyncConfig();
+          pendingImport = null;
+          detailId = null;
+          detailScope = "month";
+          homeScroll = 0;
+          editingEntities = false;
+          historyLimit = 100;
+          month = today().slice(0, 7);
+          filters = defaultFilters();
+        } else scheduleSync();
         undo = reversible ? before : null;
         render();
         notify(message, reversible);
       } finally {
+        resetting = false;
         busy = false;
       }
     }
@@ -1213,6 +1239,17 @@
     }
     const actions = (save = "Guardar") =>
       `<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary" type="submit">${save}</button></div>`;
+    function resetApp() {
+      modal(
+        "¿Restablecer todo desde cero?",
+        `<p>Se borrarán todos los movimientos, saldos, fuentes, cuentas, categorías, etiquetas, límites e importaciones de este dispositivo, junto con los ajustes de la aplicación.</p><p>La sincronización quedará desactivada. El respaldo que ya exista en GitHub se conserva.</p><button type="button" data-action="export">Descargar respaldo antes de borrar</button><label class="check"><input name="confirm-reset" type="checkbox" required>Entiendo que se borrarán todos los datos de este dispositivo.</label><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="danger" type="submit">Restablecer todo</button></div>`,
+        async (data) => {
+          assert(data.get("confirm-reset") === "on", "Confirma que quieres borrar todos los datos.");
+          await commit(emptyState(), "Aplicación restablecida desde cero", false, { reset: true });
+        },
+        { compact: true, focusSelector: '[data-action="close"]' },
+      );
+    }
     function movement(from = "", to = "", transaction = null, reviewId = null) {
       const t = transaction;
       modal(
@@ -1330,7 +1367,7 @@
         <label>Nombre<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
         ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial<input type="date" name="openingDate" required value="${e?.opening_date || today()}"></label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
         ${key === "sources" ? `<label>Ingreso mensual previsto · BOB (opcional)<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
-        ${key === "categories" ? `<label>Presupuesto · ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && budget(state, e.id, month).limit !== null ? decimal(budget(state, e.id, month).limit) : ""}" placeholder="Sin límite"></label>` : ""}
+        ${key === "categories" ? `<label>Límite mensual · desde ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && budget(state, e.id, month).limit !== null ? decimal(budget(state, e.id, month).limit) : ""}" placeholder="Sin límite"></label>` : ""}
         ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>Archivar (conserva historial)</label>` : ""}${actions()}`,
         async (data) => {
           const next = copy(state),
@@ -1384,7 +1421,7 @@
               (b) => b.category_id === item.id && b.month === month,
             );
             if (record) record.limit_cents = limit;
-            else if (limit !== null)
+            else if (limit !== (e ? budgetLimit(state, e.id, month) : null))
               next.budgets.push({
                 id: uid(),
                 category_id: item.id,
@@ -1401,7 +1438,7 @@
       const b = budget(state, id, month);
       modal(
         "Presupuesto · " + name(id),
-        `<p>${esc(monthLabel(month))}. Este límite solo cambia este mes.</p><label>Límite · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="Vacío = sin límite"></label><p class="muted">Cero es un límite válido. El restante no pasa al siguiente mes.</p>${actions()}`,
+        `<p>${esc(monthLabel(month))}. Desde este mes, el límite se mantiene en los meses siguientes hasta que lo cambies.</p><label>Límite · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="Vacío = sin límite"></label><p class="muted">Cero es un límite válido. El restante no pasa al siguiente mes.</p>${actions()}`,
         async (data) => {
           const next = copy(state),
             n =
@@ -1411,7 +1448,7 @@
             (b) => b.category_id === id && b.month === month,
           );
           if (record) record.limit_cents = n;
-          else
+          else if (n !== b.limit)
             next.budgets.push({
               id: uid(),
               category_id: id,
@@ -1508,9 +1545,7 @@
           .map((a) => bs[a.id]),
       );
       const monthlyBudget = sum(
-        state.budgets
-          .filter((b) => b.month === month && b.limit_cents !== null)
-          .map((b) => b.limit_cents),
+        state.categories.map((c) => budgetLimit(state, c.id, month) ?? 0),
       );
       return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", monthlyBudget)}</section>`;
     }
@@ -1564,13 +1599,13 @@
     function filterPanel() {
       return `<details class="panel filters" open><summary>Filtros compartidos con reportes</summary><div class="form-grid">
         <label>Desde<input id="f-start" type="date" value="${esc(filters.start)}"></label><label>Hasta<input id="f-end" type="date" value="${esc(filters.end)}"></label>
-        <label>Cuentas, fuentes o categorías<select multiple id="f-entities">${allEntities()
+        <label>Cuentas, fuentes o categorías<select multiple size="1" id="f-entities">${allEntities()
           .map(
             (e) =>
               `<option value="${esc(e.id)}" ${filters.entities.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`,
           )
           .join("")}</select></label>
-        <label>Etiquetas<select multiple id="f-tags">${state.tags.map((e) => `<option value="${esc(e.id)}" ${filters.tags.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></label>
+        <label>Etiquetas<select multiple size="1" id="f-tags">${state.tags.map((e) => `<option value="${esc(e.id)}" ${filters.tags.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></label>
         <label>Coincidencia de etiquetas<select id="f-tagMode"><option value="any" ${filters.tagMode === "any" ? "selected" : ""}>Cualquiera</option><option value="all" ${filters.tagMode === "all" ? "selected" : ""}>Todas</option></select></label>
         <label>Tipo<select id="f-kind"><option value="">Todos</option>${Object.entries(
           labels,
@@ -1689,30 +1724,84 @@
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
     }
     function budgets() {
-      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Un límite para cada categoría, un comienzo en cada mes.</p></div><section class="budget-grid">${
+      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="budget-grid">${
         state.categories
           .filter(
             (c) =>
               !c.archived_at ||
               budget(state, c.id, month).spent ||
+              budgetLimit(state, c.id, month) !== null ||
               state.budgets.some(
                 (b) => b.category_id === c.id && b.month === month,
               ),
           )
           .map((c) => {
             const b = budget(state, c.id, month);
-            return `<article class="panel budget-card"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)} este mes">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl></article>`;
+            return `<article class="panel budget-card"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl></article>`;
           })
           .join("") ||
         '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'
-      }</section><p class="footnote">Cada mes guarda su propio límite. Sin límite y límite cero son distintos. No se arrastra el restante.</p><button data-action="copy-budgets">Copiar límites del mes anterior a los que faltan</button>`;
+      }</section><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
+    }
+    function expensePie(categories) {
+      const total = sum(categories.map((c) => c.spent));
+      if (!total) return "";
+      const palette = ["#236352", "#ca673f", "#5278a8", "#a58b27", "#80649b", "#368c89", "#a75872", "#718544"];
+      let angle = -Math.PI / 2;
+      const slices = categories.map((c, index) => ({
+        ...c, color: palette[index] || `hsl(${Math.round(index * 137.508) % 360} 42% 44%)`,
+      })).filter((c) => c.spent > 0).sort((a, b) => b.spent - a.spent).map((c, index) => {
+        const start = angle;
+        angle += c.spent / total * Math.PI * 2;
+        return { ...c, start, end: angle, percent: c.spent / total * 100,
+          major: index < 5 && c.spent / total >= 0.05 };
+      });
+      const point = (a, radius) => ({ x: 180 + Math.cos(a) * radius, y: 135 + Math.sin(a) * radius });
+      const percent = (n) => n.toFixed(1) + "%";
+      const shape = (c) => {
+        const title = `${esc(c.name)} · ${percent(c.percent)}`;
+        const attributes = `class="pie-slice" data-category="${esc(c.id)}" data-percent="${c.percent}" fill="${c.color}" tabindex="0" role="img" aria-label="${title}"`;
+        if (slices.length === 1) return `<circle ${attributes} cx="180" cy="135" r="82"><title>${title}</title></circle>`;
+        const from = point(c.start, 82), to = point(c.end, 82);
+        return `<path ${attributes} d="M180 135 L${from.x} ${from.y} A82 82 0 ${c.end - c.start > Math.PI ? 1 : 0} 1 ${to.x} ${to.y} Z"><title>${title}</title></path>`;
+      };
+      const other = slices.filter((c) => !c.major);
+      const otherPercent = sum(other.map((c) => c.spent)) / total * 100;
+      const labels = slices.filter((c) => c.major).map((c) => ({ ...c, angle: (c.start + c.end) / 2 }));
+      if (other.length) labels.push({ name: "Otros", percent: otherPercent,
+        angle: (other[0].start + other.at(-1).end) / 2 });
+      for (const side of [-1, 1]) {
+        const group = labels.filter((label) => (Math.cos(label.angle) < 0 ? -1 : 1) === side)
+          .sort((a, b) => point(a.angle, 94).y - point(b.angle, 94).y);
+        group.forEach((label, index) => {
+          label.side = side;
+          const min = 35 + index * 42, max = 235 - (group.length - index - 1) * 42;
+          label.y = Math.max(min, Math.min(max, point(label.angle, 94).y));
+          if (index) label.y = Math.max(label.y, group[index - 1].y + 42);
+        });
+      }
+      const labelText = (label) => {
+        const text = label.name.trim();
+        let first = text, second = "";
+        if (text.length > 14) {
+          const space = text.lastIndexOf(" ", 14);
+          const cut = space > 0 ? space : 14;
+          first = text.slice(0, cut);
+          second = text.slice(cut).trim();
+          if (second.length > 14) second = second.slice(0, 13) + "…";
+        }
+        const p = point(label.angle, 85), elbow = point(label.angle, 94);
+        const x = label.side < 0 ? 4 : 356, edge = label.side < 0 ? 94 : 266;
+        return `<g class="pie-label"><path d="M${p.x} ${p.y} L${elbow.x} ${elbow.y} L${edge} ${label.y}"/><text x="${x}" y="${label.y - (second ? 16 : 5)}" text-anchor="${label.side < 0 ? "start" : "end"}"><tspan x="${x}">${esc(first)}</tspan>${second ? `<tspan x="${x}" dy="13">${esc(second)}</tspan>` : ""}<tspan class="pie-percent" x="${x}" dy="15">${percent(label.percent)}</tspan></text></g>`;
+      };
+      return `<figure class="expense-pie"><svg viewBox="0 0 360 270" role="img" aria-labelledby="expense-pie-title expense-pie-description"><title id="expense-pie-title">Gastos por categoría</title><desc id="expense-pie-description">${slices.map((c) => `${esc(c.name)}: ${percent(c.percent)}`).join("; ")}. Detalle en la tabla siguiente.</desc>${slices.map(shape).join("")}${labels.map(labelText).join("")}</svg>${other.length ? `<figcaption class="pie-others"><h3>Otros <span>· ${percent(otherPercent)}</span></h3><ul>${other.map((c) => `<li><span class="pie-color" style="--slice-color:${c.color}" aria-hidden="true"></span><span>${esc(c.name)}</span><strong>${percent(c.percent)}</strong></li>`).join("")}</ul></figcaption>` : ""}</figure>`;
     }
     function reports() {
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
       return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><div class="page-title"><h1>Gráficos</h1>${monthNav(true)}</div><p>Totales por categoría y evolución mensual de ingresos y gastos.</p></div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
-      <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
+      <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p>${expensePie(r.categories)}<div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
         r.categories
           .filter((c) => c.spent)
           .map(
@@ -1735,7 +1824,7 @@
       <p class="muted">Usa un token con permiso de escritura de Contents en el repositorio elegido. «Sincronizar ahora» guarda la configuración en este dispositivo.</p>
       <button class="primary" type="submit">Sincronizar ahora</button> <button type="button" data-action="sync-disable">Desactivar</button></form>
       <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></section>
-      <section class="panel"><h2>Trae tu historial desde otra app</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
+      <section class="panel"><h2>Importar historial completo</h2><p>Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.</p><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>Importar también límites de categoría (opcional)</summary><p>El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.</p><label>Aplicar límites desde (opcional)<input id="import-budget-month" type="month" aria-describedby="import-budget-help"></label><p id="import-budget-help" class="muted">Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.</p></details><p class="muted">CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
           .slice(0, historyLimit)
@@ -1747,7 +1836,8 @@
       }${state.review.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section>
       <section class="panel"><h2>Tu calendario</h2><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></section>
       <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div>`).join("")}</details>`).join("")}</section>
-      <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
+      <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
+      <section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>`;
     }
     function render() {
       resetTransactionSwipe();
@@ -1782,9 +1872,17 @@
     }
     async function previewImport(next, source) {
       pendingImport = next;
+      const dates = next.transactions.map((t) => t.occurred_on).sort();
+      const displayDate = (date) => esc(new Intl.DateTimeFormat("es-BO", {
+        dateStyle: "medium", timeZone: "UTC",
+      }).format(new Date(date + "T12:00:00Z")));
+      const period = dates.length
+        ? `<div><dt>Desde</dt><dd>${displayDate(dates[0])}</dd></div><div><dt>Hasta</dt><dd>${displayDate(dates.at(-1))}</dd></div>`
+        : `<div><dt>Período</dt><dd>Sin movimientos</dd></div>`;
+      const limits = next.budgets.length ? String(next.budgets.length) : "Sin límites";
       modal(
         "Revisar importación",
-        `<p>${esc(source)}</p><dl class="import-summary"><div><dt>Movimientos aceptados</dt><dd>${next.transactions.length}</dd></div><div><dt>Filas pendientes</dt><dd>${next.review.length}</dd></div><div><dt>Cuentas</dt><dd>${next.accounts.length}</dd></div><div><dt>Categorías</dt><dd>${next.categories.length}</dd></div></dl><p>Se reemplazarán los datos actuales (${state.transactions.length} movimientos). Puedes descargar un respaldo antes de continuar.</p><button type="button" data-action="export">Descargar respaldo actual</button><label class="check"><input name="confirm" type="checkbox" required>Entiendo que se reemplazarán los datos de este dispositivo.</label>${actions("Importar y reemplazar")}`,
+        `<p>${esc(source)}</p><dl class="import-summary">${period}<div><dt>Movimientos aceptados</dt><dd>${next.transactions.length}</dd></div><div><dt>Filas pendientes</dt><dd>${next.review.length}</dd></div><div><dt>Cuentas</dt><dd>${next.accounts.length}</dd></div><div><dt>Categorías</dt><dd>${next.categories.length}</dd></div><div><dt>Límites de categoría</dt><dd>${limits}</dd></div></dl><p>Se reemplazarán los datos actuales (${state.transactions.length} movimientos). Puedes descargar un respaldo antes de continuar.</p><button type="button" data-action="export">Descargar respaldo actual</button><label class="check"><input name="confirm" type="checkbox" required>Entiendo que se reemplazarán los datos de este dispositivo.</label>${actions("Importar y reemplazar")}`,
         async () => {
           await commit(pendingImport, "Importación guardada");
           pendingImport = null;
@@ -1876,6 +1974,7 @@
         );
       }
       if (action === "movement") return movement();
+      if (action === "reset-app") return resetApp();
       if (action === "add") return editEntity(button.dataset.key);
       if (action === "edit-entity") return editEntity(button.dataset.key, id);
       if (action === "edit-transaction")
@@ -1898,15 +1997,7 @@
         return render();
       }
       if (action === "clear-filters") {
-        filters = {
-          start: "",
-          end: "",
-          kind: "",
-          entities: [],
-          tags: [],
-          tagMode: "any",
-          text: "",
-        };
+        filters = defaultFilters();
         historyLimit = 100;
         return render();
       }
@@ -1926,26 +2017,6 @@
         filters = next;
         historyLimit = 100;
         return render();
-      }
-      if (action === "copy-budgets") {
-        const next = copy(state);
-        let added = 0;
-        for (const b of state.budgets.filter(
-          (b) => b.month === shiftMonth(month, -1),
-        ))
-          if (
-            !next.budgets.some(
-              (item) =>
-                item.month === month && item.category_id === b.category_id,
-            )
-          ) {
-            next.budgets.push({ ...b, id: uid(), month });
-            added++;
-          }
-        return commit(
-          next,
-          `${added} límites copiados. Sin arrastre de restante.`,
-        );
       }
       if (action === "export") return download();
       if (action === "sync-disable") return saveSyncSettings(true);
@@ -2374,7 +2445,7 @@
               .map((v) => v.toString(16).padStart(2, "0"))
               .join("");
             await previewImport(
-              importCSV(text, $("#import-month").value, hash),
+              importCSV(text, $("#import-budget-month").value || null, hash),
               file.name,
             );
           }

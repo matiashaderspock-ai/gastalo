@@ -4,9 +4,10 @@ PWA personal de gastos en BOB. HTML/CSS y un `app.js` vanilla, sin dependencias 
 
 - Fuentes y cuentas en filas deslizables con cuatro columnas visibles y un botón de creación discreto al final que se descubre al deslizar; categorías en cuatro columnas con el botón al final de la grilla. Desliza horizontalmente sobre nombres, importes o espacios para explorar una fila. Los nombres, importes y espacios también permiten scroll vertical normal; solo el círculo reserva el arrastre. Arrastra un círculo: el primer movimiento del dedo inicia el arrastre, sin espera ni umbral de distancia para registrar movimientos, o usa «+ Movimiento»; confirma importe, fecha, etiquetas y nota. Toca cualquier círculo para ver su historial y gráfico mensual; mantén pulsado 450 ms para mostrar los controles de edición. La navegación queda junto a los tres totales en la barra superior; la marca aparece al pie de la pantalla. Las entidades permiten elegir iconos propios; la X permite quitarlas de Inicio conservando el historial, o eliminarlas completamente junto con sus movimientos y presupuestos tras confirmar. El último cambio se puede deshacer.
 - Historial con filtros combinados, edición y borrado con deshacer. Dentro de una entidad, deslizar un movimiento a la izquierda revela Borrar; un deslizamiento completo lo borra con Deshacer disponible. La cabecera de la entidad permanece visible al desplazarse. El último cambio editable/borrado puede deshacerse hasta otra escritura o recarga.
-- Presupuestos independientes por mes, cero distinto de sin límite, sin arrastre. Inicio muestra el consumo del presupuesto como un relleno del círculo desde abajo: gris al iniciar, verde hasta 65%, naranja hasta 100% y rojo al excederlo. El importe planeado de cada categoría aparece pequeño y gris debajo del gasto actual; sin presupuesto no se añade esa línea. Copiar límites anteriores es explícito y no sobreescribe los existentes.
-- Reportes en BOB, gráfico y tabla por categoría y últimos 12 meses. Los filtros se comparten con historial; las transferencias no suman ingresos ni gastos.
-- Importación CoinKeeper CSV con vista previa y revisión de filas; importación/exportación de respaldo JSON `schemaVersion: 1`. Importar **reemplaza** el conjunto completo, nunca concatena ni duplica importaciones repetidas. Exporta un respaldo antes de reemplazarlo.
+- Límites de categoría recurrentes: se definen una vez y se heredan cada mes hasta el siguiente cambio, sin alterar meses anteriores. Cero es distinto de sin límite; el gasto y el restante se reinician cada mes. Inicio muestra el consumo como un relleno del círculo desde abajo: gris al iniciar, verde hasta 65%, naranja hasta 100% y rojo al excederlo. El importe planeado de cada categoría aparece pequeño y gris debajo del gasto actual; sin límite no se añade esa línea.
+- Gráficos en BOB: torta de gastos antes del detalle, categorías principales rotuladas y pequeñas agrupadas bajo «Otros» conservando sus colores; gráfico y tabla por categoría y últimos 12 meses. Los filtros compactos se comparten con historial; las transferencias no suman ingresos ni gastos.
+- Importación CoinKeeper CSV de todo el historial, de varios meses y años, sin mes obligatorio, con período completo en la vista previa y revisión de filas. La opción de importar límites permite indicar desde qué mes rigen; nunca filtra los movimientos. Importación/exportación de respaldo JSON `schemaVersion: 1`. Importar **reemplaza** el conjunto completo, nunca concatena ni duplica importaciones repetidas. Exporta un respaldo antes de reemplazarlo.
+- «Restablecer todo» borra datos y ajustes locales tras confirmar, permite descargar un respaldo y desactiva la sincronización sin reemplazar el respaldo remoto por datos vacíos.
 - Historial, límites, reportes y datos usan tarjetas y formularios compactos. Límites y reportes comparten el selector de mes de Inicio; cada categoría permite editar el límite desde «Editar», junto al título.
 - Selector de 48 iconos en dos páginas de 24: desliza horizontalmente o usa los botones de página o el teclado. Se conservan las 24 claves originales y la selección viaja en los respaldos JSON. Los nuevos símbolos cubren categorías habituales de gasto, tomando como referencia [Actual Budget](https://actualbudget.org/docs/getting-started/starting-fresh/) y [Wallet](https://support.budgetbakers.com/hc/en-us/articles/7077082048146-All-about-Categories-and-Subcategories).
 
@@ -18,7 +19,7 @@ python3 -m http.server 8000
 node --test tests/*.test.cjs
 ```
 
-En iPhone: abrir en Safari → Compartir → **Agregar a inicio**. Tras la primera carga completa funciona sin conexión. El navegador puede eliminar almacenamiento local: conserva respaldos JSON fuera del dispositivo. Sin multimoneda, recurrencias ni sincronización en v1.
+En iPhone: abrir en Safari → Compartir → **Agregar a inicio**. Tras la primera carga completa funciona sin conexión. El navegador puede eliminar almacenamiento local: conserva respaldos JSON fuera del dispositivo. La sincronización opcional guarda una copia en GitHub; no restaura datos remotos automáticamente. Sin multimoneda ni movimientos recurrentes en v1.
 
 GitHub Actions ejecuta las pruebas en cada PR. El workflow Pages prueba y publica solo desde `main` (o ejecución manual de esa rama); en Settings → Pages seleccionar **GitHub Actions** como origen. Este PR no publica mientras no se fusione.
 
@@ -32,6 +33,8 @@ npm install --prefix /tmp/gastalo-browser playwright
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-smoke.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-entity-swipe.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-compact-icons.cjs
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-data-workflows.cjs
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-report-pie.cjs
 # GASTALO_URL permite probar un subdirectorio; CHROMIUM_PATH cambia el ejecutable.
 ```
 
