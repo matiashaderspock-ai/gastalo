@@ -186,22 +186,15 @@
     );
   }
   // Decide before capturing the pointer or blocking native page scrolling.
-  function gestureIntent({
-    dx, dy, elapsedMs, onCircle, canDrag, canPan, pointerType,
-  }) {
+  function gestureIntent({ dx, dy, onCircle, canDrag, canPan }) {
     const vertical = Math.abs(dy),
       horizontal = Math.abs(dx);
-    if (vertical > 10 && elapsedMs < 150) return "scroll";
+    if (onCircle && canDrag)
+      return dx !== 0 || dy !== 0 ? "drag" : "pending";
     if (Math.hypot(dx, dy) <= 6) return "pending";
-    if (!onCircle) return "scroll";
-    if (
-      canPan && horizontal > vertical * 1.25 &&
-      (pointerType !== "mouse" || !canDrag) && (elapsedMs < 150 || !canDrag)
-    )
+    if (onCircle && canPan && horizontal > vertical * 1.25)
       return "pan";
-    if (!canDrag) return "scroll";
-    if (vertical >= horizontal && elapsedMs < 150) return "pending";
-    return "drag";
+    return "scroll";
   }
   function transactionSwipeOutcome(offset, width) {
     if (offset >= -32) return "closed";
@@ -1250,7 +1243,7 @@
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
           const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
-          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Para mover horizontalmente una entidad, mantén un instante antes de arrastrar.">' : ""}${active(
+          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Arrastra desde el círculo. Desliza sobre nombres, importes o espacios para ver más entidades.">' : ""}${active(
             key,
           )
             .map((e) => {
@@ -1887,7 +1880,6 @@
         dragging: false,
         strip: card.closest(".entity-strip"),
         scrollStart: card.closest(".entity-strip")?.scrollLeft || 0,
-        startedAt: performance.now(),
         onCircle: !!e.target.closest(".entity-mark"),
         allowDrag: !editingEntities && card.dataset.key !== "categories",
         pageScrollStart: window.scrollY,
@@ -1920,17 +1912,15 @@
           const intent = gestureIntent({
             dx,
             dy,
-            elapsedMs: performance.now() - p.startedAt,
             onCircle: p.onCircle,
             canDrag: p.allowDrag,
             canPan: !!p.strip && p.strip.scrollWidth > p.strip.clientWidth,
-            pointerType: e.pointerType,
           });
           if (intent === "scroll") {
             clearTimeout(p.timer);
             if (p.onCircle && p.card.dataset.key !== "categories") {
-              // touch-action is fixed at pointerdown. A cancelled circle drag
-              // pans the page explicitly; the rest of the card scrolls natively.
+              // In edit mode, circles pan the page explicitly because their
+              // touch-action is fixed at pointerdown. Text scrolls natively.
               p.verticalScrolling = true;
               p.card.setPointerCapture(p.id);
             } else {

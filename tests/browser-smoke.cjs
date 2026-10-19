@@ -457,19 +457,27 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page
       .getByRole("button", { name: "Volver a Inicio", exact: true })
       .click();
-    // Real touch motion on the inner SVG exercises capture transfer and the moving clone.
+    // A one-pixel first touch move starts dragging immediately, without a hold.
     await card("Banco").scrollIntoViewIfNeeded();
     const grip = await card("Banco").locator(".entity-mark").boundingBox();
     const target = await card("Efectivo").boundingBox();
     const point = { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 };
+    await page.evaluate(() => {
+      window.__immediateDrag = false;
+      document.addEventListener("pointermove", () => {
+        window.__immediateDrag = !!document.querySelector(".drag-clone");
+      }, {once:true});
+    });
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [point],
     });
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
-      touchPoints: [{ x: point.x + 8, y: point.y }],
+      touchPoints: [{ x: point.x + 1, y: point.y }],
     });
+    assert.equal(await page.evaluate(() => window.__immediateDrag), true,
+      "Clone exists in the first pointermove handler, without a timer");
     await page.locator(".drag-clone").waitFor();
     assert.equal(
       await card("Banco").evaluate((e) => e.classList.contains("dragging")),
@@ -545,7 +553,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       "Efectivo",
     );
     await page.getByRole("button", { name: "Cancelar", exact: true }).click();
-    // Mouse uses the same Pointer Events path; >6px starts without a hold.
+    // Mouse uses the same immediate Pointer Events path.
     const bankCircle = await card("Banco")
       .locator(".entity-mark")
       .boundingBox();
@@ -554,7 +562,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .boundingBox();
     await page.mouse.move(bankCircle.x + 24, bankCircle.y + 24);
     await page.mouse.down();
-    await page.mouse.move(bankCircle.x + 32, bankCircle.y + 24);
+    await page.mouse.move(bankCircle.x + 25, bankCircle.y + 24);
     await page.locator(".drag-clone").waitFor();
     await page.mouse.move(foodCircle.x + 24, foodCircle.y + 24, { steps: 8 });
     await page.mouse.up();
@@ -619,14 +627,14 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(await card("Categoría 2 nombre largo").locator(".entity-planned").count(), 0);
     assert.equal(await card("Categoría 2 nombre largo").locator(".entity-mark.budget-gray").count(), 1);
     // Native vertical scrolling begins on names, amounts and card padding, even
-    // with 33 horizontally scrollable accounts. A circle also yields early motion.
-    for (const selector of [".entity-name", "strong", ".entity-mark", ""]) {
+    // with 33 horizontally scrollable accounts. Circles now start dragging immediately.
+    for (const selector of [".entity-name", "strong", ""]) {
       await page.evaluate(() => window.scrollTo(0, 0));
       const box = await (selector ? card("Banco").locator(selector) : card("Banco")).boundingBox();
       const before = await page.evaluate(() => scrollY);
       const point = { x: box.x + (selector ? box.width / 2 : 2), y: box.y + box.height / 2 };
       await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
-      // First move must cancel pending drag before the 150 ms threshold.
+      // Non-circle movement keeps native vertical scrolling available.
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove", touchPoints: [{ x: point.x, y: point.y - 14 }],
       });
@@ -641,18 +649,32 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       assert.equal(await page.locator("#entity-edit-bar").isVisible(), false);
     }
 
+    async function resetStrip(strip) {
+      // Native swipes can keep moving after touchend; stop after momentum settles.
+      await strip.evaluate(e => new Promise(resolve => {
+        let previous = e.scrollLeft, stable = 0;
+        function frame() {
+          const current = e.scrollLeft;
+          stable = Math.abs(current - previous) < 0.5 ? stable + 1 : 0;
+          previous = current;
+          if (stable >= 6) { e.scrollLeft = 0; resolve(); }
+          else requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      }));
+    }
     async function swipeRow(row) {
       const strip = page.locator(`.row-${row} .entity-strip`);
       await strip.scrollIntoViewIfNeeded();
-      const box = await strip.locator(".entity-mark").nth(1).boundingBox();
+      const box = await strip.locator(".entity-name").nth(1).boundingBox();
       const before = await page.evaluate(() => scrollY);
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchStart",
-        touchPoints: [{ x: box.x + 24, y: box.y + 24 }],
+        touchPoints: [{ x: box.x + box.width / 2, y: box.y + box.height / 2 }],
       });
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchMove",
-        touchPoints: [{ x: box.x - 56, y: box.y + 24 }],
+        touchPoints: [{ x: box.x + box.width / 2 - 80, y: box.y + box.height / 2 }],
       });
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchEnd",
@@ -664,7 +686,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         0,
       );
       assert.equal(await page.evaluate(() => scrollY), before);
-      await strip.evaluate((e) => (e.scrollLeft = 0));
+      await resetStrip(strip);
     }
     for (const row of [0, 1]) {
       const strip = page.locator(`.row-${row} .entity-strip`);
@@ -690,7 +712,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
           return a.left >= b.left && a.right <= b.right + 1;
         });
         if (visible) break;
-        const grip = await strip.locator('.entity-card .entity-mark').evaluateAll(marks => {
+        const grip = await strip.locator('.entity-card .entity-name').evaluateAll(marks => {
           const b = marks[0].closest('.entity-strip').getBoundingClientRect();
           return marks.map(e => e.getBoundingClientRect()).filter(r => r.left >= b.left + 5 && r.right < b.right - 5).at(-1).toJSON();
         });
@@ -707,9 +729,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await add.tap();
       await page.getByRole('heading', {name: row === 0 ? 'Crear fuente' : 'Crear cuenta', exact:true}).waitFor();
       await page.getByRole('button', {name:'Cancelar', exact:true}).click();
-      await strip.evaluate(e => e.scrollLeft = 0);
+      await resetStrip(strip);
     }
-    // A brief hold still permits a horizontal transfer in an overflowing account row.
+    // A one-pixel vertical move also starts immediately in an overflowing row.
     await card("Banco").scrollIntoViewIfNeeded();
     const bank = await card("Banco").locator(".entity-mark").boundingBox();
     const cash = await card("Efectivo").locator(".entity-mark").boundingBox();
@@ -717,7 +739,12 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       type: "touchStart",
       touchPoints: [{ x: bank.x + 24, y: bank.y + 24 }],
     });
-    await page.waitForTimeout(180);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: bank.x + 24, y: bank.y + 25 }],
+    });
+    await page.locator(".drag-clone").waitFor();
+    assert.equal(await page.locator('.row-1 .entity-strip').evaluate(e => e.scrollLeft), 0);
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [{ x: cash.x + 24, y: cash.y + 24 }],
@@ -831,7 +858,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     );
     assert.deepEqual(errors, []);
     console.log(
-      "PASS: vertical scroll with 33 accounts, budget icon fill thresholds, header menu, long-press tools, icons, amount focus, subtle create buttons at scrollable row ends and category grid end, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
+      "PASS: instant one-pixel circle dragging, native text swipes and vertical scroll with 33 accounts, budget icon fill thresholds, header menu, long-press tools, icons, amount focus, subtle create buttons at scrollable row ends and category grid end, entity history/charts/deletion, notices, pointer drag, budgets, JSON/CSV, concurrency and offline persistence.",
     );
   } finally {
     await browser.close();
