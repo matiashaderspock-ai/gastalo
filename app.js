@@ -665,6 +665,7 @@
     return { url, options };
   }
   async function uploadBackup(config, payload, signal, fetcher = globalThis.fetch, replacementSha) {
+    // Review-guard acceptance fixture: no runtime change.
     const request = (data, sha) => {
       const { url, options } = syncRequest(config, data, sha);
       return fetcher(url, { ...options, signal });
