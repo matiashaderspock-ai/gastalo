@@ -123,7 +123,7 @@ El JS anterior enumera semana, dos semanas, cuatro semanas, mes, trimestre y añ
 - `restante(c,p) = límite(c,p) − gastado(c,p)`. Puede ser negativo para mostrar exceso. `sin límite` se guarda como nulo; un límite cero es una decisión explícita.
 - Mostrar límite, gastado, restante y exceso; no depender de colores ni copiar indicadores propietarios.
 - Navegar a otro mes cambia el período consultado, sin mover transacciones ni cambiar su fecha.
-- Al comenzar un mes, generar la nueva instancia del presupuesto a partir de una plantilla propia; acumulados comienzan en cero y saldos de cuentas continúan. Guardar límites históricos para que editar el mes actual no reescriba meses cerrados.
+- El límite se establece una sola vez y se hereda de mes a mes hasta el siguiente cambio explícito. Cada registro indica desde qué mes rige. Los acumulados comienzan en cero y los saldos de cuentas continúan. Editar un límite se aplica desde el mes consultado y conserva los valores anteriores. [R: actualización del pedido]
 - Predeterminado propuesto: sin arrastre del remanente. Si se agrega, será una política explícita, distinta de arrastrar saldos bancarios.
 - No sumar monedas nominales diferentes. Para un total general, convertir cada categoría a la moneda base con la política declarada.
 

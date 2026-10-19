@@ -71,6 +71,19 @@ summary:focus-visible {
   background: var(--green);
   color: white;
 }
+.danger {
+  background: #a33131;
+  color: white;
+  border-color: #a33131;
+}
+.danger:hover {
+  background: #842828;
+  color: white;
+  border-color: #842828;
+}
+.reset-panel {
+  border-color: #dfbdb6;
+}
 h1,
 h2,
 p {
@@ -1943,6 +1956,94 @@ dialog::backdrop {
 }
 .compact-page .filters .form-grid {
   margin-top: 0;
+  gap: 0 8px;
+}
+.compact-page .filters label {
+  margin: 3px 0;
+  line-height: 1.2;
+}
+.compact-page .filters input,
+.compact-page .filters select {
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 6px;
+  margin-top: 2px;
+  border-radius: 6px;
+}
+.compact-page .filters {
+  padding: 10px;
+}
+.expense-pie {
+  margin: 0 auto 8px;
+  max-width: 420px;
+}
+.expense-pie > svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+.pie-slice {
+  stroke: var(--white);
+  stroke-width: 1.5px;
+}
+.pie-slice:focus-visible {
+  outline: none;
+  stroke: var(--ink);
+  stroke-width: 3px;
+}
+.pie-label path {
+  fill: none;
+  stroke: #9ca99d;
+  stroke-width: 1px;
+}
+.pie-label text {
+  fill: var(--ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.pie-percent {
+  fill: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.pie-others {
+  padding: 4px 0;
+}
+.pie-others h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+.pie-others h3 span {
+  color: var(--muted);
+  font-weight: 400;
+}
+.pie-others ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pie-others li {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+}
+.pie-others li > span {
+  overflow-wrap: anywhere;
+}
+.pie-color {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--slice-color);
+}
+.pie-others strong {
+  font-weight: 500;
+  color: var(--muted);
 }
 .compact-page .inline-actions {
   margin-top: 4px;

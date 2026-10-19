@@ -49,7 +49,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
           `${name} fits at ${width}px`);
         if (name === "Límites de categoría") {
           assert.equal(await page.locator(".page-heading .month-picker").count(), 1);
-          const edit = page.getByRole("button", { name: "Editar límite de Salidas este mes" });
+          const edit = page.getByRole("button", { name: "Editar límite de Salidas" });
           assert.equal(await edit.innerText(), "Editar");
           const heading = await page.locator(".budget-card").filter({ has: edit }).locator("h2").boundingBox();
           const button = await edit.boundingBox();
@@ -60,13 +60,13 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await go("Límites de categoría");
-    await page.getByRole("button", { name: "Editar límite de Salidas este mes" }).click();
+    await page.getByRole("button", { name: "Editar límite de Salidas" }).click();
     await page.locator('#dialog [name="limit"]').fill("300");
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.match(await page.locator(".budget-card").filter({ hasText: "Salidas" }).innerText(), /300,00/);
     await page.getByRole("button", { name: "Mes siguiente" }).click();
-    assert.match(await page.locator(".budget-card").filter({ hasText: "Salidas" }).innerText(), /Sin límite/);
+    assert.match(await page.locator(".budget-card").filter({ hasText: "Salidas" }).innerText(), /300,00/);
     await go("Importar/Exportar");
     await page.locator('.manage-row').filter({ hasText: "Salidas" }).locator('button').evaluate(button => {
       button.closest("details").open = true;

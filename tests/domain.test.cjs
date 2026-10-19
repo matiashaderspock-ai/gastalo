@@ -53,7 +53,7 @@ test("saldo inicial = Current amount menos efecto neto, incluye todo el historia
   assert.equal(bank.opening_date, "2026-01-05");
 });
 
-test("presupuesto por mes: gastado, restante, exceso, cero, sin límite y sin arrastre", () => {
+test("el límite se hereda cada mes; el gasto y el restante se calculan por mes", () => {
   const s = load(),
     id = s.categories[0].id;
   assert.deepEqual(A.budget(s, id, "2026-01"), {
@@ -62,9 +62,9 @@ test("presupuesto por mes: gastado, restante, exceso, cero, sin límite y sin ar
     remaining: 17450,
   });
   assert.deepEqual(A.budget(s, id, "2026-02"), {
-    limit: null,
+    limit: 20000,
     spent: 5000,
-    remaining: null,
+    remaining: 15000,
   });
   s.budgets.push({
     id: "feb",
@@ -78,6 +78,7 @@ test("presupuesto por mes: gastado, restante, exceso, cero, sin límite y sin ar
     remaining: -5000,
   });
   assert.equal(A.budget(s, id, "2026-01").limit, 20000);
+  assert.equal(A.budget(s, id, "2026-03").limit, 0);
 });
 
 test("transferencias no afectan reportes ni presupuestos y conservan saldo total", () => {
