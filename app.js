@@ -186,22 +186,15 @@
     );
   }
   // Decide before capturing the pointer or blocking native page scrolling.
-  function gestureIntent({
-    dx, dy, elapsedMs, onCircle, canDrag, canPan, pointerType,
-  }) {
+  function gestureIntent({ dx, dy, onCircle, canDrag, canPan }) {
     const vertical = Math.abs(dy),
       horizontal = Math.abs(dx);
-    if (vertical > 10 && elapsedMs < 150) return "scroll";
+    if (onCircle && canDrag)
+      return dx !== 0 || dy !== 0 ? "drag" : "pending";
     if (Math.hypot(dx, dy) <= 6) return "pending";
-    if (!onCircle) return "scroll";
-    if (
-      canPan && horizontal > vertical * 1.25 &&
-      (pointerType !== "mouse" || !canDrag) && (elapsedMs < 150 || !canDrag)
-    )
+    if (onCircle && canPan && horizontal > vertical * 1.25)
       return "pan";
-    if (!canDrag) return "scroll";
-    if (vertical >= horizontal && elapsedMs < 150) return "pending";
-    return "drag";
+    return "scroll";
   }
   function transactionSwipeOutcome(offset, width) {
     if (offset >= -32) return "closed";
@@ -1250,7 +1243,7 @@
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
           const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
-          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Para mover horizontalmente una entidad, mantén un instante antes de arrastrar.">' : ""}${active(
+          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Arrastra desde el círculo. Desliza sobre nombres, importes o espacios para ver más entidades.">' : ""}${active(
             key,
           )
             .map((e) => {
@@ -1272,6 +1265,8 @@
               const b =
                 key === "categories" ? budget(state, e.id, month) : null;
               const progress = b ? budgetVisual(b.limit, b.spent) : null;
+              const plannedLabel = b && b.limit !== null
+                ? `Gastos planeados: ${money(b.limit)}` : "";
               const progressLabel = progress
                 ? b.limit === null
                   ? "Sin presupuesto este mes"
@@ -1279,7 +1274,7 @@
                     ? "Presupuesto excedido"
                     : `${progress.fill}% del presupuesto utilizado`
                 : "";
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${money(value)}</strong>${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${plannedLabel ? plannedLabel + ". " : ""}${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${money(value)}</strong>${plannedLabel ? `<small class="entity-planned" title="${plannedLabel}">${money(b.limit).slice(3)}</small>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",
@@ -1885,7 +1880,6 @@
         dragging: false,
         strip: card.closest(".entity-strip"),
         scrollStart: card.closest(".entity-strip")?.scrollLeft || 0,
-        startedAt: performance.now(),
         onCircle: !!e.target.closest(".entity-mark"),
         allowDrag: !editingEntities && card.dataset.key !== "categories",
         pageScrollStart: window.scrollY,
@@ -1918,17 +1912,15 @@
           const intent = gestureIntent({
             dx,
             dy,
-            elapsedMs: performance.now() - p.startedAt,
             onCircle: p.onCircle,
             canDrag: p.allowDrag,
             canPan: !!p.strip && p.strip.scrollWidth > p.strip.clientWidth,
-            pointerType: e.pointerType,
           });
           if (intent === "scroll") {
             clearTimeout(p.timer);
             if (p.onCircle && p.card.dataset.key !== "categories") {
-              // touch-action is fixed at pointerdown. A cancelled circle drag
-              // pans the page explicitly; the rest of the card scrolls natively.
+              // In edit mode, circles pan the page explicitly because their
+              // touch-action is fixed at pointerdown. Text scrolls natively.
               p.verticalScrolling = true;
               p.card.setPointerCapture(p.id);
             } else {

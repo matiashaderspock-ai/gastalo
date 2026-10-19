@@ -602,6 +602,17 @@ main:focus {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.entity-planned {
+  display: block;
+  width: 100%;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .entity-card strong.budget-amount {
   color: var(--budget-color, #aeb5b0);
 }
