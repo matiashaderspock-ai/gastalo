@@ -413,6 +413,17 @@
     next.budgets = next.budgets.filter((b) => b.category_id !== id);
     return validateState(next);
   }
+  function reorderEntities(state, key, orderedIds) {
+    assert(TYPES.includes(key) && Array.isArray(orderedIds), "Orden de entidades inválido.");
+    const visible = state[key].filter((item) => !item.archived_at);
+    const ids = new Set(visible.map((item) => item.id));
+    assert(orderedIds.length === visible.length && new Set(orderedIds).size === ids.size &&
+      orderedIds.every((id) => ids.has(id)), "Orden de entidades inválido.");
+    const next = copy(state), byId = new Map(next[key].map((item) => [item.id, item]));
+    let index = 0;
+    next[key] = next[key].map((item) => item.archived_at ? item : byId.get(orderedIds[index++]));
+    return validateState(next);
+  }
   function evolution(state, month, filters = {}) {
     return Array.from({ length: 12 }, (_, i) => {
       const m = shiftMonth(month, i - 11);
@@ -924,6 +935,7 @@
     budgetLimit,
     budgetVisual,
     eraseEntity,
+    reorderEntities,
     evolution,
     entityEvolution,
     validateState,
@@ -1502,6 +1514,11 @@
         editing && view === "home",
       );
       if ($("#entity-edit-bar")) $("#entity-edit-bar").hidden = !editing;
+      document.querySelectorAll("[data-entity]").forEach((card) => {
+        card.setAttribute("aria-label", `${editing ? "Reordenar" : "Ver historial de"} ${name(card.dataset.entity)}`);
+        if (editing) card.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown");
+        else card.removeAttribute("aria-keyshortcuts");
+      });
     }
     function removeEntity(key, id) {
       const count = state.transactions.filter(
@@ -1552,7 +1569,7 @@
     function home() {
       const bs = balances(state);
       return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar"><button data-action="movement">+ Movimiento</button>${monthNav(true)}</div>
-        <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Editar entidades</span><button data-action="finish-editing">Listo</button></div>
+        <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Arrastra los círculos para ordenar</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
           const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
@@ -1856,6 +1873,7 @@
         reports,
         settings,
       }[view]();
+      if (view === "home") setEntityEditing(editingEntities);
       document.querySelectorAll("nav button").forEach((button) => {
         button.classList.toggle(
           "active",
@@ -1920,7 +1938,10 @@
         $("#main").focus({ preventScroll: true });
         return;
       }
-      if (action === "finish-editing") return setEntityEditing(false);
+      if (action === "finish-editing") {
+        if (pointer?.reorder) void endPointer({ type: "pointercancel", pointerId: pointer.id });
+        return setEntityEditing(false);
+      }
       if (action === "remove-entity")
         return removeEntity(button.dataset.key, id);
       if (action === "toggle-icons") {
@@ -2069,8 +2090,25 @@
         if ($("#app-menu").open) {
           $("#app-menu").open = false;
           $("#app-menu summary").focus();
-        } else if (editingEntities) setEntityEditing(false);
+        } else if (editingEntities) {
+          if (pointer?.reorder) void endPointer({ type: "pointercancel", pointerId: pointer.id });
+          setEntityEditing(false);
+        }
       }
+    });
+    document.addEventListener("keydown", (e) => {
+      const card = e.target.closest("[data-entity]");
+      if (!editingEntities || !card || !e.altKey || busy || settling || pointer) return;
+      const key = card.dataset.key, ids = active(key).map((item) => item.id);
+      const from = ids.indexOf(card.dataset.entity);
+      const offset = { ArrowLeft: -1, ArrowRight: 1,
+        ArrowUp: key === "categories" ? -4 : 0, ArrowDown: key === "categories" ? 4 : 0 }[e.key];
+      if (offset === undefined) return;
+      e.preventDefault();
+      const to = from + offset;
+      if (!offset || to < 0 || to >= ids.length) return;
+      ids.splice(to, 0, ids.splice(from, 1)[0]);
+      void saveEntityOrder(key, ids, card.dataset.entity);
     });
     function openEntity(id) {
       homeScroll = window.scrollY;
@@ -2196,6 +2234,7 @@
     }, true);
     const dropTarget = (p, x, y) => {
       const card = document.elementFromPoint(x, y)?.closest("[data-entity]");
+      if (p.reorder) return card?.dataset.key === p.card.dataset.key ? card : null;
       return card && direction(state, p.from, card.dataset.entity)
         ? card
         : null;
@@ -2204,12 +2243,77 @@
       p.frame = null;
       // Viewport coordinates stay stable while the page is locked.
       p.clone.style.transform = `translate3d(${p.x - 24}px, ${p.y - 64}px, 0) scale(1.4)`;
+      if (p.reorder) {
+        const now = performance.now(), distance = Math.min(32, now - (p.lastFrame || now)) * 0.4;
+        p.lastFrame = now;
+        if (p.strip) {
+          const box = p.strip.getBoundingClientRect();
+          if (p.y >= box.top - 20 && p.y <= box.bottom + 20) {
+            const direction = p.x < box.left + 32 ? -1 : p.x > box.right - 32 ? 1 : 0;
+            p.strip.scrollLeft += direction * distance;
+          }
+        }
+        const top = $(".app-header").getBoundingClientRect().bottom + 32;
+        const direction = p.y < top ? -1 : p.y > innerHeight - 48 ? 1 : 0;
+        if (direction) window.scrollBy(0, direction * distance);
+      }
       const target = dropTarget(p, p.x, p.y);
+      if (p.reorder && target && target !== p.card) {
+        const from = p.order.indexOf(p.card.closest(".entity-wrap"));
+        const to = p.order.indexOf(target.closest(".entity-wrap"));
+        p.order.splice(to, 0, p.order.splice(from, 1)[0]);
+        p.order.forEach((wrap, index) => { wrap.style.order = index; });
+        p.container.querySelector(":scope > .entity-add").style.order = p.order.length;
+      }
       if (target !== p.target) {
         p.target?.classList.remove("drop-target");
         target?.classList.add("drop-target");
         p.target = target;
       }
+      if (p.reorder && pointer === p) p.frame = requestAnimationFrame(() => paintPointer(p));
+    }
+    async function saveEntityOrder(key, ids, focusId) {
+      const scrolls = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
+      const scrollY = window.scrollY;
+      settling = true;
+      try {
+        if (ids.some((id, index) => id !== active(key)[index]?.id))
+          await commit(reorderEntities(state, key, ids), "Orden guardado", true);
+        else render();
+      } catch (error) {
+        render();
+        notify(error.message);
+      } finally {
+        document.querySelectorAll(".entity-strip").forEach((strip, index) => { strip.scrollLeft = scrolls[index]; });
+        window.scrollTo(0, scrollY);
+        [...document.querySelectorAll("[data-entity]")].find((card) => card.dataset.entity === focusId)?.focus({ preventScroll: true });
+        settling = false;
+      }
+    }
+    async function endReorder(p, e) {
+      cancelAnimationFrame(p.frame);
+      if (e.type === "pointerup") {
+        p.x = e.clientX;
+        p.y = e.clientY;
+        paintPointer(p);
+      }
+      const box = p.container.getBoundingClientRect();
+      const inside = e.type === "pointerup" && e.clientX >= box.left && e.clientX <= box.right &&
+        e.clientY >= box.top && e.clientY <= box.bottom;
+      suppressClick = true;
+      if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
+      p.clone.remove();
+      document.querySelectorAll(".dragging, .valid-target, .invalid-target, .drop-target").forEach((card) => {
+        card.classList.remove("dragging", "valid-target", "invalid-target", "drop-target");
+      });
+      document.documentElement.classList.remove("is-reordering");
+      if (inside) await saveEntityOrder(p.card.dataset.key,
+        p.order.map((wrap) => wrap.querySelector("[data-entity]").dataset.entity), p.from);
+      else {
+        p.order.forEach((wrap) => { wrap.style.order = ""; });
+        p.container.querySelector(":scope > .entity-add").style.order = "";
+      }
+      clickTimer = setTimeout(() => { suppressClick = false; }, 0);
     }
     function startPointer(p) {
       if (pointer !== p || p.dragging) return;
@@ -2225,30 +2329,38 @@
       );
       document.body.append(p.clone);
       p.card.classList.add("dragging");
+      if (p.reorder) {
+        p.container = p.strip || p.card.closest(".entity-grid");
+        p.order = [...p.container.querySelectorAll(":scope > .entity-wrap")];
+      }
       document.querySelectorAll("[data-entity]").forEach((card) => {
+        const valid = p.reorder ? card.dataset.key === p.card.dataset.key
+          : !!direction(state, p.from, card.dataset.entity);
         card.classList.toggle(
           "valid-target",
-          !!direction(state, p.from, card.dataset.entity),
+          valid,
         );
         card.classList.toggle(
           "invalid-target",
-          card !== p.card && !direction(state, p.from, card.dataset.entity),
+          card !== p.card && !valid,
         );
       });
       p.scrollX = window.scrollX;
       p.scrollY = window.scrollY;
       // Fixed body also prevents rubber-band page scrolling in installed iOS PWAs.
-      document.body.style.top = `-${p.scrollY}px`;
-      document.body.style.left = `-${p.scrollX}px`;
-      document.documentElement.classList.add("is-dragging");
+      if (!p.reorder) {
+        document.body.style.top = `-${p.scrollY}px`;
+        document.body.style.left = `-${p.scrollX}px`;
+      }
+      document.documentElement.classList.add(p.reorder ? "is-reordering" : "is-dragging");
       p.card.setPointerCapture(p.id);
       paintPointer(p);
       vibrate();
     }
     document.addEventListener("pointerdown", (e) => {
-      if (pointer || settling || !e.isPrimary || e.button !== 0) return;
+      if (pointer || settling || busy || !e.isPrimary || e.button !== 0) return;
       const card = e.target.closest("[data-entity]");
-      if (!card || (editingEntities && !card.closest(".entity-strip"))) return;
+      if (!card) return;
       const p = (pointer = {
         id: e.pointerId,
         from: card.dataset.entity,
@@ -2258,10 +2370,11 @@
         x: e.clientX,
         y: e.clientY,
         dragging: false,
+        reorder: editingEntities,
         strip: card.closest(".entity-strip"),
         scrollStart: card.closest(".entity-strip")?.scrollLeft || 0,
         onCircle: !!e.target.closest(".entity-mark"),
-        allowDrag: !editingEntities && card.dataset.key !== "categories",
+        allowDrag: editingEntities || card.dataset.key !== "categories",
         pageScrollStart: window.scrollY,
       });
       p.timer = editingEntities
@@ -2269,6 +2382,7 @@
         : setTimeout(() => {
             if (pointer !== p) return;
             p.editing = true;
+            p.reorder = true;
             suppressClick = true;
             p.card.setPointerCapture(p.id);
             setEntityEditing(true);
@@ -2282,12 +2396,14 @@
         if (!p || e.pointerId !== p.id) return;
         p.x = e.clientX;
         p.y = e.clientY;
-        if (p.editing) {
-          e.preventDefault();
-          return;
-        }
         const dx = p.x - p.startX,
           dy = p.y - p.startY;
+        if (p.editing) {
+          e.preventDefault();
+          if (Math.hypot(dx, dy) <= 6) return;
+          p.editing = false;
+          startPointer(p);
+        }
         if (!p.dragging && !p.scrolling && !p.verticalScrolling) {
           const intent = gestureIntent({
             dx,
@@ -2298,9 +2414,9 @@
           });
           if (intent === "scroll") {
             clearTimeout(p.timer);
-            if (p.onCircle && p.card.dataset.key !== "categories") {
-              // In edit mode, circles pan the page explicitly because their
-              // touch-action is fixed at pointerdown. Text scrolls natively.
+            if (p.onCircle) {
+              // Before a long press, category circles pan the page explicitly.
+              // Their touch-action must reserve a later reorder from pointerdown.
               p.verticalScrolling = true;
               p.card.setPointerCapture(p.id);
             } else {
@@ -2330,12 +2446,12 @@
       },
       { passive: false },
     );
-    // Safari decides native scrolling at pointerdown, so source circles declare
-    // touch-action:none in CSS before the gesture. Gaps and headings still scroll.
+    // Circles reserve touch at pointerdown so a held category can reorder too.
+    // Names, gaps and headings keep native scrolling.
     document.addEventListener(
       "touchmove",
       (e) => {
-        if (pointer?.dragging || pointer?.scrolling || transactionSwipe?.dragging)
+        if (pointer?.dragging || pointer?.editing || pointer?.scrolling || transactionSwipe?.dragging)
           e.preventDefault();
       },
       { passive: false },
@@ -2345,6 +2461,7 @@
       if (!p || (e.pointerId !== undefined && e.pointerId !== p.id)) return;
       pointer = null;
       clearTimeout(p.timer);
+      if (p.reorder && p.dragging) return endReorder(p, e);
       if (p.editing || p.scrolling || p.verticalScrolling) {
         suppressClick = true;
         if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
