@@ -70,4 +70,8 @@ Importar CSV o JSON ofrece vista previa y reemplaza el estado de forma atómica 
 
 IndexedDB `gastalo`, versión 1, almacén `state`, clave `main`: `{revision,data}`. La escritura reemplaza el estado en una sola transacción y verifica su revisión para evitar que dos pestañas se sobrescriban silenciosamente. Un conflicto exige recargar la pestaña antigua. Una escritura rechazada conserva el estado anterior; no se muestra éxito. El archivo se valida completamente antes del reemplazo. Exportar devuelve solo el contrato financiero, sin el envoltorio de persistencia.
 
+La clave independiente `sync_config` guarda el destino de GitHub, token y estado de sincronización. No forma parte del JSON financiero; importar o eliminar entidades no la modifica. «Desactivar» elimina el token guardado. El token solo se envía a `api.github.com`.
+
+La sincronización es unidireccional: envía exactamente el respaldo v1 mediante Contents API, sin restaurar contenido remoto. Con token y conexión, se intenta al abrir la app, al volver a primer plano, 30 segundos después de la última escritura y con «Sincronizar ahora». El hash SHA-256 excluye únicamente `exported_at` para omitir respaldos idénticos. iOS puede suspender la PWA en segundo plano; vuelve a abrirla para reintentar cambios pendientes. La hora de éxito se muestra en `America/La_Paz`.
+
 Las fuentes, cuentas y categorías admiten el campo opcional `icon`: una clave del catálogo SVG propio de la app. Los respaldos v1 sin ese campo siguen siendo válidos y usan el icono predeterminado del tipo. El campo se conserva en exportación/restauración.

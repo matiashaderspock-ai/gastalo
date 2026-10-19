@@ -486,6 +486,77 @@
     return s;
   }
 
+  async function backupHash(payload) {
+    const data = JSON.parse(payload);
+    delete data.exported_at;
+    const digest = await globalThis.crypto.subtle.digest(
+      "SHA-256", new TextEncoder().encode(JSON.stringify(data)),
+    );
+    return Array.from(new Uint8Array(digest), (v) =>
+      v.toString(16).padStart(2, "0")).join("");
+  }
+  function utf8Base64(text) {
+    return btoa(Array.from(new TextEncoder().encode(text), (v) =>
+      String.fromCharCode(v)).join(""));
+  }
+  function shouldSync(config, online, hash) {
+    return !!config.token && online && hash !== config.lastHash;
+  }
+  function syncErrorMessage(status) {
+    if (status === 401 || status === 403) return "Token inválido o sin permiso";
+    if (status == null) return "Sin conexión, se reintentará";
+    if (status === 0) return "Revisa Repo, Branch y Path";
+    return "No se pudo sincronizar. Revisa el repositorio y sus permisos";
+  }
+  function syncRequest(config, payload, sha) {
+    const { repo, branch, path, token } = config;
+    // Encode each segment and forbid traversal; credentials only go to this host.
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !branch || !path ||
+        [...repo.split("/"), ...path.split("/")].some((s) => !s || s === "." || s === ".."))
+      throw { status: 0 };
+    const url = "https://api.github.com/repos/" +
+      repo.split("/").map(encodeURIComponent).join("/") + "/contents/" +
+      path.split("/").map(encodeURIComponent).join("/");
+    const options = {
+      method: payload === undefined ? "GET" : "PUT",
+      headers: {
+        Authorization: "Bearer " + token,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+      cache: "no-store",
+      credentials: "omit",
+      redirect: "error",
+    };
+    if (payload === undefined)
+      return { url: url + "?ref=" + encodeURIComponent(branch), options };
+    options.headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify({
+      message: "sync: backup " + JSON.parse(payload).exported_at,
+      content: utf8Base64(payload),
+      branch,
+      ...(sha ? { sha } : {}),
+    });
+    return { url, options };
+  }
+  async function uploadBackup(config, payload, signal, fetcher = globalThis.fetch) {
+    const request = (data, sha) => {
+      const { url, options } = syncRequest(config, data, sha);
+      return fetcher(url, { ...options, signal });
+    };
+    // Read only the file SHA. Remote contents never enter the app state.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const metadata = await request();
+      if (!metadata.ok && metadata.status !== 404)
+        throw { status: metadata.status };
+      const sha = metadata.status === 404 ? undefined : (await metadata.json()).sha;
+      const result = await request(payload, sha);
+      if (result.ok) return;
+      if (attempt === 0 && [409, 422].includes(result.status)) continue;
+      throw { status: result.status };
+    }
+  }
+
   // RFC 4180 records, including escaped quotes and embedded CR/LF. Blank records delimit sections.
   function csvRecords(input) {
     let text = input.replace(/^\uFEFF/, "").replace(/^sep=,\r?\n/, "");
@@ -759,6 +830,12 @@
     validateState,
     backup,
     restore,
+    backupHash,
+    utf8Base64,
+    shouldSync,
+    syncErrorMessage,
+    syncRequest,
+    uploadBackup,
     csvRecords,
     importCSV,
   };
@@ -808,6 +885,101 @@
       pendingImport = null,
       historyLimit = 100,
       busy = false;
+    // Separate IndexedDB key: never included in state, backups, imports or erase.
+    let syncConfig = {
+      repo: "matiashaderspock-ai/gastalo-data",
+      branch: "main",
+      path: "gastalo-backup.json",
+      token: "",
+    }, syncReady = false, syncFlight = null, syncQueued = false, syncTimer;
+    function syncStatus() {
+      return syncConfig.lastError || (syncConfig.lastSuccess
+        ? "Última sincronización: " + new Intl.DateTimeFormat("es-BO", {
+            dateStyle: "short", timeStyle: "medium", timeZone: "America/La_Paz",
+          }).format(new Date(syncConfig.lastSuccess)) + " · America/La_Paz"
+        : syncConfig.token ? "Sin sincronizaciones todavía" : "Sincronización desactivada");
+    }
+    function updateSyncStatus() {
+      const line = $("#sync-status");
+      if (line) line.textContent = syncStatus();
+    }
+    function persistSyncConfig(config) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("state", "readwrite");
+        tx.objectStore("state").put(config, "sync_config");
+        tx.oncomplete = resolve;
+        tx.onerror = tx.onabort = () => reject(tx.error);
+      });
+    }
+    function scheduleSync() {
+      clearTimeout(syncTimer);
+      if (syncConfig.token) syncTimer = setTimeout(runSync, 30000);
+    }
+    async function runSync() {
+      if (!syncReady || !syncConfig.token || !navigator.onLine) return;
+      if (syncFlight) {
+        syncQueued = true;
+        return;
+      }
+      const config = syncConfig, controller = new AbortController();
+      syncFlight = controller;
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      try {
+        const payload = backup(state), hash = await backupHash(payload);
+        if (controller.signal.aborted || config !== syncConfig ||
+            !shouldSync(config, navigator.onLine, hash)) return;
+        await uploadBackup(config, payload, controller.signal);
+        if (controller.signal.aborted || config !== syncConfig) return;
+        config.lastHash = hash;
+        config.lastSuccess = new Date().toISOString();
+        config.lastError = "";
+        await persistSyncConfig(config);
+      } catch (error) {
+        if (config === syncConfig) {
+          config.lastError = syncErrorMessage(error?.status);
+          // Never display exception/response text: it may echo credentials.
+          await persistSyncConfig(config).catch(() => {});
+        }
+      } finally {
+        clearTimeout(timeout);
+        syncFlight = null;
+        updateSyncStatus();
+        if (syncQueued) {
+          syncQueued = false;
+          setTimeout(runSync, 0);
+        }
+      }
+    }
+    async function saveSyncSettings(disable = false) {
+      if (!syncReady) return;
+      try {
+        const input = $("#sync-token");
+        const next = disable ? { ...syncConfig, token: "" } : {
+          ...syncConfig,
+          repo: $("#sync-repo").value.trim(),
+          branch: $("#sync-branch").value.trim(),
+          path: $("#sync-path").value.trim(),
+          token: input.value.trim() || syncConfig.token,
+        };
+        if (!disable) syncRequest(next);
+        if (["repo", "branch", "path", "token"].some((key) => next[key] !== syncConfig[key])) {
+          delete next.lastHash;
+          delete next.lastSuccess;
+          delete next.lastError;
+        }
+        syncFlight?.abort();
+        clearTimeout(syncTimer);
+        syncConfig = next;
+        input.value = "";
+        input.placeholder = next.token ? "••••" + next.token.slice(-4) : "";
+        await persistSyncConfig(next);
+        updateSyncStatus();
+        if (!disable) void runSync();
+      } catch (error) {
+        syncConfig.lastError = syncErrorMessage(error?.status ?? 0);
+        updateSyncStatus();
+      }
+    }
     const today = () =>
       new Intl.DateTimeFormat("sv-SE", {
         timeZone: state.profile.timezone,
@@ -891,6 +1063,7 @@
         });
         state = next;
         revision++;
+        scheduleSync();
         undo = reversible ? before : null;
         render();
         notify(message, reversible);
@@ -1449,6 +1622,14 @@
     function settings() {
       return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Importar/Exportar</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
       <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
+      <section class="panel"><h2>Sincronización</h2><p>Respaldo automático en tu repositorio privado de GitHub. Solo se envían datos; no se restaura desde GitHub.</p>
+      <form id="sync-form"><label>Repo<input id="sync-repo" value="${esc(syncConfig.repo)}" required autocapitalize="none" spellcheck="false"></label>
+      <label>Branch<input id="sync-branch" value="${esc(syncConfig.branch)}" required autocapitalize="none" spellcheck="false"></label>
+      <label>Path<input id="sync-path" value="${esc(syncConfig.path)}" required autocapitalize="none" spellcheck="false"></label>
+      <label>Token<input id="sync-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${esc(syncConfig.token ? "••••" + syncConfig.token.slice(-4) : "")}"></label>
+      <p class="muted">Usa un token con permiso de escritura de Contents en el repositorio elegido. «Sincronizar ahora» guarda la configuración en este dispositivo.</p>
+      <button class="primary" type="submit">Sincronizar ahora</button> <button type="button" data-action="sync-disable">Desactivar</button></form>
+      <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></section>
       <section class="panel"><h2>Trae tu historial desde otra app</h2><p>CSV con transacciones y las cuatro secciones. Solo BOB. Verás el resultado antes de reemplazar tus datos.</p><label>Mes del presupuesto del archivo<input id="import-month" type="month" value="${month}" required></label><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><p class="muted">Los acumulados «Received to date» se conservan como referencia; no se crean movimientos por ellos.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
@@ -1461,7 +1642,7 @@
       }${state.review.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section>
       <section class="panel"><h2>Tu calendario</h2><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></section>
       <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div>`).join("")}</details>`).join("")}</section>
-      <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Haz respaldos frecuentes: borrar los datos de Safari o perder el dispositivo puede borrar el historial. No hay sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
+      <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>`;
     }
     function render() {
       resetTransactionSwipe();
@@ -1656,6 +1837,7 @@
         );
       }
       if (action === "export") return download();
+      if (action === "sync-disable") return saveSyncSettings(true);
       if (action === "resolve-review") return movement("", "", null, id);
       if (action === "timezone") {
         const next = copy(state);
@@ -1669,6 +1851,14 @@
           : "El navegador decide la disponibilidad. Mantén un respaldo JSON.";
       }
     }
+    document.addEventListener("submit", (e) => {
+      if (e.target.id !== "sync-form") return;
+      e.preventDefault();
+      void saveSyncSettings();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void runSync();
+    });
     document.addEventListener("click", (e) => {
       if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;
       if (e.target.matches(".month-picker input")) {
@@ -2100,6 +2290,23 @@
       };
       await load();
       render();
+      // Load sync settings after rendering; configuration/network failures stay local.
+      void (async () => {
+        try {
+          const config = await new Promise((resolve, reject) => {
+            const r = db.transaction("state").objectStore("state").get("sync_config");
+            r.onsuccess = () => resolve(r.result);
+            r.onerror = () => reject(r.error);
+          });
+          if (config) syncConfig = config;
+          syncReady = true;
+          if (view === "settings") render();
+          void runSync();
+        } catch {
+          syncConfig.lastError = "No se pudo leer la configuración de sincronización";
+          updateSyncStatus();
+        }
+      })();
     } catch (error) {
       $("#main").innerHTML =
         `<section class="panel"><h1>No se pudo abrir el historial</h1><p>${esc(error.message)}</p><p>Recarga la página. No borres los datos de Safari si necesitas recuperar tu historial.</p></section>`;
