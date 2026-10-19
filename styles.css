@@ -105,12 +105,12 @@ p {
   gap: 8px;
   max-width: 1160px;
   margin: auto;
-  padding: 6px 28px;
+  padding: 4px 28px;
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
   background: var(--paper);
-  padding-top: max(6px, env(safe-area-inset-top));
+  padding-top: max(4px, env(safe-area-inset-top));
 }
 .brand {
   display: flex;
@@ -381,19 +381,20 @@ main:focus {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 6px 0;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
 }
 .home-totals .stat span {
   font-size: 10px;
-  min-height: 24px;
+  min-height: 0;
   line-height: 12px;
-  margin-bottom: 3px;
+  margin-bottom: 1px;
 }
 .home-totals .stat strong {
   font-size: clamp(13px, 3.5vw, 22px);
+  line-height: 1.15;
   font-variant-numeric: tabular-nums;
 }
 .home-totals .stat small {
@@ -408,21 +409,21 @@ main:focus {
 }
 .home-toolbar > button,
 .detail-period > button {
-  min-height: 36px;
+  min-height: 32px;
   font-size: 12px;
   padding: 4px 6px;
   border: 0;
   background: transparent;
 }
 .compact-month {
-  margin: 4px 0;
+  margin: 0;
   gap: 0;
   display: inline-grid;
   grid-template-columns: 28px auto 28px;
   align-items: center;
 }
 .compact-month button {
-  min-height: 36px;
+  min-height: 32px;
   min-width: 28px;
   padding: 0;
   background: transparent;
@@ -435,7 +436,7 @@ main:focus {
   place-items: center;
   width: auto;
   padding: 0 2px;
-  height: 36px;
+  height: 32px;
   margin: 0;
   font-size: 12px;
   white-space: nowrap;
@@ -444,8 +445,8 @@ main:focus {
   position: absolute;
   inset: 0;
   width: 100%;
-  min-height: 36px;
-  height: 36px;
+  min-height: 32px;
+  height: 32px;
   padding: 0;
   margin: 0;
   opacity: 0;
@@ -457,8 +458,8 @@ main:focus {
 }
 .entity-section {
   border-top: 1px solid var(--line);
-  padding-top: 6px;
-  margin-top: 8px;
+  padding-top: 3px;
+  margin-top: 3px;
 }
 .row-0 {
   --row-color: #62802b;
@@ -505,7 +506,7 @@ main:focus {
 .entity-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px 6px;
+  gap: 2px 6px;
   padding: 0;
 }
 /* Entity rows and their final create button scroll together. */
@@ -520,6 +521,7 @@ main:focus {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
+  scroll-margin-top: calc(48px + env(safe-area-inset-top));
   padding-bottom: 4px;
   scrollbar-width: thin;
 }
@@ -544,7 +546,7 @@ main:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   border: 0;
   background: transparent;
   border-radius: 8px;
@@ -566,7 +568,7 @@ main:focus {
   width: 100%;
   padding: 0 1px;
   font-size: 12px;
-  line-height: 16px;
+  line-height: 14px;
   font-weight: 500;
   color: var(--ink);
   white-space: nowrap;
@@ -607,7 +609,7 @@ main:focus {
   width: 100%;
   color: var(--muted);
   font-size: 10px;
-  line-height: 12px;
+  line-height: 11px;
   font-weight: 400;
   white-space: nowrap;
   overflow: hidden;
@@ -1480,8 +1482,8 @@ dialog::backdrop {
 }
 @media (max-width: 760px) {
   .app-header {
-    padding: 6px 16px;
-    padding-top: max(6px, env(safe-area-inset-top));
+    padding: 4px 16px;
+    padding-top: max(4px, env(safe-area-inset-top));
   }
   .brand {
     font-size: 1.25rem;
