@@ -1,0 +1,46 @@
+name: Auto-merge
+on:
+  pull_request:
+    types: [opened, synchronize, labeled, unlabeled]
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  label-guard:
+    if: github.event.pull_request.user.login == 'matiashaderspock-ai' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/label-guard.yml
+  merge:
+    needs: label-guard
+    if: needs.label-guard.outputs.needs_matias == 'false' && !contains(github.event.pull_request.labels.*.name, 'needs-matias')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+    steps:
+      - name: Verify test is required before allowing auto-merge
+        run: |
+          branch=$(jq -rn --arg branch "$BASE_BRANCH" '$branch | @uri')
+          required=$(gh api "repos/$GH_REPO/branches/$branch" --jq '.protection.required_status_checks.contexts // []')
+          rules=$(gh api "repos/$GH_REPO/rules/branches/$branch")
+          if ! jq -en --argjson classic "$required" --argjson rules "$rules" '$classic | index("test") != null' &&
+             ! jq -e 'any(.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[]; .context == "test")' <<< "$rules"; then
+            echo '::error::The target branch must require the test check before auto-merge can be enabled.'
+            exit 1
+          fi
+      - name: Enable squash auto-merge after the guard
+        run: |
+          pr=$(gh pr view "$PR_NUMBER" --json labels,headRefOid,isDraft,state)
+          if ! jq -e --arg head "$PR_HEAD" '.state == "OPEN" and (.isDraft | not) and .headRefOid == $head and all(.labels[]; .name != "needs-matias")' <<< "$pr"; then
+            exit 0
+          fi
+          gh pr merge "$PR_NUMBER" --auto --squash --match-head-commit "$PR_HEAD"
