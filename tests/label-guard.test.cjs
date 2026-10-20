@@ -42,6 +42,35 @@ test('CSS-only PR is eligible and the needs-matias label is created when missing
   assert.deepEqual(result.reads, []);
 });
 
+test('remove() helpers and sensitive markers under tests/ do not require review', async () => {
+  const before = source.replace('uploadBackup', 'remove');
+  for (const path of ['tests/browser-entity-scroll.cjs', 'tests/sync-reset-delete.test.cjs']) {
+    for (const patch of ['@@ -2 +2 @@\n-    return 1;\n+    return 2;', '@@ -1 +1 @@\n-old\n+sync_config uploadBackup gastalo-data store.delete(key) Restablecer todo']) {
+      const result = await inspect([file(path, patch)], { before, after: before.replaceAll('return 1', 'return 2'), error: true });
+      assert.equal(result.output.needs_matias, 'false', path);
+      assert.deepEqual(result.added, []);
+      assert.deepEqual(result.reads, []);
+    }
+  }
+});
+
+test('the same remove() helper in app.js still requires review', async () => {
+  const before = source.replace('uploadBackup', 'remove');
+  const result = await inspect([file('app.js', '@@ -2 +2 @@\n-    return 1;\n+    return 2;')], {
+    before, after: before.replaceAll('return 1', 'return 2'),
+  });
+  assert.equal(result.output.needs_matias, 'true');
+  assert.deepEqual(result.added[0].labels, ['needs-matias']);
+});
+
+test('every .github/ change requires review, including files under .github/tests/', async () => {
+  for (const path of ['.github/workflows/label-guard.yml', '.github/tests/helper.cjs', '.github/notes.md']) {
+    const result = await inspect([file(path, '@@ -1 +1 @@\n-old\n+new')]);
+    assert.equal(result.output.needs_matias, 'true', path);
+    assert.deepEqual(result.added[0].labels, ['needs-matias']);
+  }
+});
+
 test('sync/reset/deletion markers and merge-policy files require review', async () => {
   for (const [path, line] of [
     ['app.js', 'sync_config'], ['app.js', 'uploadBackup'], ['app.js', 'gastalo-data'],
