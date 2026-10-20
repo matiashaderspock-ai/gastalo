@@ -1355,7 +1355,7 @@
       modal(
         t ? "Editar movimiento" : "Nuevo movimiento",
         `
-        <section class="movement-tags" aria-label="Etiquetas del movimiento"><div class="movement-tags-heading"><span>Etiquetas</span><button type="button" id="tag-picker-toggle" aria-label="Elegir o crear etiquetas" aria-expanded="false" aria-controls="tag-picker">+</button></div><div id="movement-tag-chips" class="tag-choices"></div></section>
+        <section class="movement-tags" aria-label="Etiquetas del movimiento"><div id="movement-tag-chips" class="tag-choices"></div><button type="button" id="tag-picker-toggle" aria-label="Elegir o crear etiquetas" aria-expanded="false" aria-controls="tag-picker">+</button></section>
         <section id="tag-picker" class="movement-tag-picker" aria-label="Elegir etiquetas" hidden><div class="tag-search"><label>Buscar o crear etiqueta<input id="tag-search" type="search" maxlength="80" autocomplete="off" placeholder="Buscar o crear etiqueta"></label><button type="button" id="tag-create" aria-label="Crear etiqueta" hidden>+</button></div><div id="tag-picker-list"></div><p id="tag-search-empty" class="muted" hidden>Sin coincidencias.</p><button type="button" id="tag-picker-done">Listo</button></section>
         <div class="movement-fields"><div class="form-grid"><label>Origen<select name="from" required>${options(
           [...state.sources, ...state.accounts].filter(
@@ -1445,7 +1445,9 @@
         closeButton = $('#dialog .dialog-heading [data-action="close"]');
       const renderTags = () => {
         const tags = availableTags(), query = fold(search.value);
-        $("#movement-tag-chips").innerHTML = movementTagSuggestions({ ...state, tags }, selectedTags).map(tagChoice).join("") || '<span class="muted">Sin etiquetas</span>';
+        const chips = $("#movement-tag-chips"), scrollLeft = chips.scrollLeft;
+        chips.innerHTML = movementTagSuggestions({ ...state, tags }, selectedTags).map(tagChoice).join("") || '<span class="muted">Sin etiquetas</span>';
+        chips.scrollLeft = scrollLeft;
         const matches = tags.filter((tag) => fold(tag.name).includes(query)).sort((a, b) => a.name.localeCompare(b.name, "es"));
         $("#tag-picker-list").innerHTML = matches.map(tagChoice).join("");
         $("#tag-search-empty").hidden = matches.length > 0;
