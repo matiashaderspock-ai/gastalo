@@ -197,7 +197,25 @@
       label: "Suscripciones",
       path: '<rect x="2" y="5" width="20" height="14" rx="3"/><path d="m10 9 5 3-5 3V9ZM7 2h10M7 22h10"/>',
     },
+    investments: {
+      label: "Inversiones",
+      path: '<path d="M3 3v18h18M6 16l5-5 4 3 6-9m-6 0h6v6"/>',
+    },
+    loan: {
+      label: "Crédito y deudas",
+      path: '<circle cx="15" cy="6" r="4"/><path d="M15 4v4m-1-3h2m-2 2h2M2 14h4l4-3h4a2 2 0 0 1 0 4h-3m5-1 3-2a2 2 0 0 1 2 3l-7 5H8l-6-3"/>',
+    },
+    unexpected: {
+      label: "Imprevistos",
+      path: '<path d="m10 4-8 14a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3L14 4a2 2 0 0 0-4 0ZM12 9v5m0 3h.01"/>',
+    },
   };
+  // Frequent everyday choices first; keep every persisted icon key available.
+  const ENTITY_ICON_PAGES = [
+    ["bank", "card", "wallet", "income", "tag", "drinks", "loan", "fuel", "unexpected", "investments", "home", "food", "subscriptions", "health", "beauty", "car", "clothing", "shield"],
+    ["gym", "shopping", "groceries", "coffee", "work", "travel", "bills", "phone", "internet", "spark", "games", "gift", "education", "pet", "repair", "taxes", "pharmacy", "bus"],
+    ["parking", "electricity", "bike", "music", "water", "gas", "dental", "baby", "family", "cinema", "books", "furniture", "laundry", "charity", "taxi"],
+  ];
   function entityIconKey(item, type) {
     return Object.hasOwn(ENTITY_ICONS, item?.icon)
       ? item.icon
@@ -966,6 +984,7 @@
   const API = {
     SCHEMA_VERSION,
     ENTITY_ICONS,
+    ENTITY_ICON_PAGES,
     entityIconKey,
     cents,
     sum,
@@ -1657,13 +1676,13 @@
     }
     function iconChooser(key, item) {
       const selectedIcon = entityIconKey(item, key);
-      const icons = Object.entries(ENTITY_ICONS);
-      const pages = [icons.slice(0, 24), icons.slice(24)];
-      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="Elegir icono: dos páginas de 24">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="Página ${index + 1} de 2">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" title="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>Desliza para ver más</span><div role="group" aria-label="Páginas de iconos">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="Página de iconos ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
+      const pages = ENTITY_ICON_PAGES.map(page => page.map(id => [id, ENTITY_ICONS[id]]));
+      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="Elegir icono: ${pages.length} páginas">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="Página ${index + 1} de ${pages.length}">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" title="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>Desliza para ver más</span><div role="group" aria-label="Páginas de iconos">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="Página de iconos ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
     }
     function showIconPage(index) {
       const pages = $(".icon-pages");
-      pages.scrollTo({ left: index * pages.clientWidth, behavior: "instant" });
+      const last = pages.children.length - 1;
+      pages.scrollTo({ left: Math.max(0, Math.min(last, index)) * pages.clientWidth, behavior: "instant" });
       updateIconPage();
     }
     function updateIconPage() {
@@ -2125,7 +2144,7 @@
         button.setAttribute("aria-expanded", String(!picker.hidden));
         if (!picker.hidden) {
           const selected = $('#dialog [name="icon"]').value;
-          showIconPage(Math.floor(Object.keys(ENTITY_ICONS).indexOf(selected) / 24));
+          showIconPage(ENTITY_ICON_PAGES.findIndex(page => page.includes(selected)));
         }
         return;
       }
@@ -2243,7 +2262,9 @@
     document.addEventListener("keydown", (e) => {
       if (!e.target.matches(".icon-pages") || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
       e.preventDefault();
-      showIconPage(e.key === "ArrowRight" || e.key === "End" ? 1 : 0);
+      const current = Math.round(e.target.scrollLeft / e.target.clientWidth);
+      showIconPage(e.key === "Home" ? 0 : e.key === "End" ? ENTITY_ICON_PAGES.length - 1
+        : current + (e.key === "ArrowRight" ? 1 : -1));
     });
     document.addEventListener("click", (e) => {
       if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;

@@ -1,4 +1,4 @@
-/* Touch, keyboard and persistence checks for the two-page icon chooser.
+/* Touch, keyboard and persistence checks for the three-page icon chooser.
    Start the server and use the Playwright setup documented in README.md. */
 const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
@@ -74,9 +74,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('.manage-row').filter({ hasText: "Salidas" }).getByRole("button", { name: "Editar" }).click();
     const toggle = page.locator('[data-action="toggle-icons"]');
     await toggle.click();
-    assert.equal(await page.locator(".icon-page").count(), 2);
-    for (const group of await page.locator(".icon-page").all())
-      assert.equal(await group.locator('[data-action="select-icon"]').count(), 24);
+    assert.equal(await page.locator(".icon-page").count(), 3);
+    for (const [i, group] of (await page.locator(".icon-page").all()).entries())
+      assert.equal(await group.locator('[data-action="select-icon"]').count(), A.ENTITY_ICON_PAGES[i].length);
     const pages = page.locator(".icon-pages");
     const cdp = await context.newCDPSession(page);
     async function swipe(dx) {
@@ -93,18 +93,39 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.waitForFunction(() => document.querySelector('[data-action="icon-page"][data-page="1"]').getAttribute("aria-current") === "true");
     assert.equal(await page.locator('#dialog [name="icon"]').inputValue(), "tag", "Swipe does not select an icon");
     await page.screenshot({ path: "/tmp/gastalo-icons-page-2.png" });
+    await swipe(-270);
+    await page.waitForFunction(() => document.querySelector('[data-action="icon-page"][data-page="2"]').getAttribute("aria-current") === "true");
+    await page.screenshot({ path: "/tmp/gastalo-icons-page-3.png" });
+    await swipe(270);
+    await page.waitForFunction(() => document.querySelector('[data-action="icon-page"][data-page="1"]').getAttribute("aria-current") === "true");
     await swipe(270);
     await page.waitForFunction(() => document.querySelector('[data-action="icon-page"][data-page="0"]').getAttribute("aria-current") === "true");
     await pages.focus();
     await page.keyboard.press("ArrowRight");
     assert.equal(await page.locator('[data-action="icon-page"][data-page="1"]').getAttribute("aria-current"), "true");
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="2"]').getAttribute("aria-current"), "true");
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="2"]').getAttribute("aria-current"), "true", "ArrowRight stops at the last page");
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="1"]').getAttribute("aria-current"), "true");
+    await page.keyboard.press("End");
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="2"]').getAttribute("aria-current"), "true");
     await page.keyboard.press("Home");
-    await page.getByRole("button", { name: "Página de iconos 2", exact: true }).click();
-    await page.getByRole("button", { name: "Salidas y bebidas", exact: true }).tap();
+    await page.keyboard.press("ArrowLeft");
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="0"]').getAttribute("aria-current"), "true", "ArrowLeft stops at the first page");
+    await page.screenshot({ path: "/tmp/gastalo-icons-page-1.png" });
+    await page.getByRole("button", { name: "Página de iconos 3", exact: true }).click();
+    await page.getByRole("button", { name: "Taxi", exact: true }).tap();
     assert.equal(await page.locator("#icon-picker").isVisible(), false);
     await toggle.click();
-    assert.equal(await page.locator('[data-action="icon-page"][data-page="1"]').getAttribute("aria-current"), "true");
-    assert.equal(await page.locator('[data-icon="drinks"]').getAttribute("aria-pressed"), "true");
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="2"]').getAttribute("aria-current"), "true");
+    assert.equal(await page.locator('[data-icon="taxi"]').getAttribute("aria-pressed"), "true");
+    await page.getByRole("button", { name: "Página de iconos 1", exact: true }).click();
+    await page.getByRole("button", { name: "Inversiones", exact: true }).tap();
+    await toggle.click();
+    assert.equal(await page.locator('[data-action="icon-page"][data-page="0"]').getAttribute("aria-current"), "true");
+    assert.equal(await page.locator('[data-icon="investments"]').getAttribute("aria-pressed"), "true");
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     await page.reload();
@@ -117,9 +138,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         tx.oncomplete = () => db.close();
       };
     }));
-    assert.equal(A.restore(A.backup(saved)).categories.find(c => c.id === "outings").icon, "drinks");
+    assert.equal(A.restore(A.backup(saved)).categories.find(c => c.id === "outings").icon, "investments");
     assert.deepEqual(errors, []);
-    console.log("PASS: compact pages at 320/390/1280px, inline budget editing, monthly limits, 24+24 icons, native swipes, keyboard/buttons, reopening selection and persistence through reload/JSON.");
+    console.log("PASS: compact pages at 320/390/1280px, inline budget editing, monthly limits, 18+18+15 icons, native swipes across three pages, keyboard/buttons, reopening selection and new-icon persistence through reload/JSON.");
   } finally {
     await browser.close();
   }
