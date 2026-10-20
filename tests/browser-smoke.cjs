@@ -147,7 +147,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.locator('#dialog [name="amount"]').fill(amount);
       await page.locator(".movement-extras > summary").click();
       await page.locator('#dialog [name="note"]').fill(note);
-      await page.locator('#dialog [name="newTag"]').fill("Personal");
+      await page.getByRole('button', { name: 'Elegir o crear etiquetas', exact: true }).click();
+      await page.locator('#tag-search').fill('Personal');
+      if (await page.locator('#tag-create').isVisible()) await page.locator('#tag-create').click();
+      else await page.locator('#tag-picker-list input').first().check();
+      await page.locator('#tag-picker-done').click();
       await page.locator('#dialog button[type="submit"]').click();
       await page.locator("#dialog").waitFor({ state: "hidden" });
     }
@@ -551,7 +555,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     });
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
     await page.waitForFunction(() => document.activeElement?.name === "amount");
-    assert.ok((await page.locator("#dialog").boundingBox()).height < 360);
+    assert.equal(await page.locator("#tag-picker").isVisible(), false);
+    assert.ok((await page.locator("#dialog").boundingBox()).height < 480, "The movement stays compact with the visible tag box");
     assert.equal(
       await page.locator('#dialog [name="to"] option:checked').innerText(),
       "Efectivo",
@@ -572,7 +577,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.mouse.up();
     await page.getByRole("heading", { name: "Nuevo movimiento" }).waitFor();
     await page.waitForFunction(() => document.activeElement?.name === "amount");
-    assert.ok((await page.locator("#dialog").boundingBox()).height < 360);
+    assert.equal(await page.locator("#tag-picker").isVisible(), false);
+    assert.ok((await page.locator("#dialog").boundingBox()).height < 480, "The movement stays compact with the visible tag box");
     assert.equal(
       await page.locator('#dialog [name="from"] option:checked').innerText(),
       "Banco",
