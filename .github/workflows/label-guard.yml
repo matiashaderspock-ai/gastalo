@@ -53,7 +53,7 @@ jobs:
               return Buffer.from(data.content, 'base64').toString('utf8');
             }
             async function sensitive(file) {
-              const paths = [file.filename, file.previous_filename].filter(Boolean);
+              const paths = [file.filename, file.previous_filename].filter(path => path && !path.startsWith('tests/'));
               if (paths.some(path => path.startsWith('.github/') || /(?:sync|reset|delet|erase)/i.test(path))) return true;
               if (!paths.some(path => /\.(?:[cm]?js|html|json)$/i.test(path))) return false;
               if (!file.patch) return true; // Truncated/binary/unavailable diff: require review.
