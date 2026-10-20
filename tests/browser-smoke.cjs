@@ -124,7 +124,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
           .getByRole("button", { name: "Editar Comida", exact: true })
           .click();
         await page.locator('[data-action="toggle-icons"]').click();
-        assert.equal(await page.locator('#icon-picker [data-action="select-icon"]').count(), 48);
+        assert.equal(await page.locator('#icon-picker [data-action="select-icon"]').count(), Object.keys(A.ENTITY_ICONS).length);
         await page.locator('#icon-picker [data-icon="food"]').click();
         await page.locator('#dialog button[type="submit"]').click();
         await page.locator("#dialog").waitFor({ state: "hidden" });
