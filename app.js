@@ -272,6 +272,16 @@
       imports: [],
     };
   }
+  function movementTagSuggestions(state, selected = [], limit = 6) {
+    const counts = new Map();
+    for (const t of state.transactions) if (t.status === "posted")
+      for (const id of t.tag_ids) counts.set(id, (counts.get(id) || 0) + 1);
+    const available = state.tags.filter((tag) => !tag.archived_at || selected.includes(tag.id));
+    const popular = available.filter((tag) => !tag.archived_at).sort((a, b) =>
+      (counts.get(b.id) || 0) - (counts.get(a.id) || 0) || a.name.localeCompare(b.name, "es") || a.id.localeCompare(b.id),
+    ).slice(0, limit);
+    return [...popular, ...available.filter((tag) => selected.includes(tag.id) && !popular.includes(tag))];
+  }
   // Pure gesture rule. Entity types use the same keys as the stored collections.
   function canDrop(from, to) {
     if (!from || !to || from.id === to.id) return false;
@@ -962,6 +972,7 @@
     dateOK,
     shiftMonth,
     emptyState,
+    movementTagSuggestions,
     direction,
     canDrop,
     gestureIntent,
@@ -1337,11 +1348,16 @@
       );
     }
     function movement(from = "", to = "", transaction = null, reviewId = null) {
-      const t = transaction;
+      const t = transaction, pendingTags = [], returnView = view,
+        scrollY = window.scrollY, scrollX = window.scrollX,
+        stripScroll = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
+      let selectedTags = [...(t?.tag_ids || [])];
       modal(
         t ? "Editar movimiento" : "Nuevo movimiento",
         `
-        <div class="form-grid"><label>Origen<select name="from" required>${options(
+        <section class="movement-tags" aria-label="Etiquetas del movimiento"><div class="movement-tags-heading"><span>Etiquetas</span><button type="button" id="tag-picker-toggle" aria-label="Elegir o crear etiquetas" aria-expanded="false" aria-controls="tag-picker">+</button></div><div id="movement-tag-chips" class="tag-choices"></div></section>
+        <section id="tag-picker" class="movement-tag-picker" aria-label="Elegir etiquetas" hidden><div class="tag-search"><label>Buscar o crear etiqueta<input id="tag-search" type="search" maxlength="80" autocomplete="off" placeholder="Buscar o crear etiqueta"></label><button type="button" id="tag-create" aria-label="Crear etiqueta" hidden>+</button></div><div id="tag-picker-list"></div><p id="tag-search-empty" class="muted" hidden>Sin coincidencias.</p><button type="button" id="tag-picker-done">Listo</button></section>
+        <div class="movement-fields"><div class="form-grid"><label>Origen<select name="from" required>${options(
           [...state.sources, ...state.accounts].filter(
             (e) => !e.archived_at || e.id === (t?.from_id || from),
           ),
@@ -1351,17 +1367,8 @@
         <label>Destino<select name="to" required></select></label></div>
         <div class="form-grid"><label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
         <label>Fecha<input name="date" type="date" required value="${esc(t?.occurred_on || today())}"></label></div>
-        <details class="movement-extras" ${t?.note || t?.tag_ids.length ? "open" : ""}><summary>Etiquetas y nota</summary><fieldset><legend>Etiquetas</legend><div class="tag-choices">${
-          state.tags
-            .filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id))
-            .map(
-              (tag) =>
-                `<label><input type="checkbox" name="tags" value="${esc(tag.id)}" ${t?.tag_ids.includes(tag.id) ? "checked" : ""}>${esc(tag.name)}</label>`,
-            )
-            .join("") || '<span class="muted">Aún no hay etiquetas.</span>'
-        }</div></fieldset>
-        <label>Nueva etiqueta (opcional)<input name="newTag" maxlength="80" placeholder="Un nombre de etiqueta"></label>
-        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label></details>${actions(t ? "Guardar cambios" : "Registrar")}`,
+        <details class="movement-extras" ${t?.note ? "open" : ""}><summary>Nota</summary>
+        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
         async (data) => {
           const next = copy(state),
             fromId = data.get("from"),
@@ -1370,16 +1377,8 @@
             amount = cents(data.get("amount"));
           assert(kind, "Elige una dirección válida.");
           assert(amount > 0, "El importe debe ser mayor que cero.");
-          const tagIds = data.getAll("tags"),
-            tagName = data.get("newTag").trim();
-          if (tagName) {
-            let tag = next.tags.find((e) => e.name === tagName);
-            if (!tag) {
-              tag = { id: uid(), name: tagName, archived_at: null };
-              next.tags.push(tag);
-            }
-            tagIds.push(tag.id);
-          }
+          const tagIds = selectedTags;
+          next.tags.push(...pendingTags.filter((tag) => tagIds.includes(tag.id)));
           const now = new Date().toISOString();
           const record = {
             ...(t || {}),
@@ -1437,6 +1436,77 @@
       };
       update(t?.to_id || to);
       fromSelect.onchange = () => update(to);
+      const availableTags = () => [...state.tags, ...pendingTags].filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id) || selectedTags.includes(tag.id) ||
+        (search.value.trim() && fold(tag.name).includes(fold(search.value))));
+      const fold = (name) => name.trim().toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const tagChoice = (tag) => `<label><input type="checkbox" data-movement-tag value="${esc(tag.id)}" ${selectedTags.includes(tag.id) ? "checked" : ""}>${esc(tag.name)}</label>`;
+      const search = $("#tag-search"), picker = $("#tag-picker"), toggle = $("#tag-picker-toggle"),
+        dialog = $("#dialog"), title = $("#dialog-title").textContent,
+        closeButton = $('#dialog .dialog-heading [data-action="close"]');
+      const renderTags = () => {
+        const tags = availableTags(), query = fold(search.value);
+        $("#movement-tag-chips").innerHTML = movementTagSuggestions({ ...state, tags }, selectedTags).map(tagChoice).join("") || '<span class="muted">Sin etiquetas</span>';
+        const matches = tags.filter((tag) => fold(tag.name).includes(query)).sort((a, b) => a.name.localeCompare(b.name, "es"));
+        $("#tag-picker-list").innerHTML = matches.map(tagChoice).join("");
+        $("#tag-search-empty").hidden = matches.length > 0;
+        $("#tag-create").hidden = !query || state.tags.concat(pendingTags).some((tag) => fold(tag.name) === query);
+        $("#tag-create").title = `Crear «${search.value.trim()}»`;
+      };
+      const chooseTag = (e) => {
+        if (!e.target.matches("[data-movement-tag]")) return;
+        selectedTags = e.target.checked ? [...new Set([...selectedTags, e.target.value])]
+          : selectedTags.filter((id) => id !== e.target.value);
+        renderTags();
+      };
+      $("#movement-tag-chips").onchange = picker.onchange = chooseTag;
+      search.oninput = renderTags;
+      const closePicker = () => {
+        picker.hidden = true;
+        dialog.classList.remove("choosing-tags");
+        $("#dialog-title").textContent = title;
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.focus({ preventScroll: true });
+      };
+      toggle.onclick = () => {
+        if (!picker.hidden) return closePicker();
+        picker.hidden = false;
+        dialog.classList.add("choosing-tags");
+        $("#dialog-title").textContent = "Etiquetas";
+        toggle.setAttribute("aria-expanded", "true");
+        search.focus({ preventScroll: true });
+      };
+      $("#tag-picker-done").onclick = closePicker;
+      const dismissPicker = (e) => {
+        if (picker.hidden) return;
+        e.preventDefault();
+        e.stopPropagation();
+        closePicker();
+      };
+      closeButton.addEventListener("click", dismissPicker);
+      dialog.addEventListener("cancel", dismissPicker);
+      $("#tag-create").onclick = () => {
+        const name = search.value.trim();
+        if (!name || state.tags.concat(pendingTags).some((tag) => fold(tag.name) === fold(name))) return;
+        const tag = { id: uid(), name, archived_at: null };
+        pendingTags.push(tag);
+        selectedTags.push(tag.id);
+        search.value = "";
+        renderTags();
+        search.focus({ preventScroll: true });
+      };
+      search.onkeydown = (e) => {
+        if (e.key === "Enter") { e.preventDefault(); if (!$("#tag-create").hidden) $("#tag-create").click(); }
+        if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePicker(); }
+      };
+      renderTags();
+      dialog.addEventListener("close", () => {
+        closeButton.removeEventListener("click", dismissPicker);
+        dialog.removeEventListener("cancel", dismissPicker);
+        dialog.classList.remove("choosing-tags");
+        if (view !== returnView) return;
+        document.querySelectorAll(".entity-strip").forEach((strip, index) => { strip.scrollLeft = stripScroll[index] || 0; });
+        window.scrollTo(scrollX, scrollY);
+      }, { once: true });
     }
     function editEntity(key, id = null) {
       const e = id ? state[key].find((e) => e.id === id) : null;
@@ -2574,6 +2644,7 @@
       const rect =
         target?.querySelector(".entity-mark").getBoundingClientRect() ||
         p.origin;
+      const stripScroll = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
       if (p.card.hasPointerCapture(p.id)) p.card.releasePointerCapture(p.id);
       p.target?.classList.remove("drop-target");
       if (target) vibrate();
@@ -2610,6 +2681,7 @@
         document.documentElement.classList.remove("is-dragging");
         document.body.style.top = "";
         document.body.style.left = "";
+        document.querySelectorAll(".entity-strip").forEach((strip, index) => { strip.scrollLeft = stripScroll[index]; });
         window.scrollTo(p.scrollX, p.scrollY);
         settling = false;
         // A new tap must work immediately after settling; suppress only the drag click.

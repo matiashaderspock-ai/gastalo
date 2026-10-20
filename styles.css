@@ -1787,6 +1787,64 @@ dialog::backdrop {
 .movement-extras {
   margin-top: 4px;
 }
+.movement-tags {
+  background: #f0f1ed;
+  border: 1px solid #dfe3da;
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin: 8px 0 12px;
+}
+.movement-tags-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+.movement-tags-heading button,
+.tag-search > button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 24px;
+}
+.movement-tags .tag-choices {
+  gap: 6px;
+}
+.movement-tags .tag-choices label {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 5px 8px;
+  margin: 2px 0;
+  font-size: 12px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.movement-tags .tag-choices label:has(:checked) {
+  background: #deeadb;
+  border-color: var(--green);
+}
+.movement-tag-picker {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+.choosing-tags .movement-tags,
+.choosing-tags .movement-fields { display: none; }
+.choosing-tags #tag-picker-list { max-height: min(55dvh, 440px); }
+.tag-search {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+}
+.tag-search label { flex: 1; min-width: 0; }
+#tag-picker-list { max-height: 210px; overflow-y: auto; margin: 6px 0; }
+#tag-picker-list label { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--line); padding: 9px 0; margin: 0; font-weight: 400; }
+.compact-dialog #tag-picker-list input { width: 20px; height: 20px; min-height: 20px; margin: 0; padding: 0; flex-shrink: 0; accent-color: var(--green); }
+#tag-create { background: var(--green); color: white; }
 .movement-extras summary {
   min-height: 32px;
   padding: 6px 0;
