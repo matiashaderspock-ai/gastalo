@@ -59,3 +59,27 @@ For these and/or other purposes and motivations, and without any expectation of 
     4. Affirmer understands and acknowledges that Creative Commons is not a party to this document and has no duty or obligation with respect to this CC0 or use of the Work.
 
 For more information, please see <https://creativecommons.org/publicdomain/zero/1.0>.
+
+
+Additional monochrome brand adaptations
+
+eToro: brand symbol, SVG reference from 2FA SVG Logos
+https://github.com/2fasvg/2fasvg.github.io/blob/b5a447e262c5f9638abbc214a3f35f7d5d08879b/assets/img/logo/etoro.com/etoro.com.svg
+
+PlayStation and HBO: simple-icons 16.35.0 (CC0, notice above).
+
+Banco Unión: simplified outline of its geometric symbol.
+Banco BISA: vectorized distinctive lettering, omitting the surrounding wordmark.
+Banco Ganadero: its three diagonal bands, redrawn as local paths.
+Banco Mercantil Santa Cruz: central lettering and simplified seal; tiny text omitted.
+Brand artwork references:
+https://github.com/MiguelT18/altavida-frontend/tree/0e3a626b3a363917fb10284d325d5d14ca8a752c/src/assets/media/images/pages/financiamiento/creditos
+https://github.com/PestanaS273/KeySolutionsSAC/blob/d2ece60fbea23885f92f3e2afe83ef50dbc09427/src/assets/bancoMercantil.svg
+Official brands: https://bancounion.com.bo/ https://www.bisa.com/
+https://www.bg.com.bo/ https://www.bmsc.com.bo/
+
+Yango: simplified spiral drawn as a local stroke symbol, based on the Yango Deli
+app icon: https://apps.apple.com/us/app/yango-deli-food-delivery/id6444406396
+
+Brand names and marks belong to their respective owners. These adaptations
+identify financial accounts and expense categories; no affiliation is implied.
