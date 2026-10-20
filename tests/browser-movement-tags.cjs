@@ -62,13 +62,14 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
             padding: style.paddingLeft, aligned: Math.abs(input.getBoundingClientRect().left - input.closest('label').getBoundingClientRect().left) < 1 }];
         }));
       });
-      for (const name of ['from', 'to', 'date', 'note']) {
+      for (const name of ['from', 'to', 'date']) {
         assert.equal(fields[name].border, '0px', `${name} is borderless`);
         assert.equal(fields[name].background, 'rgba(0, 0, 0, 0)');
         assert.equal(fields[name].padding, '0px');
       }
       assert.equal(fields.date.aligned, true, 'The date value aligns with Fecha');
       assert.equal(fields.amount.border, '1px', 'Importe retains its input box');
+      assert.equal(fields.note.border, '1px', 'The note is a boxed text-entry field');
       const layout = await page.locator('.movement-tags').evaluate(e => {
         const row = e.querySelector('.tag-choices'), labels = [...row.querySelectorAll('label')];
         const plain = item => { const s = getComputedStyle(item); return s.backgroundColor === 'rgba(0, 0, 0, 0)' && s.borderTopWidth === '0px'; };

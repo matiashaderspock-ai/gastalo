@@ -1082,6 +1082,12 @@ select[multiple] {
 textarea {
   resize: vertical;
 }
+select,
+input[type="date"],
+input[type="month"] {
+  border: 0;
+  background: transparent;
+}
 fieldset {
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1425,11 +1431,16 @@ th {
   border-top: 1px solid var(--line);
 }
 dialog {
+  position: fixed;
+  top: var(--dialog-viewport-top, 0px);
+  bottom: calc(100% - var(--dialog-viewport-top, 0px) - var(--dialog-viewport-height, 100%));
+  margin: auto;
   border: 1px solid var(--line);
   border-radius: 22px;
   padding: 25px;
   width: min(540px, calc(100% - 24px));
-  max-height: calc(100dvh - 32px);
+  max-height: calc(var(--dialog-viewport-height, 100dvh) - 32px);
+  overflow-y: auto;
   color: var(--ink);
   background: var(--white);
   box-shadow: 0 24px 100px #173f3630;
@@ -1676,7 +1687,7 @@ dialog::backdrop {
   }
   dialog {
     padding: 18px;
-    max-height: calc(100dvh - 24px);
+    max-height: calc(var(--dialog-viewport-height, 100dvh) - 24px);
   }
   .header-end button {
     font-size: 0.7rem;
@@ -1735,7 +1746,7 @@ dialog::backdrop {
   width: min(440px, calc(100% - 20px));
   padding: 14px;
   border-radius: 16px;
-  max-height: calc(100dvh - 20px);
+  max-height: calc(var(--dialog-viewport-height, 100dvh) - 24px);
 }
 .compact-dialog .dialog-heading {
   gap: 8px;
@@ -1768,8 +1779,7 @@ dialog::backdrop {
   gap: 0 10px;
 }
 .compact-dialog .movement-fields select,
-.compact-dialog .movement-fields input[type="date"],
-.compact-dialog .movement-fields textarea {
+.compact-dialog .movement-fields input[type="date"] {
   background: transparent;
   border: 0;
   border-radius: 0;
