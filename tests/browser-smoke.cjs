@@ -196,19 +196,10 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const consultedMonth = await page.locator("#month").inputValue();
     await page.locator(".month-picker input").click();
     await page.keyboard.press("Escape");
-    await page
-      .getByRole("button", { name: "Mes anterior", exact: true })
-      .click();
-    await page
-      .getByRole("button", { name: "Mes siguiente", exact: true })
-      .click();
-    assert.equal(await page.locator("#month").inputValue(), consultedMonth);
-    const monthLayout = await page.locator(".compact-month").evaluate(e => {
-      const [prev, picker, next] = [...e.children].map(c => c.getBoundingClientRect());
-      return { leftGap: picker.x - prev.right, rightGap: next.x - picker.right,
-        centered: Math.abs(prev.y + prev.height / 2 - picker.y - picker.height / 2) < 1 && Math.abs(next.y + next.height / 2 - picker.y - picker.height / 2) < 1 };
-    });
-    assert.ok(monthLayout.leftGap <= 2 && monthLayout.rightGap <= 2 && monthLayout.centered);
+    assert.equal(await page.locator('.home-toolbar .month-nav button').count(), 0);
+    await page.locator('#month').fill('2026-12');
+    assert.equal(await page.locator('#month').inputValue(), '2026-12');
+    await page.locator('#month').fill(consultedMonth);
     // Complete deletion is distinct from archive, requires confirmation and supports Undo.
     await hold("Banco");
     await page.getByRole("button", { name: "Eliminar Banco", exact: true }).click();

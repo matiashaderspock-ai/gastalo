@@ -54,6 +54,21 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.ok(await page.locator('.movement-tags').evaluate(e => Boolean(e.compareDocumentPosition(document.querySelector('[name="from"]')) & Node.DOCUMENT_POSITION_FOLLOWING)));
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });
+      const fields = await page.locator('.movement-fields').evaluate(e => {
+        const names = ['from', 'to', 'date', 'note', 'amount'];
+        return Object.fromEntries(names.map(name => {
+          const input = e.querySelector(`[name="${name}"]`), style = getComputedStyle(input);
+          return [name, { border: style.borderTopWidth, background: style.backgroundColor,
+            padding: style.paddingLeft, aligned: Math.abs(input.getBoundingClientRect().left - input.closest('label').getBoundingClientRect().left) < 1 }];
+        }));
+      });
+      for (const name of ['from', 'to', 'date', 'note']) {
+        assert.equal(fields[name].border, '0px', `${name} is borderless`);
+        assert.equal(fields[name].background, 'rgba(0, 0, 0, 0)');
+        assert.equal(fields[name].padding, '0px');
+      }
+      assert.equal(fields.date.aligned, true, 'The date value aligns with Fecha');
+      assert.equal(fields.amount.border, '1px', 'Importe retains its input box');
       const layout = await page.locator('.movement-tags').evaluate(e => {
         const row = e.querySelector('.tag-choices'), labels = [...row.querySelectorAll('label')];
         const plain = item => { const s = getComputedStyle(item); return s.backgroundColor === 'rgba(0, 0, 0, 0)' && s.borderTopWidth === '0px'; };

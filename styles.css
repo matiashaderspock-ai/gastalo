@@ -455,6 +455,9 @@ main:focus {
   border: 0;
   font-size: 22px;
 }
+.compact-month.month-only {
+  grid-template-columns: auto;
+}
 .compact-month .month-picker {
   position: relative;
   display: grid;
@@ -1763,6 +1766,22 @@ dialog::backdrop {
 .compact-dialog .form-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 10px;
+}
+.compact-dialog .movement-fields select,
+.compact-dialog .movement-fields input[type="date"],
+.compact-dialog .movement-fields textarea {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: left;
+}
+.movement-fields input[type="date"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+.movement-fields input[type="date"]::-webkit-datetime-edit {
+  padding: 0;
 }
 .compact-dialog fieldset {
   margin: 8px 0;

@@ -12,7 +12,7 @@ PWA personal de gastos en BOB. HTML/CSS y un `app.js` vanilla, sin dependencias 
 - Historial, límites, reportes y datos usan tarjetas y formularios compactos. Límites y reportes comparten el selector de mes de Inicio; cada categoría permite editar el límite desde «Editar», junto al título.
 - Selector de 48 iconos en dos páginas de 24: desliza horizontalmente o usa los botones de página o el teclado. Se conservan las 24 claves originales y la selección viaja en los respaldos JSON. Los nuevos símbolos cubren categorías habituales de gasto, tomando como referencia [Actual Budget](https://actualbudget.org/docs/getting-started/starting-fresh/) y [Wallet](https://support.budgetbakers.com/hc/en-us/articles/7077082048146-All-about-Categories-and-Subcategories).
 - Mantén pulsada una entidad para editar y arrastra su círculo para cambiarla de columna o fila dentro de su grupo. Puedes seguir arrastrando después de la pulsación larga o soltar y mover otro círculo; las posiciones se ajustan mientras lo mueves. Los bordes desplazan las filas y la página para alcanzar entidades fuera de pantalla. «Listo» sale del modo de edición. El orden se guarda, permite Deshacer y viaja en JSON. Con teclado, enfoca una entidad en modo edición y usa Alt + flechas (arriba/abajo avanzan una fila en categorías).
-- En los selectores de mes, las flechas anterior/siguiente cambian el período y solo el centro de mes/año abre el calendario.
+- En Inicio se cambia el período tocando el mes actual, sin flechas. Los demás selectores conservan las flechas anterior/siguiente y el centro de mes/año abre el calendario.
 
 ## Usar y desarrollar
 
