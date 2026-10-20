@@ -52,10 +52,29 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.equal(await page.locator('#movement-tag-chips input:checked').count(), 0, 'Suggestions are not automatically selected');
     assert.deepEqual((await page.locator('#movement-tag-chips label').allTextContents()).slice(0, 4), ['Viajes', 'Habitual', 'Café', 'Mercado']);
     assert.ok(await page.locator('.movement-tags').evaluate(e => Boolean(e.compareDocumentPosition(document.querySelector('[name="from"]')) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const layout = await page.locator('.movement-tags').evaluate(e => {
+        const row = e.querySelector('.tag-choices'), labels = [...row.querySelectorAll('label')];
+        const plain = item => { const s = getComputedStyle(item); return s.backgroundColor === 'rgba(0, 0, 0, 0)' && s.borderTopWidth === '0px'; };
+        row.scrollLeft = row.scrollWidth;
+        return { height: e.getBoundingClientRect().height, scroll: row.scrollLeft, title: !!e.querySelector('.movement-tags-heading'),
+          rows: new Set(labels.map(l => l.getBoundingClientRect().top)).size,
+          plain: labels.every(plain) && plain(e.querySelector('#tag-picker-toggle')) };
+      });
+      assert.ok(layout.height < 60 && layout.scroll > 0, `Compact sliding row at ${width}px`);
+      assert.equal(layout.rows, 1);
+      assert.equal(layout.title, false);
+      assert.equal(layout.plain, true, 'Names and + have no boxes');
+    }
+    await page.locator('#movement-tag-chips label').last().click();
+    assert.ok(await page.locator('#movement-tag-chips').evaluate(e => e.scrollLeft > 0), 'Selection retains the sliding row position');
+    await page.locator('#movement-tag-chips label').last().click();
+    await page.locator('#movement-tag-chips').evaluate(e => { e.scrollLeft = 0; });
     await page.locator('[name="from"]').selectOption('accounts-11');
     await page.locator('[name="to"]').selectOption(state.categories[0].id);
     await page.locator('[name="amount"]').fill('12,34');
-    await page.locator('#movement-tag-chips [value="tag-0"]').check();
+    await page.locator('#movement-tag-chips label').filter({ has: page.locator('[value="tag-0"]') }).click();
     await page.locator('#tag-picker-toggle').click();
     await page.locator('#tag-search').fill('cafe');
     assert.equal(await page.locator('#tag-picker-list label').innerText(), 'Café');
