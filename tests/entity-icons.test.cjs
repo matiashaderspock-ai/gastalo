@@ -37,7 +37,7 @@ test("solo se aceptan claves del catálogo propio, nunca SVG o rutas arbitrarias
     s.accounts[0].icon = icon;
     assert.throws(() => A.validateState(s), /Icono de entidad inválido/);
   }
-  assert.equal(Object.keys(A.ENTITY_ICONS).length, 51);
+  assert.equal(Object.keys(A.ENTITY_ICONS).length, 58);
 });
 test("todos los iconos ampliados se conservan al respaldar y restaurar categorías", () => {
   const s = load();
@@ -47,8 +47,8 @@ test("todos los iconos ampliados se conservan al respaldar y restaurar categorí
   }
 });
 test("las tres páginas incluyen cada icono una sola vez y priorizan las opciones habituales", () => {
-  assert.deepEqual(A.ENTITY_ICON_PAGES.map(page => page.length), [18, 18, 15]);
+  assert.deepEqual(A.ENTITY_ICON_PAGES.map(page => page.length), [22, 20, 16]);
   assert.deepEqual(A.ENTITY_ICON_PAGES.flat().sort(), Object.keys(A.ENTITY_ICONS).sort());
-  for (const key of ["bank", "card", "wallet", "drinks", "fuel", "investments", "loan", "unexpected"])
+  for (const key of ["bank", "card", "wallet", "drinks", "fuel", "investments", "loan", "unexpected", "chatgpt", "apple", "revolut", "binance"])
     assert.ok(A.ENTITY_ICON_PAGES[0].includes(key), key);
 });
