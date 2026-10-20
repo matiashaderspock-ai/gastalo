@@ -156,11 +156,19 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.locator("#app-menu > summary").click();
       await page.getByRole("button", { name: view, exact: true }).click();
     }
+    let pickerCalls = 0;
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       for (const view of ["Inicio", "Límites de categoría", "Gráficos"]) {
         await go(view);
         await page.locator("#month").fill("2026-12");
+        if (view === "Inicio") {
+          assert.equal(await page.locator('.month-nav button').count(), 0);
+          await page.locator('.month-picker input').tap();
+          assert.equal(await page.evaluate(() => window.__pickerCalls), ++pickerCalls);
+          await page.keyboard.press('Escape');
+          continue;
+        }
         for (const action of ["next", "prev"]) {
           await page.locator("#month").evaluate(input => { input.style.minWidth = "180px"; });
           const button = page.locator(`.month-nav [data-action="${action}"]`);
@@ -173,9 +181,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         }
       }
     }
-    assert.equal(await page.evaluate(() => window.__pickerCalls), 0);
+    assert.equal(await page.evaluate(() => window.__pickerCalls), pickerCalls);
     await page.locator(".month-picker input").tap();
-    assert.equal(await page.evaluate(() => window.__pickerCalls), 1);
+    assert.equal(await page.evaluate(() => window.__pickerCalls), pickerCalls + 1);
     await page.keyboard.press("Escape");
     await go("Inicio");
     await card(reordered.accounts.find(e => !e.archived_at).id).click();
@@ -184,7 +192,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(await page.locator("#month").inputValue(), "2027-01");
     await page.getByRole("button", { name: "Mes anterior", exact: true }).tap();
     assert.equal(await page.locator("#month").inputValue(), "2026-12");
-    assert.equal(await page.evaluate(() => window.__pickerCalls), 1);
+    assert.equal(await page.evaluate(() => window.__pickerCalls), pickerCalls + 1);
     assert.deepEqual(errors, []);
     console.log("PASS: long-press then reorder, all groups, rows/columns, Undo, keyboard, cancel/cross-group drops, horizontal/vertical edge scrolling, financial invariants, persistence/JSON, and month arrow/calendar hit areas at 320/390/1280px.");
   } catch (error) {

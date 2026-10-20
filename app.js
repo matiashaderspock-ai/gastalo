@@ -1621,12 +1621,12 @@
     function stat(label, amount, cls = "") {
       return `<div class="stat ${cls}"><span>${label}</span><strong><small>Bs</small>${money(amount).slice(3)}</strong></div>`;
     }
-    function monthNav(compact = false) {
+    function monthNav(compact = false, showArrows = true) {
       const picker = compact
         ? `<label class="month-picker"><span aria-hidden="true">${esc(new Intl.DateTimeFormat("es-BO", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(month + "-15T12:00:00Z")))}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
         : `<label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label>`;
       const arrow = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
-      return `<div class="month-nav ${compact ? "compact-month" : ""}"><button data-action="prev" aria-label="Mes anterior">${arrow("m14 6-6 6 6 6")}</button>${picker}<button data-action="next" aria-label="Mes siguiente">${arrow("m10 6 6 6-6 6")}</button></div>`;
+      return `<div class="month-nav ${compact ? "compact-month" : ""} ${showArrows ? "" : "month-only"}">${showArrows ? `<button data-action="prev" aria-label="Mes anterior">${arrow("m14 6-6 6 6 6")}</button>` : ""}${picker}${showArrows ? `<button data-action="next" aria-label="Mes siguiente">${arrow("m10 6 6 6-6 6")}</button>` : ""}</div>`;
     }
     function iconSvg(iconKey) {
       return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ENTITY_ICONS[iconKey].path}</svg>`;
@@ -1714,7 +1714,7 @@
     }
     function home() {
       const bs = balances(state);
-      return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar"><button data-action="movement">+ Movimiento</button>${monthNav(true)}</div>
+      return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar"><button data-action="movement">+ Movimiento</button>${monthNav(true, false)}</div>
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Arrastra los círculos para ordenar</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
