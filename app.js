@@ -3,7 +3,8 @@
   "use strict";
   const SCHEMA_VERSION = 1;
   const TYPES = ["sources", "accounts", "categories"];
-  // Original SVG symbols. Persist only their keys, never SVG from user data.
+  // Local SVG symbols; brand artwork credits/licenses: icons/NOTICE.txt.
+  // Persist only their keys, never SVG from user data.
   const ENTITY_ICONS = {
     income: {
       label: "Ingresos",
@@ -209,12 +210,40 @@
       label: "Imprevistos",
       path: '<path d="m10 4-8 14a2 2 0 0 0 2 3h16a2 2 0 0 0 2-3L14 4a2 2 0 0 0-4 0ZM12 9v5m0 3h.01"/>',
     },
+    chatgpt: {
+      label: "ChatGPT",
+      path: '<g fill="currentColor" stroke="none" fill-rule="evenodd"><path d="M9.205 8.658v-2.26c0-.19.072-.333.238-.428l4.543-2.616c.619-.357 1.356-.523 2.117-.523 2.854 0 4.662 2.212 4.662 4.566 0 .167 0 .357-.024.547l-4.71-2.759a.797.797 0 00-.856 0l-5.97 3.473zm10.609 8.8V12.06c0-.333-.143-.57-.429-.737l-5.97-3.473 1.95-1.118a.433.433 0 01.476 0l4.543 2.617c1.309.76 2.189 2.378 2.189 3.948 0 1.808-1.07 3.473-2.76 4.163zM7.802 12.703l-1.95-1.142c-.167-.095-.239-.238-.239-.428V5.899c0-2.545 1.95-4.472 4.591-4.472 1 0 1.927.333 2.712.928L8.23 5.067c-.285.166-.428.404-.428.737v6.898zM12 15.128l-2.795-1.57v-3.33L12 8.658l2.795 1.57v3.33L12 15.128zm1.796 7.23c-1 0-1.927-.332-2.712-.927l4.686-2.712c.285-.166.428-.404.428-.737v-6.898l1.974 1.142c.167.095.238.238.238.428v5.233c0 2.545-1.974 4.472-4.614 4.472zm-5.637-5.303l-4.544-2.617c-1.308-.761-2.188-2.378-2.188-3.948A4.482 4.482 0 014.21 6.327v5.423c0 .333.143.571.428.738l5.947 3.449-1.95 1.118a.432.432 0 01-.476 0zm-.262 3.9c-2.688 0-4.662-2.021-4.662-4.519 0-.19.024-.38.047-.57l4.686 2.71c.286.167.571.167.856 0l5.97-3.448v2.26c0 .19-.07.333-.237.428l-4.543 2.616c-.619.357-1.356.523-2.117.523zm5.899 2.83a5.947 5.947 0 005.827-4.756C22.287 18.339 24 15.84 24 13.296c0-1.665-.713-3.282-1.998-4.448.119-.5.19-.999.19-1.498 0-3.401-2.759-5.947-5.946-5.947-.642 0-1.26.095-1.88.31A5.962 5.962 0 0010.205 0a5.947 5.947 0 00-5.827 4.757C1.713 5.447 0 7.945 0 10.49c0 1.666.713 3.283 1.998 4.448-.119.5-.19 1-.19 1.499 0 3.401 2.759 5.946 5.946 5.946.642 0 1.26-.095 1.88-.309a5.96 5.96 0 004.162 1.713z"/></g>',
+    },
+    apple: {
+      label: "Apple",
+      path: '<g fill="currentColor" stroke="none" fill-rule="evenodd"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></g>',
+    },
+    revolut: {
+      label: "Revolut",
+      path: '<g fill="currentColor" stroke="none" fill-rule="evenodd"><path d="M20.9133 6.9566C20.9133 3.1208 17.7898 0 13.9503 0H2.424v3.8605h10.9782c1.7376 0 3.177 1.3651 3.2087 3.043.016.84-.2994 1.633-.8878 2.2324-.5886.5998-1.375.9303-2.2144.9303H9.2322a.2756.2756 0 0 0-.2755.2752v3.431c0 .0585.018.1142.052.1612L16.2646 24h5.3114l-7.2727-10.094c3.6625-.1838 6.61-3.2612 6.61-6.9494zM6.8943 5.9229H2.424V24h4.4704z"/></g>',
+    },
+    binance: {
+      label: "Binance",
+      path: '<g fill="currentColor" stroke="none" fill-rule="evenodd"><path d="M16.624 13.9202l2.7175 2.7154-7.353 7.353-7.353-7.352 2.7175-2.7164 4.6355 4.6595 4.6356-4.6595zm4.6366-4.6366L24 12l-2.7154 2.7164L18.5682 12l2.6924-2.7164zm-9.272.001l2.7163 2.6914-2.7164 2.7174v-.001L9.2721 12l2.7164-2.7154zm-9.2722-.001L5.4088 12l-2.6914 2.6924L0 12l2.7164-2.7164zM11.9885.0115l7.353 7.329-2.7174 2.7154-4.6356-4.6356-4.6355 4.6595-2.7174-2.7154 7.353-7.353z"/></g>',
+    },
+    grok: {
+      label: "Grok",
+      path: '<g fill="currentColor" stroke="none" fill-rule="evenodd"><path d="M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815"/></g>',
+    },
+    robot: {
+      label: "Robot",
+      path: '<rect x="4" y="7" width="16" height="14" rx="4"/><path d="M12 7V4M1 12v5m22-5v5M9 17h6"/><circle cx="12" cy="3" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="16" cy="12" r="1"/>',
+    },
+    skull: {
+      label: "Calavera",
+      path: '<path d="M8 17H6a2 2 0 0 1-2-2v-4a8 8 0 0 1 16 0v4a2 2 0 0 1-2 2h-2v4H8v-4Zm3 0v4m2-4v4m-2-7 1-2 1 2"/><circle cx="8" cy="11" r="2"/><circle cx="16" cy="11" r="2"/>',
+    },
   };
   // Frequent everyday choices first; keep every persisted icon key available.
   const ENTITY_ICON_PAGES = [
-    ["bank", "card", "wallet", "income", "tag", "drinks", "loan", "fuel", "unexpected", "investments", "home", "food", "subscriptions", "health", "beauty", "car", "clothing", "shield"],
-    ["gym", "shopping", "groceries", "coffee", "work", "travel", "bills", "phone", "internet", "spark", "games", "gift", "education", "pet", "repair", "taxes", "pharmacy", "bus"],
-    ["parking", "electricity", "bike", "music", "water", "gas", "dental", "baby", "family", "cinema", "books", "furniture", "laundry", "charity", "taxi"],
+    ["bank", "card", "wallet", "income", "tag", "drinks", "loan", "fuel", "unexpected", "investments", "home", "food", "subscriptions", "health", "beauty", "car", "clothing", "shield", "chatgpt", "apple", "revolut", "binance"],
+    ["gym", "shopping", "groceries", "coffee", "work", "travel", "bills", "phone", "internet", "spark", "games", "gift", "education", "pet", "repair", "taxes", "pharmacy", "bus", "grok", "robot"],
+    ["parking", "electricity", "bike", "music", "water", "gas", "dental", "baby", "family", "cinema", "books", "furniture", "laundry", "charity", "taxi", "skull"],
   ];
   function entityIconKey(item, type) {
     return Object.hasOwn(ENTITY_ICONS, item?.icon)

@@ -122,10 +122,10 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(await page.locator('[data-action="icon-page"][data-page="2"]').getAttribute("aria-current"), "true");
     assert.equal(await page.locator('[data-icon="taxi"]').getAttribute("aria-pressed"), "true");
     await page.getByRole("button", { name: "Página de iconos 1", exact: true }).click();
-    await page.getByRole("button", { name: "Inversiones", exact: true }).tap();
+    await page.getByRole("button", { name: "ChatGPT", exact: true }).tap();
     await toggle.click();
     assert.equal(await page.locator('[data-action="icon-page"][data-page="0"]').getAttribute("aria-current"), "true");
-    assert.equal(await page.locator('[data-icon="investments"]').getAttribute("aria-pressed"), "true");
+    assert.equal(await page.locator('[data-icon="chatgpt"]').getAttribute("aria-pressed"), "true");
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     await page.reload();
@@ -138,9 +138,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         tx.oncomplete = () => db.close();
       };
     }));
-    assert.equal(A.restore(A.backup(saved)).categories.find(c => c.id === "outings").icon, "investments");
+    assert.equal(A.restore(A.backup(saved)).categories.find(c => c.id === "outings").icon, "chatgpt");
     assert.deepEqual(errors, []);
-    console.log("PASS: compact pages at 320/390/1280px, inline budget editing, monthly limits, 18+18+15 icons, native swipes across three pages, keyboard/buttons, reopening selection and new-icon persistence through reload/JSON.");
+    console.log("PASS: compact pages at 320/390/1280px, inline budget editing, monthly limits, 22+20+16 icons, native swipes across three pages, keyboard/buttons, reopening selection and new-icon persistence through reload/JSON.");
   } finally {
     await browser.close();
   }
