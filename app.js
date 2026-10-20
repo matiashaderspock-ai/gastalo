@@ -1030,6 +1030,7 @@
       detailId = null,
       detailScope = "month",
       homeScroll = 0,
+      homeStripScroll = [],
       editingEntities = false,
       undo = null,
       pendingImport = null,
@@ -1930,6 +1931,8 @@
       <section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>`;
     }
     function render() {
+      const strips = [...document.querySelectorAll(".entity-strip")], scrollY = window.scrollY;
+      if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
       resetTransactionSwipe();
       $("#main").classList.toggle("compact-page", ["history", "budgets", "reports", "settings"].includes(view));
       $("#header-totals").innerHTML = view === "home" ? homeTotals()
@@ -1960,6 +1963,12 @@
         );
       });
       $("#undo-button").hidden = !undo;
+      if (view === "home") {
+        document.querySelectorAll(".entity-strip").forEach((strip, index) => {
+          strip.scrollLeft = homeStripScroll[index] || 0;
+        });
+        window.scrollTo(0, scrollY);
+      }
     }
     async function previewImport(next, source) {
       pendingImport = next;

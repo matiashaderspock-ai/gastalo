@@ -42,6 +42,7 @@ NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-compact-icons.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-data-workflows.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-report-pie.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-reorder-months.cjs
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-entity-scroll.cjs
 # GASTALO_URL permite probar un subdirectorio; CHROMIUM_PATH cambia el ejecutable.
 ```
 
