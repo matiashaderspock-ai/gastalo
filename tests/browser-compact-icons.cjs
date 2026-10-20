@@ -126,6 +126,16 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await toggle.click();
     assert.equal(await page.locator('[data-action="icon-page"][data-page="0"]').getAttribute("aria-current"), "true");
     assert.equal(await page.locator('[data-icon="chatgpt"]').getAttribute("aria-pressed"), "true");
+    // Each new brand is selectable; reopening follows its page and selected key.
+    for (const key of ["etoro", "playstation", "hbo", "banco_union", "banco_bisa", "banco_ganadero", "yango", "banco_mercantil"]) {
+      const index = A.ENTITY_ICON_PAGES.findIndex(keys => keys.includes(key));
+      await page.getByRole("button", { name: `Página de iconos ${index + 1}`, exact: true }).click();
+      await page.getByRole("button", { name: A.ENTITY_ICONS[key].label, exact: true }).tap();
+      assert.equal(await page.locator("#icon-picker").isVisible(), false);
+      await toggle.click();
+      assert.equal(await page.locator(`[data-action="icon-page"][data-page="${index}"]`).getAttribute("aria-current"), "true");
+      assert.equal(await page.locator(`[data-icon="${key}"]`).getAttribute("aria-pressed"), "true");
+    }
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     await page.reload();
@@ -138,9 +148,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         tx.oncomplete = () => db.close();
       };
     }));
-    assert.equal(A.restore(A.backup(saved)).categories.find(c => c.id === "outings").icon, "chatgpt");
+    assert.equal(A.restore(A.backup(saved)).categories.find(c => c.id === "outings").icon, "banco_mercantil");
     assert.deepEqual(errors, []);
-    console.log("PASS: compact pages at 320/390/1280px, inline budget editing, monthly limits, 22+20+16 icons, native swipes across three pages, keyboard/buttons, reopening selection and new-icon persistence through reload/JSON.");
+    console.log("PASS: compact pages at 320/390/1280px, inline budget editing, monthly limits, 24+24+18 icons, native swipes across three pages, keyboard/buttons, reopening selection and new-icon persistence through reload/JSON.");
   } finally {
     await browser.close();
   }
