@@ -1300,6 +1300,26 @@
           .join("")
       );
     }
+    function fitDialogToViewport() {
+      const dialog = $("#dialog"), viewport = window.visualViewport;
+      if (viewport) {
+        dialog.style.setProperty("--dialog-viewport-top", `${viewport.offsetTop}px`);
+        dialog.style.setProperty("--dialog-viewport-height", `${viewport.height}px`);
+      }
+      if (!dialog.open) return;
+      requestAnimationFrame(() => {
+        const field = document.activeElement;
+        if (!dialog.open || !dialog.contains(field)) return;
+        const bounds = dialog.getBoundingClientRect(), input = field.getBoundingClientRect();
+        if (input.bottom > bounds.bottom - 16)
+          dialog.scrollTop += input.bottom - bounds.bottom + 16;
+        else if (input.top < bounds.top + 16)
+          dialog.scrollTop += input.top - bounds.top - 16;
+      });
+    }
+    window.visualViewport?.addEventListener("resize", fitDialogToViewport);
+    window.visualViewport?.addEventListener("scroll", fitDialogToViewport);
+    $("#dialog").addEventListener("focusin", fitDialogToViewport);
     function modal(
       title,
       html,
@@ -1330,6 +1350,7 @@
       };
       const initialField = $("#dialog-body").querySelector(focusSelector);
       initialField?.setAttribute("autofocus", "");
+      fitDialogToViewport();
       if (!dialog.open) dialog.showModal();
       initialField?.focus();
     }
