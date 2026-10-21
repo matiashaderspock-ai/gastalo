@@ -2898,9 +2898,70 @@
       $("#main").innerHTML =
         `<section class="panel"><h1>No se pudo abrir el historial</h1><p>${esc(error.message)}</p><p>Recarga la página. No borres los datos de Safari si necesitas recuperar tu historial.</p></section>`;
     }
+    // A standalone iPhone app can resume without navigating or running boot again.
+    const appScript = new URL(document.querySelector('script[src*="app.js?v="]').src),
+      appVersion = Number(appScript.searchParams.get("v"));
+    $("#app-version").textContent = `v${appVersion}`;
+    let checkingAppVersion = false, availableAppVersion = null;
+    function applyAppUpdate() {
+      if (!availableAppVersion || document.visibilityState !== "visible" ||
+          $("#dialog").open || view === "settings" || busy || editingEntities || pointer || settling) return;
+      const url = new URL(location.href);
+      url.searchParams.set("app-version", availableAppVersion);
+      availableAppVersion = null;
+      location.replace(url.href);
+    }
+    async function checkAppVersion(manual = false) {
+      if (checkingAppVersion || document.visibilityState !== "visible") return;
+      if (!navigator.onLine) {
+        if (manual) notify("Conéctate a internet para actualizar la app.");
+        return;
+      }
+      checkingAppVersion = true;
+      const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const url = new URL("./index.html", location.href);
+        url.searchParams.set("app-check", Date.now());
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        const html = new DOMParser().parseFromString(await response.text(), "text/html"),
+          src = html.querySelector('script[src*="app.js?v="]')?.getAttribute("src");
+        if (!src) throw new Error("Versión no disponible");
+        const latest = new URL(src, url), version = latest.searchParams.get("v");
+        if (latest.origin !== appScript.origin || latest.pathname !== appScript.pathname || !/^\d+$/.test(version))
+          throw new Error("Versión no disponible");
+        if (Number(version) > appVersion) {
+          availableAppVersion = version;
+          if ($("#dialog").open || view === "settings")
+            notify("Actualización lista. Se aplicará al cerrar el formulario o volver a Inicio.");
+          applyAppUpdate();
+        } else if (manual) notify(`La app está actualizada (v${appVersion}).`);
+      } catch {
+        if (manual) notify("No se pudo comprobar la actualización. Intenta de nuevo con conexión.");
+      } finally {
+        clearTimeout(timeout);
+        checkingAppVersion = false;
+      }
+    }
+    $("#update-app").onclick = () => checkAppVersion(true);
+    $("#dialog").addEventListener("close", applyAppUpdate);
+    document.addEventListener("click", () => { if (availableAppVersion) setTimeout(applyAppUpdate, 0); });
+    document.addEventListener("visibilitychange", () => { void checkAppVersion(); });
+    window.addEventListener("pageshow", () => { void checkAppVersion(); });
+    window.addEventListener("online", () => { void checkAppVersion(); });
+    void checkAppVersion();
     if ("serviceWorker" in navigator)
       navigator.serviceWorker
-        .register("./sw.js")
+        .register("./sw.js", { updateViaCache: "none" })
+        .then((registration) => {
+          const update = () => {
+            if (document.visibilityState === "visible" && navigator.onLine)
+              void registration.update().catch(() => {});
+          };
+          document.addEventListener("visibilitychange", update);
+          window.addEventListener("pageshow", update);
+          window.addEventListener("online", update);
+        })
         .catch(() =>
           notify(
             "No se pudo preparar el modo sin conexión. Vuelve a abrir con conexión.",

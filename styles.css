@@ -169,6 +169,15 @@ p {
   font-size: 0.75rem;
   color: #90502c;
 }
+#app-version, #update-app {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+#update-app {
+  border: 0;
+  background: transparent;
+  padding: 6px;
+}
 .app-menu {
   margin: 0;
 }
