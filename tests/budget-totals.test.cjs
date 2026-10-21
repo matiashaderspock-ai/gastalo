@@ -46,3 +46,26 @@ test("editar o borrar un gasto y quitar un límite recalcula lo pendiente sin ca
   assert.deepEqual(A.budgetTotals(A.restore(saved), "2026-01"), { limit: 20000, remaining: 20000 });
   assert.equal(A.backup(s, now), saved, "Totals are derived and do not rewrite saved limits");
 });
+
+test("archivar y restaurar una categoría conserva sus movimientos, límites y saldos", () => {
+  const s = load(), category = s.categories[0];
+  const before = {
+    transactions: structuredClone(s.transactions),
+    budgets: structuredClone(s.budgets),
+    totals: A.budgetTotals(s, "2026-01"),
+    spent: A.report(s, "2026-01").categories.find(c => c.id === category.id).spent,
+  };
+  category.archived_at = "2026-10-20T00:00:00.000Z";
+  A.validateState(s);
+  assert.equal(s.categories.filter(c => !c.archived_at).some(c => c.id === category.id), false);
+  assert.deepEqual(A.budgetTotals(s, "2026-01"), before.totals);
+  assert.equal(A.report(s, "2026-01").categories.find(c => c.id === category.id).spent, before.spent);
+  assert.deepEqual(s.transactions, before.transactions);
+  assert.deepEqual(s.budgets, before.budgets);
+  category.archived_at = null;
+  A.validateState(s);
+  assert.equal(s.categories.filter(c => !c.archived_at).some(c => c.id === category.id), true);
+  assert.deepEqual(A.budgetTotals(s, "2026-01"), before.totals);
+  assert.deepEqual(s.transactions, before.transactions);
+  assert.deepEqual(s.budgets, before.budgets);
+});
