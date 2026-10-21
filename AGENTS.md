@@ -1,5 +1,7 @@
 # Instructions for Codex
 
+Nunca mergees un PR vos mismo (ni web ni API). Solo el workflow Auto-merge mergea. Si un PR tiene needs-matias, dejalo abierto y pará.
+
 ## Codex PR failure reporting
 
 This rule applies to every PR created or updated by Codex in `matiashaderspock-ai/gastalo`, `matiashaderspock-ai/courier-sentiment-bot`, `matiashaderspock-ai/tradier-readonly`, and `matiashaderspock-ai/cumpafit`.

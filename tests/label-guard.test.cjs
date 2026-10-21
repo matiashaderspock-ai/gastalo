@@ -104,6 +104,61 @@ test('an unrelated UI function in app.js remains eligible', async () => {
   assert.equal(result.output.needs_matias, 'false');
 });
 
+test('deleting or clearing a UI Set in app.js does not require review', async () => {
+  for (const line of ['openManageGroups.delete(key);', 'openManageGroups.clear();']) {
+    const result = await inspect([file('app.js', '@@ -5,0 +6 @@\n+    ' + line)]);
+    assert.equal(result.output.needs_matias, 'false', line);
+    assert.deepEqual(result.added, []);
+    assert.deepEqual(result.reads, ['base', 'head']);
+  }
+});
+
+test('storage deletion still requires review for each supported receiver', async () => {
+  for (const line of [
+    'store.delete(id)', 'localStorage.removeItem(k)', 'db.clear()',
+    'tx.objectStore("state").delete(id)', 'sessionStorage.clear()',
+    'caches.delete(key)', 'cache.delete(key)', 'idbStore.clear()',
+    'store . delete (id)',
+  ]) {
+    const result = await inspect([file('app.js', '@@ -5,0 +6 @@\n+    ' + line)]);
+    assert.equal(result.output.needs_matias, 'true', line);
+    assert.deepEqual(result.added[0].labels, ['needs-matias']);
+    assert.deepEqual(result.reads, [], 'the storage marker must match before inspecting function ranges');
+  }
+});
+
+// Exact app.js patch from #31 and original sensitive function boundaries at both
+// recorded commits. Retain line numbers, declarations and terminators so the real
+// range rule runs offline without copying two complete versions of app.js.
+const pr31Patch = fs.readFileSync(__dirname + '/fixtures/label-guard-pr31-app.patch', 'utf8').trimEnd();
+const pr31Functions = require('./fixtures/label-guard-pr31-functions.json');
+function boundarySource(snapshot) {
+  const lines = Array(snapshot.lineCount).fill('');
+  for (const [number, line] of Object.entries(snapshot.lines)) lines[Number(number) - 1] = line;
+  return lines.join('\n');
+}
+const pr31Sources = {
+  before: boundarySource(pr31Functions.before),
+  after: boundarySource(pr31Functions.after),
+};
+
+test('the real #31 app.js diff still requires review because it edits removeEntity', async () => {
+  const result = await inspect([file('app.js', pr31Patch)], pr31Sources);
+  assert.equal(result.output.needs_matias, 'true');
+  assert.deepEqual(result.added[0].labels, ['needs-matias']);
+  assert.deepEqual(result.reads, ['base', 'head'], 'markers must pass; removeEntity ranges require review');
+});
+
+test('the real #31 UI hunks outside removeEntity do not require review', async () => {
+  const hunks = pr31Patch.split(/(?=^@@ )/m);
+  for (const hunk of hunks) {
+    const insideRemoveEntity = /^@@ -17(?:83|94),|^@@ -1807,/.test(hunk);
+    const result = await inspect([file('app.js', hunk)], pr31Sources);
+    assert.equal(result.output.needs_matias, String(insideRemoveEntity), hunk.split('\n')[0]);
+    assert.deepEqual(result.reads, ['base', 'head']);
+  }
+});
+
 test('old diff lines use the merge base when the target branch has advanced', async () => {
   const result = await inspect([file('app.js', '@@ -2 +2 @@\n-    return 1;\n+    return 2;')], { pr: { base: { sha: 'advanced-base' } } });
   assert.equal(result.output.needs_matias, 'true');

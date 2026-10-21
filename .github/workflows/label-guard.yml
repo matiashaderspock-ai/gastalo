@@ -33,7 +33,7 @@ jobs:
                 await github.rest.issues.getLabel({ ...repo, name: label });
               }
             }
-            const marker = /sync_config|uploadBackup|syncConfig|gastalo-data|gastalo-backup|Restablecer todo|reset-app|eraseEntity|deleteTransaction|deleteDatabase|deleteObjectStore|deleted_at|["']deleted["']|\.(?:delete|clear|removeItem)\s*\(/i;
+            const marker = /sync_config|uploadBackup|syncConfig|gastalo-data|gastalo-backup|Restablecer todo|reset-app|eraseEntity|deleteTransaction|deleteDatabase|deleteObjectStore|deleted_at|["']deleted["']|\b(?:store|objectStore\([^)]*\)|db|localStorage|sessionStorage|caches|cache|idb\w*)\s*\.\s*(?:delete|clear|removeItem)\s*\(/i;
             let mergeBase;
             function ranges(source) {
               const lines = source.split('\n'), result = [];
