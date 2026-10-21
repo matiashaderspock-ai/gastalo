@@ -171,7 +171,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByRole("button", { name: "Eliminar Banco", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Quitar de Inicio", exact: true })
+      .getByRole("button", { name: "Archivar", exact: true })
       .click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.equal(await card("Banco").count(), 0);
@@ -417,6 +417,43 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await go("Inicio");
       await assertBudgetMark(tone, fill, planned);
     }
+    // Archiving a category preserves its limits and history, and restoration works
+    // both from Organizar entidades and the collapsed Archived Categories list.
+    await hold("Comida");
+    await page.getByRole("button", { name: "Eliminar Comida", exact: true }).click();
+    assert.equal(await page.locator('#dialog [name="removal"]:checked').inputValue(), "archive");
+    await page.getByRole("button", { name: "Archivar", exact: true }).click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.equal(await card("Comida").count(), 0);
+    await page.getByRole("button", { name: "Listo", exact: true }).click();
+    await go("Límites de categoría");
+    assert.equal(await page.locator("#archived-categories").evaluate(e => e.open), false);
+    assert.equal(await page.locator("section.budget-grid > .budget-card").count(), 0);
+    await page.locator("#archived-categories > summary").click();
+    assert.equal(await page.locator("#archived-categories .budget-card").count(), 1);
+    assert.match(await page.locator("#archived-categories .budget-card").innerText(), /200,00/);
+    await go("Importar/Exportar");
+    await page.locator('[data-manage-key="categories"] > summary').click();
+    await page.getByRole("button", { name: "Restaurar Comida en Inicio" }).click();
+    assert.equal(await page.locator('[data-manage-key="categories"]').evaluate(e => e.open), true);
+    await go("Inicio");
+    await card("Comida").waitFor();
+    await go("Límites de categoría");
+    assert.equal(await page.locator("section.budget-grid > .budget-card").count(), 1);
+    assert.match(await page.locator("section.budget-grid > .budget-card").innerText(), /200,00/);
+    await go("Inicio");
+    await hold("Comida");
+    await page.getByRole("button", { name: "Eliminar Comida", exact: true }).click();
+    await page.getByRole("button", { name: "Archivar", exact: true }).click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Listo", exact: true }).click();
+    await go("Límites de categoría");
+    await page.locator("#archived-categories > summary").click();
+    await page.getByRole("button", { name: "Restaurar Comida en Inicio" }).click();
+    assert.equal(await page.locator("#archived-categories .budget-card").count(), 0);
+    assert.equal(await page.locator("section.budget-grid > .budget-card").count(), 1);
+    await go("Inicio");
+    await card("Comida").waitFor();
     // Entity detail has its own scope, month switching and signed account history.
     await card("Comida").tap();
     assert.equal(await page.locator(".entity-history .transaction").count(), 1);
