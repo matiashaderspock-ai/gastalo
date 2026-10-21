@@ -494,6 +494,16 @@
       remaining: limit === null ? null : sum([limit, -spent]),
     };
   }
+  function budgetTotals(state, month) {
+    const categories = report(state, month).categories.map((c) => {
+      const limit = budgetLimit(state, c.id, month) ?? 0;
+      return { limit, remaining: Math.max(0, sum([limit, -c.spent])) };
+    });
+    return {
+      limit: sum(categories.map((c) => c.limit)),
+      remaining: sum(categories.map((c) => c.remaining)),
+    };
+  }
   function budgetVisual(limit, spent) {
     if (limit === null || spent === 0) return { fill: 0, tone: "gray" };
     if (spent > limit) return { fill: 100, tone: "red" };
@@ -1062,6 +1072,7 @@
     filterTransactions,
     report,
     budget,
+    budgetTotals,
     budgetLimit,
     budgetVisual,
     eraseEntity,
@@ -1808,10 +1819,8 @@
           .filter((a) => !a.exclude_from_total)
           .map((a) => bs[a.id]),
       );
-      const monthlyBudget = sum(
-        state.categories.map((c) => budgetLimit(state, c.id, month) ?? 0),
-      );
-      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", monthlyBudget)}</section>`;
+      const remaining = budgetTotals(state, month).remaining;
+      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", remaining)}</section>`;
     }
     function home() {
       const bs = balances(state);
@@ -1988,7 +1997,7 @@
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
     }
     function budgets() {
-      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="budget-grid">${
+      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", budgetTotals(state, month).limit)}</section><section class="budget-grid">${
         state.categories
           .filter(
             (c) =>

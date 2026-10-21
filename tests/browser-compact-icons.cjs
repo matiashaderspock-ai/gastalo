@@ -48,6 +48,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false,
           `${name} fits at ${width}px`);
         if (name === "Límites de categoría") {
+          assert.match(await page.locator(".budget-totals").innerText(), /Total de límites mensuales[\s\S]*200,00/);
           assert.equal(await page.locator(".page-heading .month-picker").count(), 1);
           const edit = page.getByRole("button", { name: "Editar límite de Salidas" });
           assert.equal(await edit.innerText(), "Editar");
@@ -65,8 +66,22 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.match(await page.locator(".budget-card").filter({ hasText: "Salidas" }).innerText(), /300,00/);
+    assert.match(await page.locator(".budget-totals").innerText(), /500,00/);
+    await go("Inicio");
+    assert.match(await page.locator(".home-totals .stat").last().innerText(), /474,50/);
+    await go("Límites de categoría");
     await page.getByRole("button", { name: "Mes siguiente" }).click();
     assert.match(await page.locator(".budget-card").filter({ hasText: "Salidas" }).innerText(), /300,00/);
+    assert.match(await page.locator(".budget-totals").innerText(), /500,00/);
+    await page.getByRole("button", { name: "Editar límite de Comida" }).click();
+    await page.locator('#dialog [name="limit"]').fill("20");
+    await page.locator('#dialog button[type="submit"]').click();
+    await page.locator("#dialog").waitFor({ state: "hidden" });
+    assert.match(await page.locator(".budget-totals").innerText(), /320,00/);
+    await go("Inicio");
+    assert.match(await page.locator(".home-totals .stat").last().innerText(), /300,00/, "An exceeded category does not consume another category's remaining limit");
+    await page.locator("#month").fill("2026-01");
+    assert.match(await page.locator(".home-totals .stat").last().innerText(), /474,50/);
     await go("Importar/Exportar");
     await page.locator('.manage-row').filter({ hasText: "Salidas" }).locator('button').evaluate(button => {
       button.closest("details").open = true;

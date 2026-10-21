@@ -285,6 +285,9 @@ main:focus {
   gap: 12px;
   margin: 20px 0;
 }
+.stats.budget-totals {
+  grid-template-columns: 1fr;
+}
 .stat {
   padding: 20px 22px;
   border: 1px solid var(--line);
