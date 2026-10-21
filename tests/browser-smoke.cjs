@@ -1,3 +1,4 @@
+const { openMovementFromMenu, setHomeMonth } = require("./browser-helpers.cjs");
 /* Optional real-browser smoke test. Requires Playwright; runtime app has no dependencies.
    Start a server first. GASTALO_URL may include a Pages-style subdirectory. */
 const { chromium, devices } = require("playwright");
@@ -48,7 +49,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const brandBox = await page.locator(".menu-brand").boundingBox();
     const firstItemBox = await page.locator("#app-menu nav button").first().boundingBox();
     assert.ok(brandBox.y + brandBox.height <= firstItemBox.y);
-    assert.equal(await page.locator("#app-menu nav button").count(), 5);
+    assert.equal(await page.locator("#app-menu nav button").count(), 6);
     await page.keyboard.press("Escape");
     assert.equal(
       await page.locator("#app-menu").evaluate((e) => e.open),
@@ -139,7 +140,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       return mark.getBoundingClientRect().width === 40 && style.borderStyle === 'solid' && style.borderWidth === '1px';
     })));
     async function transaction(from, to, amount, note = "") {
-      await page.locator('[data-action="movement"]').first().click();
+      await openMovementFromMenu(page);
       const fromId = await card(from).getAttribute("data-entity");
       const toId = await card(to).getAttribute("data-entity");
       await page.locator('#dialog [name="from"]').selectOption(fromId);
@@ -183,9 +184,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.locator(".entity-edit, .entity-section h2").count(),
       0,
     );
-    assert.ok(
-      (await page.locator(".compact-month").boundingBox()).height <= 36,
-    );
+    assert.equal(await page.locator(".home-toolbar, #main #month").count(), 0);
     assert.equal(
       await page
         .locator(".home-totals .stat")
@@ -193,13 +192,16 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         .evaluate((e) => getComputedStyle(e).borderTopWidth),
       "0px",
     );
+    await go("Límites de categoría");
+    assert.ok((await page.locator(".compact-month").boundingBox()).height <= 36);
     const consultedMonth = await page.locator("#month").inputValue();
     await page.locator(".month-picker input").click();
     await page.keyboard.press("Escape");
-    assert.equal(await page.locator('.home-toolbar .month-nav button').count(), 0);
+
     await page.locator('#month').fill('2026-12');
     assert.equal(await page.locator('#month').inputValue(), '2026-12');
-    await page.locator('#month').fill(consultedMonth);
+    await go("Inicio");
+    await setHomeMonth(page, consultedMonth);
     // Complete deletion is distinct from archive, requires confirmation and supports Undo.
     await hold("Banco");
     await page.getByRole("button", { name: "Eliminar Banco", exact: true }).click();
@@ -378,7 +380,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByRole("heading", { name: "Revisión de importación · 1" })
       .waitFor();
     await go("Inicio");
-    await page.locator("#month").fill("2026-01");
+    await setHomeMonth(page, "2026-01");
     assert.match(await card("Banco").innerText(), /1\.850,00|1850,00/);
     async function assertBudgetMark(tone, fill, planned = "200,00") {
       const mark = card("Comida").locator(".entity-mark");
@@ -404,9 +406,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }
     await assertBudgetMark("green", 12.75);
     assert.equal(await page.locator('.row-0 .entity-planned, .row-1 .entity-planned').count(), 0);
-    await page.locator("#month").fill("2026-02");
+    await setHomeMonth(page, "2026-02");
     assert.equal(await card("Comida").locator(".entity-planned").innerText(), "200,00");
-    await page.locator("#month").fill("2026-01");
+    await setHomeMonth(page, "2026-01");
     await assertBudgetMark("green", 12.75);
     for (const [limit, tone, fill, planned] of [["30", "orange", 85, "30,00"], ["25.50", "orange", 100, "25,50"], ["20", "red", 100, "20,00"], ["0", "red", 100, "0,00"], ["", "gray", 0, null], ["200", "green", 12.75, "200,00"]]) {
       await go("Límites de categoría");
@@ -450,6 +452,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await go("Límites de categoría");
     await page.locator("#archived-categories > summary").click();
     await page.getByRole("button", { name: "Restaurar Comida en Inicio" }).click();
+    await page.locator("#archived-categories .budget-card").waitFor({ state: "detached" });
     assert.equal(await page.locator("#archived-categories .budget-card").count(), 0);
     assert.equal(await page.locator("section.budget-grid > .budget-card").count(), 1);
     await go("Inicio");
@@ -887,7 +890,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await dp.getByRole("button", { name: "Importar y reemplazar" }).click();
     await dp.locator("#dialog").waitFor({ state: "hidden" });
     await go("Inicio", dp);
-    await dp.locator("#month").fill("2026-01");
+    await setHomeMonth(dp, "2026-01");
     await dp.screenshot({ path: "/tmp/gastalo-desktop.png", fullPage: true });
     assert.equal(
       await dp.evaluate(

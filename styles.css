@@ -461,13 +461,6 @@ main:focus {
   display: inline;
   margin-right: 3px;
 }
-.home-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-.home-toolbar > button,
 .detail-period > button {
   min-height: 32px;
   font-size: 12px;
@@ -531,6 +524,10 @@ main:focus {
   padding-top: 5px;
   margin-top: 5px;
 }
+.entity-section + .entity-section {
+  padding-top: 12px;
+  margin-top: 12px;
+}
 .row-0 {
   --row-color: #62802b;
 }
@@ -576,7 +573,8 @@ main:focus {
 .entity-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  column-gap: 6px;
+  row-gap: 12px;
   padding: 0;
 }
 /* Entity rows and their final create button scroll together. */
@@ -1795,9 +1793,6 @@ dialog::backdrop {
   }
   .form-grid {
     grid-template-columns: 1fr;
-  }
-  .home-toolbar {
-    flex-wrap: wrap;
   }
 }
 @media (prefers-reduced-motion: no-preference) {

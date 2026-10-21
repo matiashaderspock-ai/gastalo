@@ -161,14 +161,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.setViewportSize({ width, height: 844 });
       for (const view of ["Inicio", "Límites de categoría", "Gráficos"]) {
         await go(view);
-        await page.locator("#month").fill("2026-12");
         if (view === "Inicio") {
-          assert.equal(await page.locator('.month-nav button').count(), 0);
-          await page.locator('.month-picker input').tap();
-          assert.equal(await page.evaluate(() => window.__pickerCalls), ++pickerCalls);
-          await page.keyboard.press('Escape');
+          assert.equal(await page.locator(".home-toolbar, .month-picker, #month").count(), 0);
           continue;
         }
+        await page.locator("#month").fill("2026-12");
         for (const action of ["next", "prev"]) {
           await page.locator("#month").evaluate(input => { input.style.minWidth = "180px"; });
           const button = page.locator(`.month-nav [data-action="${action}"]`);

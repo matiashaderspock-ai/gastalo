@@ -82,6 +82,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await remove(id, false);
       await checkPosition(before, `${key} archive`);
       assert.equal(await card(id).count(), 0);
+      // Losing the last grid row can clamp scrollY; Undo preserves that current position.
+      before = await position();
       await page.locator('#toast [data-action="undo"]').click();
       await card(id).waitFor();
       await checkPosition(before, `${key} undo`);

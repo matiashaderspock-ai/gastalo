@@ -1,3 +1,4 @@
+const { setHomeMonth } = require("./browser-helpers.cjs");
 const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -30,7 +31,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }), state);
     await page.reload();
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
-    await page.locator("#month").fill("2026-01");
+    await setHomeMonth(page, "2026-01");
     async function go(name) {
       await page.locator("#app-menu > summary").click();
       await page.getByRole("button", { name, exact: true }).click();

@@ -1,3 +1,4 @@
+const { setHomeMonth } = require("./browser-helpers.cjs");
 /* Focused touch/browser regression. Uses the same Playwright setup as browser-smoke.cjs. */
 const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
@@ -37,9 +38,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }), state);
     await page.reload();
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
-    await page.locator("#month").fill("2026-01");
-    const homeMove = await page.locator('.home-toolbar [data-action="movement"]').boundingBox();
-    assert.ok(homeMove.x < (await page.locator(".home-toolbar .compact-month").boundingBox()).x);
+    await setHomeMonth(page, "2026-01");
+    assert.equal(await page.locator(".home-toolbar, #main #month").count(), 0);
     const cdp = await context.newCDPSession(page);
     const row = id => page.locator(`[data-swipe-transaction="${id}"]`);
     const count = () => page.locator(".entity-history .transaction").count();
