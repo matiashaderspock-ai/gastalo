@@ -1,10 +1,10 @@
 /* Bump CACHE and both versioned FILES with index.html whenever JS/CSS changes. */
-const CACHE = "gastalo-v36";
+const CACHE = "gastalo-v37";
 const FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=36",
-  "./app.js?v=36",
+  "./styles.css?v=37",
+  "./app.js?v=37",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -12,9 +12,9 @@ const FILES = [
   "./icons/apple-touch-icon.png",
 ];
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting()));
 });
-// Activate after existing windows close so an open form keeps its matching JS/CSS.
+// Existing pages keep their loaded JS/CSS; the page defers refreshing open forms.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -53,6 +53,7 @@ self.addEventListener("fetch", (event) => {
       try {
         const response = await fetch(event.request, {
           signal: controller.signal,
+          cache: "no-cache",
         });
         if (!response.ok) throw new Error("HTTP " + response.status);
         // Keep the versioned shell immutable in this cache. A new shell installs in a new cache.

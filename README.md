@@ -22,7 +22,7 @@ python3 -m http.server 8000
 node --test tests/*.test.cjs
 ```
 
-En iPhone: abrir en Safari → Compartir → **Agregar a inicio**. Tras la primera carga completa funciona sin conexión. El navegador puede eliminar almacenamiento local: conserva respaldos JSON fuera del dispositivo. La sincronización opcional guarda una copia en GitHub; no restaura datos remotos automáticamente. Sin multimoneda ni movimientos recurrentes en v1.
+En iPhone: abrir en Safari → Compartir → **Agregar a inicio**. Tras la primera carga completa funciona sin conexión. Al volver a primer plano comprueba nuevas versiones y las aplica cuando no hay formularios abiertos ni cambios de ajustes en curso. Al pie se muestra la versión instalada y «Actualizar app» permite comprobarla manualmente. El navegador puede eliminar almacenamiento local: conserva respaldos JSON fuera del dispositivo. La sincronización opcional guarda una copia en GitHub; no restaura datos remotos automáticamente. Sin multimoneda ni movimientos recurrentes en v1.
 
 GitHub Actions ejecuta las pruebas en cada PR. El workflow Pages prueba y publica solo desde `main` (o ejecución manual de esa rama); en Settings → Pages seleccionar **GitHub Actions** como origen. Este PR no publica mientras no se fusione.
 
@@ -30,7 +30,7 @@ Los PR de `matiashaderspock-ai` activan squash auto-merge y esperan el check obl
 Cambios de sincronización, borrado, reset o política de merge reciben `needs-matias` y requieren revisión y merge manual de Matias.
 La etiqueta pausa el auto-merge; `test` espera al guard antes de dar verde y nunca deja de ser obligatorio.
 
-Cada cambio de JS/CSS debe subir juntos `?v=` de ambos assets en `index.html`, ambos paths en `FILES` y `CACHE` de `sw.js`. El service worker usa network-first con timeout y fallback al shell precargado, respeta el subdirectorio de Pages y activa actualizaciones cuando se cierran las ventanas anteriores.
+Cada cambio de JS/CSS debe subir juntos `?v=` de ambos assets en `index.html`, ambos paths en `FILES` y `CACHE` de `sw.js`. El service worker usa network-first con revalidación, timeout y fallback al shell precargado; respeta el subdirectorio de Pages y activa el nuevo shell cuando termina su descarga. La página espera a que se cierren los formularios y se salga de ajustes antes de recargar una versión nueva.
 
 Prueba opcional de navegador (Chromium instalado; emulación de iPhone, no dispositivo físico):
 
@@ -46,6 +46,8 @@ NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-reorder-months.cj
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-entity-scroll.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-movement-tags.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-form-controls.cjs
+# La prueba de actualizaciones levanta su propio servidor de versiones:
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-app-update.cjs
 # GASTALO_URL permite probar un subdirectorio; CHROMIUM_PATH cambia el ejecutable.
 ```
 

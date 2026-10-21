@@ -69,11 +69,15 @@ async function app(local, remote, savedConfig = config) {
     return tx;
   }};
   const document = {
-    visibilityState: "visible", querySelector: node, querySelectorAll: () => [],
+    visibilityState: "visible",
+    querySelector: selector => selector.startsWith("script[") ? { src: "https://app.test/gastalo/app.js?v=1" } : node(selector),
+    querySelectorAll: () => [],
     addEventListener(type, listener) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(listener); },
   };
   const context = vm.createContext({
     document, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
+    URL, location: { href: "https://app.test/gastalo/" },
+    DOMParser: class { parseFromString() { return { querySelector: () => ({ getAttribute: () => "./app.js?v=1" }) }; } },
     indexedDB: { open() { const request = { result: db }; setImmediate(() => request.onsuccess()); return request; } },
     crypto: { subtle: { digest(...args) {
       const result = globalThis.crypto.subtle.digest(...args);
@@ -85,6 +89,8 @@ async function app(local, remote, savedConfig = config) {
     clearTimeout(id) { timers.delete(id); },
     FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values?.[key] ?? null; } },
     fetch: async (url, options) => {
+      if (url instanceof URL && url.pathname.endsWith("/index.html"))
+        return { ok: true, text: async () => '<script src="./app.js?v=1"></script>' };
       calls.push(options);
       if (options.method === "PUT") return { ok: true, status: 200 };
       return { ok: true, status: 200, json: async () => ({ sha: remoteSha, encoding: "base64", content: A.utf8Base64(A.backup(remoteState)) }) };
