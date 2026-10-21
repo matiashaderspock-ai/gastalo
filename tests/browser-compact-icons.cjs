@@ -1,3 +1,4 @@
+const { setHomeMonth } = require("./browser-helpers.cjs");
 /* Touch, keyboard and persistence checks for the three-page icon chooser.
    Start the server and use the Playwright setup documented in README.md. */
 const { chromium, devices } = require("playwright");
@@ -20,6 +21,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const state = A.importCSV(fs.readFileSync(__dirname + "/fixtures/coinkeeper.csv", "utf8"),
       "2026-01", "compact-icons", "2026-02-02T00:00:00Z");
     state.categories.push({ id: "outings", name: "Salidas", currency: "BOB", archived_at: null });
+    for (let i = 0; i < 4; i++) state.categories.push({ id: `spacing-${i}`, name: `Categoría ${i}`, currency: "BOB", archived_at: null });
     A.validateState(state);
     await page.evaluate(data => new Promise((resolve, reject) => {
       const request = indexedDB.open("gastalo");
@@ -33,7 +35,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }), state);
     await page.reload();
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
-    await page.locator("#month").fill("2026-01");
+    await setHomeMonth(page, "2026-01");
     async function go(name) {
       await page.locator("#app-menu > summary").click();
       await page.getByRole("button", { name, exact: true }).click();
@@ -43,6 +45,17 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     }
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
+      await go("Inicio");
+      assert.equal(await page.locator(".home-toolbar, #main #month, #main [data-action=movement]").count(), 0);
+      const rows = await page.locator(".entity-section").all();
+      for (let i = 1; i < rows.length; i++) {
+        const previous = await rows[i - 1].boundingBox(), current = await rows[i].boundingBox();
+        assert.ok(current.y - previous.y - previous.height >= 11.5, "Entity groups have more vertical breathing room");
+      }
+      const categories = await page.locator(".row-2 .entity-wrap").all();
+      const firstRow = await categories[0].boundingBox(), nextRow = await categories[4].boundingBox();
+      assert.ok(nextRow.y - firstRow.y - firstRow.height >= 11.5, "Category rows have a 12px gap");
+      if (width === 390) await page.screenshot({ path: "/tmp/gastalo-home-spaced.png", fullPage: true });
       for (const name of ["Historial", "Límites de categoría", "Gráficos", "Importar/Exportar"]) {
         await go(name);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false,
@@ -80,7 +93,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.match(await page.locator(".budget-totals").innerText(), /320,00/);
     await go("Inicio");
     assert.match(await page.locator(".home-totals .stat").last().innerText(), /300,00/, "An exceeded category does not consume another category's remaining limit");
-    await page.locator("#month").fill("2026-01");
+    await setHomeMonth(page, "2026-01");
     assert.match(await page.locator(".home-totals .stat").last().innerText(), /474,50/);
     await go("Importar/Exportar");
     await page.locator('.manage-row').filter({ hasText: "Salidas" }).locator('button').evaluate(button => {

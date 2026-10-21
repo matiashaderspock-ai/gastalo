@@ -1834,7 +1834,7 @@
     }
     function home() {
       const bs = balances(state);
-      return `<h1 class="sr-only">Un mes más claro.</h1><div class="home-toolbar"><button data-action="movement">+ Movimiento</button>${monthNav(true, false)}</div>
+      return `<h1 class="sr-only">Un mes más claro.</h1>
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Arrastra los círculos para ordenar</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
@@ -2258,7 +2258,10 @@
           state.categories.some((c) => c.id === detailId) ? detailId : "",
         );
       }
-      if (action === "movement") return movement();
+      if (action === "movement") {
+        $("#app-menu").open = false;
+        return movement();
+      }
       if (action === "reset-app") return resetApp();
       if (action === "add") return editEntity(button.dataset.key);
       if (action === "edit-entity") return editEntity(button.dataset.key, id);

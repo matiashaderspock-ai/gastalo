@@ -1,3 +1,4 @@
+const { setHomeMonth } = require("./browser-helpers.cjs");
 /* Uses synthetic data and intercepted GitHub requests; never contacts a real backup repo. */
 const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
@@ -77,7 +78,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(saved.accounts[0].opening_date, "2021-01-05");
     assert.equal(saved.transactions.at(-1).occurred_on, "2025-02-01");
     await go("Inicio");
-    await page.locator("#month").fill("2025-01");
+    await setHomeMonth(page, "2025-01");
     await go("Límites de categoría");
     async function setLimit(value) {
       await page.getByRole("button", { name: "Editar límite de Comida", exact: true }).click();

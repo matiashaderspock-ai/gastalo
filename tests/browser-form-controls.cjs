@@ -1,3 +1,4 @@
+const { openMovementFromMenu } = require("./browser-helpers.cjs");
 /* Borderless pickers and keyboard viewport resizing; Chromium cannot open a real phone keyboard. */
 const { chromium, devices } = require('playwright');
 const assert = require('node:assert/strict');
@@ -67,7 +68,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
       assert.equal(await page.locator('#f-text').evaluate(e => getComputedStyle(e).borderTopWidth), '1px');
       await page.locator('#app-menu > summary').click();
       await page.getByRole('button', { name: 'Inicio', exact: true }).click();
-      await page.locator('[data-action="movement"]').first().click();
+      await openMovementFromMenu(page);
       await checkPickers();
       await page.locator('[name="amount"]').fill('12,34');
       await bounds(500, 0, 'resize', '[name="amount"]');
@@ -98,7 +99,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await fallback.setViewportSize({ width: 320, height: 360 });
     await fallback.goto(base);
     await fallback.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
-    await fallback.locator('[data-action="movement"]').first().click();
+    await openMovementFromMenu(fallback);
     const fallbackBox = await fallback.locator('#dialog').boundingBox();
     assert.ok(fallbackBox.y >= 10 && fallbackBox.y + fallbackBox.height <= 350, 'Small-screen fallback works without VisualViewport');
     await fallback.close();

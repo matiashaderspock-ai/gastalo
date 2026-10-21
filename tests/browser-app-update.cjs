@@ -1,3 +1,4 @@
+const { openMovementFromMenu } = require("./browser-helpers.cjs");
 /* Serve successive app releases locally; no production requests or real tokens. */
 const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
@@ -48,7 +49,7 @@ const server = http.createServer((req, res) => {
     }), { data: state, config });
     await page.reload();
     await page.waitForFunction(() => navigator.serviceWorker.controller);
-    await page.getByRole("button", { name: "+ Movimiento", exact: true }).click();
+    await openMovementFromMenu(page);
     await page.locator('#dialog [name="amount"]').fill("123.45");
     release++;
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));

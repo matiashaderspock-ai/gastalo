@@ -1,3 +1,4 @@
+const { openMovementFromMenu } = require("./browser-helpers.cjs");
 /* Real touch gestures, IndexedDB and compact movement tags, using synthetic data. */
 const { chromium, devices } = require('playwright');
 const assert = require('node:assert/strict');
@@ -46,7 +47,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     }
     await scrolled();
     const before = await position();
-    await page.locator('[data-action="movement"]').first().click();
+    await openMovementFromMenu(page);
     assert.equal(await page.locator('#tag-picker').isVisible(), false);
     assert.equal(await page.locator('#movement-tag-chips label').count(), 6);
     assert.equal(await page.locator('#movement-tag-chips input:checked').count(), 0, 'Suggestions are not automatically selected');
@@ -113,7 +114,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.equal(expense.amount_cents, 1234);
     assert.deepEqual(expense.tag_ids.sort(), ['tag-0', 'tag-7', created.id].sort());
     // A staged tag disappears if the movement is cancelled.
-    await page.locator('[data-action="movement"]').first().click();
+    await openMovementFromMenu(page);
     await page.locator('#tag-picker-toggle').click();
     await page.locator('#tag-search').fill('Never saved');
     await page.locator('#tag-search').press('Enter');
