@@ -1,0 +1,122 @@
+@@ -1270,6 +1270,8 @@
+         timeZone: state.profile.timezone,
+       }).format(new Date());
+     let month = today().slice(0, 7);
++    let archivedBudgetsOpen = false;
++    const openManageGroups = new Set();
+     const defaultFilters = () => ({
+       start: "",
+       end: "",
+@@ -1783,8 +1785,8 @@
+         (t) => t.from_id === id || t.to_id === id,
+       ).length;
+       modal(
+-        "Quitar " + name(id),
+-        `<fieldset class="remove-options"><legend>¿Qué quieres hacer?</legend><label class="check"><input type="radio" name="removal" value="archive" checked>Quitar de Inicio y conservar historial</label><p class="muted">Conserva movimientos y saldos. Puedes restaurarla en Importar/Exportar.</p><label class="check"><input type="radio" name="removal" value="erase">Eliminar completamente</label></fieldset><div id="erase-warning" hidden><p>Se eliminará la entidad, sus ${count} movimientos de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.</p><label class="check"><input type="checkbox" name="confirmErase" disabled>Confirmo que quiero eliminar la entidad y su historial.</label></div>${actions("Quitar de Inicio")}`,
++        "Archivar o eliminar " + name(id),
++        `<fieldset class="remove-options"><legend>¿Qué quieres hacer?</legend><label class="check"><input type="radio" name="removal" value="archive" checked>Archivar (conservar historial)</label><p class="muted">Conserva movimientos, saldos y límites. Puedes restaurarla en Importar/Exportar o, si es una categoría, en Límites de categoría.</p><label class="check"><input type="radio" name="removal" value="erase">Eliminar completamente</label></fieldset><div id="erase-warning" hidden><p>Se eliminará la entidad, sus ${count} movimientos de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.</p><label class="check"><input type="checkbox" name="confirmErase" disabled>Confirmo que quiero eliminar la entidad y su historial.</label></div>${actions("Archivar")}`,
+         async (data) => {
+           if (data.get("removal") === "erase") {
+             assert(data.get("confirmErase"), "Confirma la eliminación del historial.");
+@@ -1794,7 +1796,7 @@
+             const next = copy(state);
+             next[key].find((e) => e.id === id).archived_at =
+               new Date().toISOString();
+-            await commit(next, "Entidad quitada de Inicio", true);
++            await commit(next, "Entidad archivada", true);
+           }
+         },
+         { compact: true, focusSelector: 'button[data-action="close"]' },
+@@ -1807,10 +1809,18 @@
+           confirmation.disabled = !erase;
+           confirmation.required = erase;
+           $('#modal-form button[type="submit"]').textContent =
+-            erase ? "Eliminar completamente" : "Quitar de Inicio";
++            erase ? "Eliminar completamente" : "Archivar";
+         };
+       });
+     }
++    async function restoreEntity(key, id) {
++      assert([...TYPES, "tags"].includes(key), "Tipo de entidad inválido.");
++      const next = copy(state);
++      const item = next[key].find((e) => e.id === id);
++      assert(item?.archived_at, "La entidad no está archivada.");
++      item.archived_at = null;
++      await commit(next, "Entidad restaurada en Inicio", true);
++    }
+     function homeTotals() {
+       const r = report(state, month),
+         bs = balances(state);
+@@ -1996,25 +2006,14 @@
+         '<p class="empty">No hay movimientos con estos filtros.</p>'
+       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
+     }
++    function budgetCard(c, archived = false) {
++      const b = budget(state, c.id, month);
++      return `<article class="panel budget-card"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl>${archived ? `<button class="budget-restore" data-action="restore-entity" data-key="categories" data-id="${esc(c.id)}" aria-label="Restaurar ${esc(c.name)} en Inicio">Restaurar en Inicio</button>` : ""}</article>`;
++    }
+     function budgets() {
+-      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", budgetTotals(state, month).limit)}</section><section class="budget-grid">${
+-        state.categories
+-          .filter(
+-            (c) =>
+-              !c.archived_at ||
+-              budget(state, c.id, month).spent ||
+-              budgetLimit(state, c.id, month) !== null ||
+-              state.budgets.some(
+-                (b) => b.category_id === c.id && b.month === month,
+-              ),
+-          )
+-          .map((c) => {
+-            const b = budget(state, c.id, month);
+-            return `<article class="panel budget-card"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl></article>`;
+-          })
+-          .join("") ||
+-        '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'
+-      }</section><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
++      const currentCategories = state.categories.filter((c) => !c.archived_at);
++      const archivedCategories = state.categories.filter((c) => c.archived_at);
++      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", budgetTotals(state, month).limit)}</section><section class="budget-grid">${currentCategories.map((c) => budgetCard(c)).join("") || '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>Categorías archivadas (${archivedCategories.length})</summary><div class="budget-grid">${archivedCategories.map((c) => budgetCard(c, true)).join("") || '<p class="empty">No hay categorías archivadas.</p>'}</div></details><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
+     }
+     function expensePie(categories) {
+       const total = sum(categories.map((c) => c.spent));
+@@ -2108,7 +2107,7 @@
+           .join("") || '<p class="muted">Sin filas pendientes.</p>'
+       }${state.review.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section>
+       <section class="panel"><h2>Tu calendario</h2><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></section>
+-      <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div>`).join("")}</details>`).join("")}</section>
++      <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Restaurar ${esc(e.name)}${key === "tags" ? "" : " en Inicio"}">${key === "tags" ? "Restaurar" : "Restaurar en Inicio"}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div></div>`).join("")}</details>`).join("")}</section>
+       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
+       <section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>`;
+     }
+@@ -2194,6 +2193,7 @@
+         id = button.dataset.id;
+       if (button.dataset.view) {
+         view = button.dataset.view;
++        if (view === "budgets") archivedBudgetsOpen = false;
+         editingEntities = false;
+         $("#app-menu").open = false;
+         historyLimit = 100;
+@@ -2262,6 +2262,7 @@
+       if (action === "reset-app") return resetApp();
+       if (action === "add") return editEntity(button.dataset.key);
+       if (action === "edit-entity") return editEntity(button.dataset.key, id);
++      if (action === "restore-entity") return restoreEntity(button.dataset.key, id);
+       if (action === "edit-transaction")
+         return movement(
+           "",
+@@ -2336,6 +2337,14 @@
+       showIconPage(e.key === "Home" ? 0 : e.key === "End" ? ENTITY_ICON_PAGES.length - 1
+         : current + (e.key === "ArrowRight" ? 1 : -1));
+     });
++    document.addEventListener("toggle", (e) => {
++      if (e.target.id === "archived-categories") archivedBudgetsOpen = e.target.open;
++      if (e.target.matches?.("[data-manage-key]")) {
++        const key = e.target.dataset.manageKey;
++        if (e.target.open) openManageGroups.add(key);
++        else openManageGroups.delete(key);
++      }
++    }, true);
+     document.addEventListener("click", (e) => {
+       if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;
+       if (e.target.matches(".month-picker input")) {
