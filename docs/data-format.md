@@ -25,6 +25,8 @@ Una transacción contiene:
   "from_id": "cuenta-id",
   "to_id": "categoria-id",
   "occurred_on": "2026-10-16",
+  "occurred_time": "12:00:00",
+  "occurred_timezone": "America/La_Paz",
   "amount_cents": 2550,
   "currency": "BOB",
   "tag_ids": ["etiqueta-id"],
@@ -37,7 +39,13 @@ Una transacción contiene:
 
 `kind`: `income` (fuente→cuenta), `expense` (cuenta→categoría), `transfer` (cuenta→otra cuenta). `status`: `posted` o `deleted`; los borrados pueden tener `deleted_at`. Solo `posted` entra en cálculos. `tag_ids` es un conjunto sin duplicados. Archivar una entidad la oculta de nuevas selecciones sin alterar su historial. Cada movimiento puede tener `import_metadata: {fingerprint,record,raw}`; los originales permanecen sin reinterpretar. Al corregir una revisión se conserva `resolved_from_review`.
 
-Fechas `occurred_on` son fechas contables locales, no timestamps UTC. El mes abarca desde el día 1 hasta antes del primer día siguiente. Los timestamps de auditoría no determinan el mes. La zona del perfil solo determina la fecha predeterminada de un movimiento nuevo. Los saldos iniciales representan el estado anterior a los movimientos de este conjunto; `opening_date` documenta esa referencia. El saldo actual suma todos los movimientos contabilizados del conjunto, incluidos los fechados a futuro; el neto del mes usa solo ese mes.
+Fechas `occurred_on` son fechas contables locales, no timestamps UTC. El mes abarca desde el día 1 hasta antes del primer día siguiente. Los timestamps de auditoría no determinan el mes. La zona del perfil determina la fecha y hora predeterminadas de un movimiento nuevo. Los saldos iniciales representan el estado anterior a los movimientos de este conjunto; `opening_date` documenta esa referencia. El saldo actual suma todos los movimientos contabilizados del conjunto, incluidos los fechados a futuro; el neto del mes usa solo ese mes.
+
+Los movimientos nuevos incorporan `occurred_time` (`HH:mm:ss`, reloj de 24 horas) y `occurred_timezone` (zona IANA, por ejemplo `America/La_Paz`). La hora se propone al abrir el formulario y puede corregirse junto con la fecha; los minutos introducidos sin segundos se guardan con `:00`. La zona procede del perfil al crear el movimiento y se conserva al editarlo, aunque después cambie la zona del perfil. `created_at` y `updated_at` siguen siendo timestamps UTC de auditoría: `created_at` indica cuándo se guardó el registro y no reemplaza la fecha/hora contable. El historial se ordena por fecha, hora conocida y finalmente `created_at`.
+
+En respaldos v1 antiguos y CSV sin hora, ambos campos pueden faltar o ser `null`; eso significa **hora desconocida**, no medianoche ni la hora de importación. Editar o resolver una fila antigua permite agregar una hora explícita sin asignarla automáticamente. Una hora presente requiere una zona válida. Los respaldos y la sincronización conservan los campos, sin cambiar el esquema v1 ni los cálculos mensuales de saldos, límites o reportes.
+
+La presentación usa `DD/MM/AA` para fechas, `MM/AA` para períodos mensuales y `HH:mm` para horas. Esto no modifica `occurred_on`, `opening_date`, `budgets.month` ni los timestamps ISO completos del JSON. Los datos originales del CSV permanecen literales en `import_metadata` y en la revisión del archivo.
 
 ## Lectura para análisis semanal o mensual
 

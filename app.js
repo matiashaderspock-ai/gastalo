@@ -328,6 +328,46 @@
       s.slice(0, 4) !== "0000"
     );
   }
+  function timeOK(value) {
+    return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(value);
+  }
+  function formatDate(value) {
+    return dateOK(value) ? `${value.slice(8, 10)}/${value.slice(5, 7)}/${value.slice(2, 4)}` : "";
+  }
+  function formatMonth(value) {
+    return monthOK(value) ? `${value.slice(5, 7)}/${value.slice(2, 4)}` : "";
+  }
+  function localClock(now, timezone) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    }).formatToParts(new Date(now));
+    const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    return { date: `${p.year.padStart(4, "0")}-${p.month}-${p.day}`, time: `${p.hour}:${p.minute}:${p.second}` };
+  }
+  function formatTimestamp(value, timezone) {
+    const clock = localClock(value, timezone);
+    return formatDate(clock.date) + " " + clock.time;
+  }
+  const movementTimezones = new Set();
+  function transactionTimeFields(time, timezone) {
+    if (time === "" || time == null) return { occurred_time: null, occurred_timezone: null };
+    assert(timeOK(time), "Hora inválida. Usa el formato de 24 horas.");
+    assert(typeof timezone === "string" && timezone, "Falta la zona horaria del movimiento.");
+    if (!movementTimezones.has(timezone)) {
+      try { new Intl.DateTimeFormat("es", { timeZone: timezone }); }
+      catch { throw new Error("Zona horaria del movimiento inválida."); }
+      movementTimezones.add(timezone);
+    }
+    return { occurred_time: time.length === 5 ? time + ":00" : time, occurred_timezone: timezone };
+  }
+  function compareTransactionDates(a, b) {
+    const aTime = a.occurred_time ? a.occurred_time.padEnd(8, ":00") : "";
+    const bTime = b.occurred_time ? b.occurred_time.padEnd(8, ":00") : "";
+    return b.occurred_on.localeCompare(a.occurred_on) ||
+      bTime.localeCompare(aTime) ||
+      b.created_at.localeCompare(a.created_at);
+  }
   function shiftMonth(month, offset) {
     const d = new Date(month + "-15T12:00:00Z");
     d.setUTCMonth(d.getUTCMonth() + offset);
@@ -666,6 +706,10 @@
           typeof t.updated_at === "string",
         "Movimiento inválido.",
       );
+      if (t.occurred_time != null) assert(timeOK(t.occurred_time), "Hora del movimiento inválida.");
+      transactionTimeFields(t.occurred_time, t.occurred_timezone);
+      assert(t.occurred_time != null || t.occurred_timezone == null,
+        "La zona horaria requiere una hora del movimiento.");
       assert(
         Array.isArray(t.tag_ids) &&
           new Set(t.tag_ids).size === t.tag_ids.length &&
@@ -1060,6 +1104,12 @@
     cents,
     sum,
     dateOK,
+    timeOK,
+    formatDate,
+    formatMonth,
+    localClock,
+    transactionTimeFields,
+    compareTransactionDates,
     shiftMonth,
     emptyState,
     movementTagSuggestions,
@@ -1119,12 +1169,22 @@
       Math.trunc(Math.abs(n) / 100) +
       "." +
       String(Math.abs(n) % 100).padStart(2, "0");
-    const monthLabel = (m) =>
-      new Intl.DateTimeFormat("es-BO", {
-        month: "long",
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(new Date(m + "-15T12:00:00Z"));
+    const monthLabel = formatMonth;
+    function dateControl({ name = "", id = "", value = "", type = "date", required = false, describedBy = "" }) {
+      const display = type === "date" ? formatDate(value) : type === "month" ? formatMonth(value) : value.slice(0, 5);
+      const placeholder = type === "date" ? "DD/MM/AA" : type === "month" ? "MM/AA" : "HH:MM";
+      const icon = type === "time"
+        ? '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
+        : '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>';
+      return `<span class="date-control"><span class="date-value${display ? "" : " muted"}" aria-hidden="true">${esc(display || placeholder)}</span><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">${icon}</svg><input type="${type}"${name ? ` name="${esc(name)}"` : ""}${id ? ` id="${esc(id)}"` : ""} value="${esc(value)}"${required ? " required" : ""}${type === "time" ? ' step="1"' : ""}${describedBy ? ` aria-describedby="${esc(describedBy)}"` : ""}></span>`;
+    }
+    function updateDateControl(input) {
+      const display = input.type === "date" ? formatDate(input.value)
+        : input.type === "month" ? formatMonth(input.value) : input.value.slice(0, 5);
+      const text = input.parentElement.querySelector(".date-value");
+      text.textContent = display || (input.type === "date" ? "DD/MM/AA" : input.type === "month" ? "MM/AA" : "HH:MM");
+      text.classList.toggle("muted", !display);
+    }
     let state = emptyState(),
       revision = 0,
       db,
@@ -1149,9 +1209,7 @@
       syncQueued = false, syncTimer, resetting = false;
     function syncStatus() {
       return syncConfig.lastError || (syncConfig.lastSuccess
-        ? "Última sincronización: " + new Intl.DateTimeFormat("es-BO", {
-            dateStyle: "short", timeStyle: "medium", timeZone: "America/La_Paz",
-          }).format(new Date(syncConfig.lastSuccess)) + " · America/La_Paz"
+        ? "Última sincronización: " + formatTimestamp(syncConfig.lastSuccess, "America/La_Paz") + " · America/La_Paz"
         : syncConfig.token ? "Sin sincronizaciones todavía" : "Sincronización desactivada");
     }
     function updateSyncStatus() {
@@ -1465,6 +1523,9 @@
       const t = transaction, pendingTags = [], returnView = view,
         scrollY = window.scrollY, scrollX = window.scrollX,
         stripScroll = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
+      const eventTimezone = t?.occurred_timezone || state.profile.timezone;
+      const clock = localClock(new Date(), eventTimezone);
+      const initialTime = t || reviewId ? t?.occurred_time || "" : clock.time;
       let selectedTags = [...(t?.tag_ids || [])];
       modal(
         t ? "Editar movimiento" : "Nuevo movimiento",
@@ -1479,8 +1540,9 @@
           "Elige origen",
         )}</select></label>
         <label>Destino<select name="to" required></select></label></div>
-        <div class="form-grid"><label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
-        <label>Fecha<input name="date" type="date" required value="${esc(t?.occurred_on || today())}"></label></div>
+        <label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
+        <div class="form-grid"><label>Fecha${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label>
+        <label>Hora${dateControl({ name: "time", type: "time", required: !t && !reviewId, value: initialTime, describedBy: "movement-timezone" })}</label></div><p id="movement-timezone" class="movement-timezone muted">Hora local · ${esc(eventTimezone)}${t && !t.occurred_time ? " · Hora anterior no registrada" : ""}</p>
         <details class="movement-extras" ${t?.note ? "open" : ""}><summary>Nota</summary>
         <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
         async (data) => {
@@ -1501,6 +1563,7 @@
             from_id: fromId,
             to_id: toId,
             occurred_on: data.get("date"),
+            ...transactionTimeFields(data.get("time"), eventTimezone),
             amount_cents: amount,
             currency: "BOB",
             tag_ids: [...new Set(tagIds)],
@@ -1637,7 +1700,7 @@
         `
         ${key !== "tags" ? iconChooser(key, e) : ""}
         <label>Nombre<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
-        ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial<input type="date" name="openingDate" required value="${e?.opening_date || today()}"></label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
+        ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial${dateControl({ name: "openingDate", required: true, value: e?.opening_date || today() })}</label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
         ${key === "sources" ? `<label>Ingreso mensual previsto · BOB (opcional)<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
         ${key === "categories" ? `<label>Límite mensual · desde ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && budget(state, e.id, month).limit !== null ? decimal(budget(state, e.id, month).limit) : ""}" placeholder="Sin límite"></label>` : ""}
         ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>Archivar (conserva historial)</label>` : ""}${actions()}`,
@@ -1737,8 +1800,8 @@
     }
     function monthNav(compact = false, showArrows = true) {
       const picker = compact
-        ? `<label class="month-picker"><span aria-hidden="true">${esc(new Intl.DateTimeFormat("es-BO", { month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(month + "-15T12:00:00Z")))}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
-        : `<label><span class="sr-only">Mes consultado</span><input type="month" id="month" value="${month}" required></label>`;
+        ? `<label class="month-picker"><span aria-hidden="true">${formatMonth(month)}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
+        : `<label><span class="sr-only">Mes consultado</span>${dateControl({ type: "month", id: "month", value: month, required: true })}</label>`;
       const arrow = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
       return `<div class="month-nav ${compact ? "compact-month" : ""} ${showArrows ? "" : "month-only"}">${showArrows ? `<button data-action="prev" aria-label="Mes anterior">${arrow("m14 6-6 6 6 6")}</button>` : ""}${picker}${showArrows ? `<button data-action="next" aria-label="Mes siguiente">${arrow("m10 6 6 6-6 6")}</button>` : ""}</div>`;
     }
@@ -1881,7 +1944,7 @@
     }
     function filterPanel() {
       return `<details class="panel filters" open><summary>Filtros compartidos con reportes</summary><div class="form-grid">
-        <label>Desde<input id="f-start" type="date" value="${esc(filters.start)}"></label><label>Hasta<input id="f-end" type="date" value="${esc(filters.end)}"></label>
+        <label>Desde${dateControl({ id: "f-start", value: filters.start })}</label><label>Hasta${dateControl({ id: "f-end", value: filters.end })}</label>
         <label>Cuentas, fuentes o categorías<select multiple size="1" id="f-entities">${allEntities()
           .map(
             (e) =>
@@ -1908,9 +1971,9 @@
           : t.kind === "income" || t.to_id === contextId
             ? "+"
             : "−";
-      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${esc(t.occurred_on)} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${formatDate(t.occurred_on)}${t.occurred_time ? ` · ${esc(t.occurred_time.slice(0, 5))}` : ""} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
       return contextId
-        ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${esc(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
+        ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
         : row;
     }
     function entityChart(id, type) {
@@ -1932,7 +1995,7 @@
         notation: "compact",
         maximumFractionDigits: 1,
       });
-      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><svg viewBox="0 0 610 190" role="img" aria-labelledby="chart-title chart-description"><title id="chart-title">${caption} · ${esc(name(id))}</title><desc id="chart-description">${series.map((p) => `${p.month}: ${money(p.value)}`).join("; ")}. Datos disponibles en la tabla siguiente.</desc>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${series[i].month.slice(5)}/${series[i].month.slice(2, 4)}</text>`).join("")}</svg><details class="chart-data"><summary>Ver datos del gráfico</summary><table><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p) => `<tr><td>${p.month}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></details></section>`;
+      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><svg viewBox="0 0 610 190" role="img" aria-labelledby="chart-title chart-description"><title id="chart-title">${caption} · ${esc(name(id))}</title><desc id="chart-description">${series.map((p) => `${formatMonth(p.month)}: ${money(p.value)}`).join("; ")}. Datos disponibles en la tabla siguiente.</desc>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${series[i].month.slice(5)}/${series[i].month.slice(2, 4)}</text>`).join("")}</svg><details class="chart-data"><summary>Ver datos del gráfico</summary><table><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p) => `<tr><td>${formatMonth(p.month)}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></details></section>`;
     }
     function detailHeader() {
       const type = TYPES.find((key) => state[key].some((e) => e.id === detailId));
@@ -1947,9 +2010,7 @@
       if (!type)
         return '<p class="empty">Esta entidad ya no está disponible.</p><button data-view="home">Volver a Inicio</button>';
       const all = filterTransactions(state, { entities: [detailId] }).sort(
-        (a, b) =>
-          b.occurred_on.localeCompare(a.occurred_on) ||
-          b.created_at.localeCompare(a.created_at),
+        compareTransactionDates,
       );
       const ts = all.filter(
         (t) => detailScope === "all" || t.occurred_on.startsWith(month),
@@ -1984,13 +2045,11 @@
                     budget(state, detailId, month).limit,
                   )
                 : "");
-      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${esc(new Intl.DateTimeFormat("es-BO", { dateStyle: "long", timeZone: "UTC" }).format(new Date(date + "T12:00:00Z")))}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${formatDate(date)}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
     }
     function history() {
       const ts = filterTransactions(state, filters).sort(
-        (a, b) =>
-          b.occurred_on.localeCompare(a.occurred_on) ||
-          b.created_at.localeCompare(a.created_at),
+        compareTransactionDates,
       );
       const income = sum(
           ts.filter((t) => t.kind === "income").map((t) => t.amount_cents),
@@ -2083,7 +2142,7 @@
           .join("") ||
         '<p class="empty">Todavía no hay gastos en este período.</p>'
       }</div><div class="table-scroll"><table><thead><tr><th>Categoría</th><th>Gasto · BOB</th><th>Participación</th></tr></thead><tbody>${r.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${money(c.spent)}</td><td>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</td></tr>`).join("")}</tbody></table></div></section>
-      <section class="panel"><h2>Doce meses de perspectiva</h2><p class="legend"><span class="income-key">Ingresos</span><span class="expense-key">Gastos</span></p><div class="timeline" role="img" aria-label="Evolución mensual de ingresos y gastos; datos en la tabla siguiente">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}</span></div>`).join("")}</div><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead><tbody>${series.map((m) => `<tr><td>${m.month}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></section><p class="footnote">Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.</p>`;
+      <section class="panel"><h2>Doce meses de perspectiva</h2><p class="legend"><span class="income-key">Ingresos</span><span class="expense-key">Gastos</span></p><div class="timeline" role="img" aria-label="Evolución mensual de ingresos y gastos; datos en la tabla siguiente">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}<small>/${m.month.slice(2, 4)}</small></span></div>`).join("")}</div><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead><tbody>${series.map((m) => `<tr><td>${formatMonth(m.month)}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></section><p class="footnote">Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.</p>`;
     }
     function settings() {
       return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Importar/Exportar</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
@@ -2096,7 +2155,7 @@
       <p class="muted">Usa un token con permiso de escritura de Contents en el repositorio elegido. «Sincronizar ahora» guarda la configuración en este dispositivo.</p>
       <button class="primary" type="submit">Sincronizar ahora</button> <button type="button" data-action="sync-disable">Desactivar</button></form>
       <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></section>
-      <section class="panel"><h2>Importar historial completo</h2><p>Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.</p><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>Importar también límites de categoría (opcional)</summary><p>El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.</p><label>Aplicar límites desde (opcional)<input id="import-budget-month" type="month" aria-describedby="import-budget-help"></label><p id="import-budget-help" class="muted">Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.</p></details><p class="muted">CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.</p></section>
+      <section class="panel"><h2>Importar historial completo</h2><p>Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.</p><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>Importar también límites de categoría (opcional)</summary><p>El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.</p><label>Aplicar límites desde (opcional)${dateControl({ id: "import-budget-month", type: "month", describedBy: "import-budget-help" })}</label><p id="import-budget-help" class="muted">Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.</p></details><p class="muted">CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
           .slice(0, historyLimit)
@@ -2154,9 +2213,7 @@
     async function previewImport(next, source) {
       pendingImport = next;
       const dates = next.transactions.map((t) => t.occurred_on).sort();
-      const displayDate = (date) => esc(new Intl.DateTimeFormat("es-BO", {
-        dateStyle: "medium", timeZone: "UTC",
-      }).format(new Date(date + "T12:00:00Z")));
+      const displayDate = formatDate;
       const period = dates.length
         ? `<div><dt>Desde</dt><dd>${displayDate(dates[0])}</dd></div><div><dt>Hasta</dt><dd>${displayDate(dates.at(-1))}</dd></div>`
         : `<div><dt>Período</dt><dd>Sin movimientos</dd></div>`;
@@ -2176,7 +2233,7 @@
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = `gastalo-${today()}.json`;
+      link.download = `gastalo-${formatDate(today()).replaceAll("/", "-")}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
@@ -2350,7 +2407,7 @@
     }, true);
     document.addEventListener("click", (e) => {
       if (!$("#app-menu").contains(e.target)) $("#app-menu").open = false;
-      if (e.target.matches(".month-picker input")) {
+      if (e.target.matches(".month-picker input, .date-control input")) {
         try {
           e.target.showPicker?.();
         } catch {
@@ -2830,8 +2887,12 @@
     document.addEventListener("contextmenu", (e) => {
       if (e.target.closest("[data-entity]")) e.preventDefault();
     });
+    document.addEventListener("input", (e) => {
+      if (e.target.matches(".date-control input")) updateDateControl(e.target);
+    });
     document.addEventListener("change", async (e) => {
       try {
+        if (e.target.matches(".date-control input")) updateDateControl(e.target);
         if (e.target.id === "month" && monthOK(e.target.value)) {
           month = e.target.value;
           detailScope = "month";

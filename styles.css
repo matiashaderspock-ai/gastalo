@@ -1119,7 +1119,8 @@ textarea {
 }
 select,
 input[type="date"],
-input[type="month"] {
+input[type="month"],
+input[type="time"] {
   border: 0;
   background: transparent;
 }
@@ -2418,6 +2419,71 @@ dialog::backdrop {
   margin: 6px 0;
   font-size: 12px;
   line-height: 1.4;
+}
+.date-control {
+  position: relative;
+  display: block;
+  min-width: 0;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 4px;
+  padding: 7px 22px 7px 0;
+  overflow: hidden;
+  isolation: isolate;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 24px;
+}
+.date-value {
+  display: block;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.date-control svg {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.date-control input[type] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+.date-control:focus-within {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+.compact-page .filters .date-control {
+  min-height: 32px;
+  height: 32px;
+  margin-top: 2px;
+  padding: 4px 22px 4px 0;
+}
+.compact-dialog .movement-timezone {
+  font-size: 11px;
+  margin: 0 0 4px;
+}
+.timeline-month > span small {
+  display: block;
+  font-size: inherit;
+}
+.compact-page .timeline {
+  height: 155px;
 }
 @media (max-width: 360px) {
   .compact-page .form-grid {
