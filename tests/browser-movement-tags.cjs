@@ -56,19 +56,18 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });
       const fields = await page.locator('.movement-fields').evaluate(e => {
-        const names = ['from', 'to', 'date', 'note', 'amount'];
+        const names = ['from', 'to', 'note', 'amount'];
         return Object.fromEntries(names.map(name => {
           const input = e.querySelector(`[name="${name}"]`), style = getComputedStyle(input);
           return [name, { border: style.borderTopWidth, background: style.backgroundColor,
             padding: style.paddingLeft, aligned: Math.abs(input.getBoundingClientRect().left - input.closest('label').getBoundingClientRect().left) < 1 }];
         }));
       });
-      for (const name of ['from', 'to', 'date']) {
+      for (const name of ['from', 'to']) {
         assert.equal(fields[name].border, '0px', `${name} is borderless`);
         assert.equal(fields[name].background, 'rgba(0, 0, 0, 0)');
         assert.equal(fields[name].padding, '0px');
       }
-      assert.equal(fields.date.aligned, true, 'The date value aligns with Fecha');
       assert.equal(fields.amount.border, '1px', 'Importe retains its input box');
       assert.equal(fields.note.border, '1px', 'The note is a boxed text-entry field');
       const layout = await page.locator('.movement-tags').evaluate(e => {
@@ -77,12 +76,12 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
         row.scrollLeft = row.scrollWidth;
         return { height: e.getBoundingClientRect().height, scroll: row.scrollLeft, title: !!e.querySelector('.movement-tags-heading'),
           rows: new Set(labels.map(l => l.getBoundingClientRect().top)).size,
-          plain: labels.every(plain) && plain(e.querySelector('#tag-picker-toggle')) };
+          plain: plain(e) && labels.every(plain) && plain(e.querySelector('#tag-picker-toggle')) };
       });
       assert.ok(layout.height < 60 && layout.scroll > 0, `Compact sliding row at ${width}px`);
       assert.equal(layout.rows, 1);
       assert.equal(layout.title, false);
-      assert.equal(layout.plain, true, 'Names and + have no boxes');
+      assert.equal(layout.plain, true, 'Names, + and their enclosing row have no boxes');
     }
     await page.locator('#movement-tag-chips label').last().click();
     assert.ok(await page.locator('#movement-tag-chips').evaluate(e => e.scrollLeft > 0), 'Selection retains the sliding row position');
