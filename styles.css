@@ -1597,7 +1597,8 @@ dialog::backdrop {
 [hidden] {
   display: none !important;
 }
-.sr-only {
+.sr-only,
+.titleless-dialog:not(.choosing-tags) #dialog-title {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1836,6 +1837,15 @@ dialog::backdrop {
   width: 32px;
   padding: 2px;
 }
+.titleless-dialog:not(.choosing-tags) .dialog-heading {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  margin: 0;
+}
+.titleless-dialog:not(.choosing-tags) .movement-tags {
+  margin-right: 38px;
+}
 .compact-dialog label {
   font-size: 12px;
   margin: 6px 0;
@@ -1896,11 +1906,10 @@ dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f0f1ed;
-  border: 1px solid #dfe3da;
-  border-radius: 12px;
-  padding: 4px 10px;
-  margin: 8px 0 12px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0 0 8px;
 }
 #tag-picker-toggle,
 .tag-search > button {
@@ -2477,6 +2486,13 @@ dialog::backdrop {
 .compact-dialog .movement-timezone {
   font-size: 11px;
   margin: 0 0 4px;
+}
+.compact-dialog .movement-timestamp {
+  font-size: 12px;
+  margin: 8px 0 2px;
+}
+.app-header.without-menu {
+  grid-template-columns: minmax(0, 1fr);
 }
 .timeline-month > span small {
   display: block;

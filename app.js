@@ -1478,10 +1478,12 @@
       {
         focusSelector = "input:not([type=hidden]),select,button",
         compact = false,
+        hideTitle = false,
       } = {},
     ) {
       const dialog = $("#dialog");
       dialog.classList.toggle("compact-dialog", compact);
+      dialog.classList.toggle("titleless-dialog", hideTitle);
       $("#dialog-title").textContent = title;
       $("#dialog-body").innerHTML = html;
       $("#modal-error").textContent = "";
@@ -1541,10 +1543,10 @@
         )}</select></label>
         <label>Destino<select name="to" required></select></label></div>
         <label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
-        <div class="form-grid"><label>Fecha${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label>
-        <label>Hora${dateControl({ name: "time", type: "time", required: !t && !reviewId, value: initialTime, describedBy: "movement-timezone" })}</label></div><p id="movement-timezone" class="movement-timezone muted">Hora local · ${esc(eventTimezone)}${t && !t.occurred_time ? " · Hora anterior no registrada" : ""}</p>
         <details class="movement-extras" ${t?.note ? "open" : ""}><summary>Nota</summary>
-        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
+        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label>
+        ${t || reviewId ? `<div class="form-grid"><label>Fecha${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label><label>Hora${dateControl({ name: "time", type: "time", value: initialTime, describedBy: "movement-timezone" })}</label></div>` : `<input type="hidden" name="date" value="${clock.date}"><input type="hidden" name="time" value="${initialTime}"><p class="movement-timestamp muted"><time datetime="${clock.date}T${initialTime}">${formatDate(clock.date)} · ${initialTime.slice(0, 5)}</time></p>`}
+        <p id="movement-timezone" class="movement-timezone muted">Hora local · ${esc(eventTimezone)}${t && !t.occurred_time ? " · Hora anterior no registrada" : ""}</p></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
         async (data) => {
           const next = copy(state),
             fromId = data.get("from"),
@@ -1594,6 +1596,7 @@
         },
         {
           compact: true,
+          hideTitle: !t,
           focusSelector:
             t || (from && to) ? '[name="amount"]' : '[name="from"]',
         },
@@ -2175,6 +2178,9 @@
       if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
       resetTransactionSwipe();
       $("#main").classList.toggle("compact-page", ["history", "budgets", "reports", "settings"].includes(view));
+      const categoryDetail = view === "detail" && state.categories.some((item) => item.id === detailId);
+      $("#app-menu").hidden = categoryDetail;
+      $(".app-header").classList.toggle("without-menu", categoryDetail);
       $("#header-totals").innerHTML = view === "home" ? homeTotals()
         : view === "detail" ? detailHeader() : "";
       $("#main").classList.toggle(
