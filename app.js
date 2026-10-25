@@ -491,6 +491,20 @@
             .includes(filters.text.toLocaleLowerCase("es"))),
     );
   }
+  function entityMovementAmount(transaction, entityId) {
+    if (transaction.from_id !== entityId && transaction.to_id !== entityId) return 0;
+    const positive = transaction.kind !== "expense" &&
+      (transaction.kind === "income" || transaction.to_id === entityId);
+    return positive ? transaction.amount_cents : -transaction.amount_cents;
+  }
+  function entityDayTotals(state, entityId) {
+    const days = new Map();
+    for (const transaction of filterTransactions(state, { entities: [entityId] })) {
+      if (!days.has(transaction.occurred_on)) days.set(transaction.occurred_on, []);
+      days.get(transaction.occurred_on).push(entityMovementAmount(transaction, entityId));
+    }
+    return new Map([...days].map(([date, amounts]) => [date, sum(amounts)]));
+  }
   function report(state, month, filters = {}) {
     const ts = filterTransactions(state, filters).filter(
       (t) => t.occurred_on.slice(0, 7) === month,
@@ -1120,6 +1134,8 @@
     scrollEntityStrip,
     balances,
     filterTransactions,
+    entityMovementAmount,
+    entityDayTotals,
     report,
     budget,
     budgetTotals,
@@ -1164,6 +1180,7 @@
       Math.trunc(Math.abs(n) / 100).toLocaleString("es-BO") +
       "," +
       String(Math.abs(n) % 100).padStart(2, "0");
+    const signedMoney = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + money(Math.abs(n));
     const decimal = (n) =>
       (n < 0 ? "-" : "") +
       Math.trunc(Math.abs(n) / 100) +
@@ -1968,16 +1985,10 @@
     }
     function transactionRow(t, contextId = null) {
       const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
-      const metadata = contextId ? time
+      const metadata = contextId ? `${time ? time + " · " : ""}${labels[t.kind]}`
         : `${formatDate(t.occurred_on)}${time ? ` · ${time}` : ""} · ${labels[t.kind]}`;
-      const sign = !contextId
-        ? ""
-        : t.kind === "expense"
-          ? "−"
-          : t.kind === "income" || t.to_id === contextId
-            ? "+"
-            : "−";
-      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong>${metadata ? `<span>${metadata}</span>` : ""}${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      const amount = contextId ? signedMoney(entityMovementAmount(t, contextId)) : money(t.amount_cents);
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${metadata}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${amount}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
       return contextId
         ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
         : row;
@@ -2093,6 +2104,7 @@
           .map((t) => t.amount_cents),
       );
       const groups = new Map();
+      const dayTotals = entityDayTotals(state, detailId);
       for (const t of ts.slice(0, historyLimit)) {
         if (!groups.has(t.occurred_on)) groups.set(t.occurred_on, []);
         groups.get(t.occurred_on).push(t);
@@ -2111,7 +2123,7 @@
                     budget(state, detailId, month).limit,
                   )
                 : "");
-      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><h3>${formatDate(date)}</h3><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3><strong class="history-day-total" aria-label="Total neto del día: ${signedMoney(dayTotals.get(date))}">${signedMoney(dayTotals.get(date))}</strong></div><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
     }
     function history() {
       const ts = filterTransactions(state, filters).sort(

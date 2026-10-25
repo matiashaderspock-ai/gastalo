@@ -94,9 +94,9 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
         assert.ok(arrow.x - header.x < 35, 'The back arrow uses the leftmost header space');
         await page.getByRole('button', { name: 'Todo el historial', exact: true }).click();
         const expectedHours = state.transactions.filter(transaction => transaction.from_id === item.id || transaction.to_id === item.id)
-          .sort(A.compareTransactionDates).filter(transaction => transaction.occurred_time).map(transaction => transaction.occurred_time.slice(0, 5));
-        assert.deepEqual(await page.locator('.transaction-info > span').allTextContents(), expectedHours, 'All entity types show only known hours per record');
-        for (const date of await page.locator('.history-day > h3').allTextContents()) assert.match(date, /^\d{2}\/\d{2}\/\d{2}$/);
+          .sort(A.compareTransactionDates).map(transaction => `${transaction.occurred_time ? transaction.occurred_time.slice(0, 5) + ' · ' : ''}${{ income: 'Ingreso', expense: 'Gasto', transfer: 'Transferencia' }[transaction.kind]}`);
+        assert.deepEqual(await page.locator('.transaction-info > span').allTextContents(), expectedHours, 'All entity types show hour and type without repeating the date');
+        for (const date of await page.locator('.history-day h3').allTextContents()) assert.match(date, /^\d{2}\/\d{2}\/\d{2}$/);
         await swipe(back(), { dx: 30 });
         assert.equal(await page.locator('.entity-detail').count(), 1, 'A short swipe on the back button cannot activate it');
         await swipe(page.locator('.detail-totals'), { dx: -50 });
@@ -228,7 +228,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     for (const text of await page.locator('.transaction-info > span').allTextContents()) assert.match(text, /^\d{2}\/\d{2}\/\d{2}(?: · \d{2}:\d{2})? · (Ingreso|Gasto|Transferencia)$/);
     assert.deepEqual(await saved(), state, 'Navigation never saves staged forms, deletes data or changes financial state');
     assert.deepEqual(errors, []);
-    console.log(`PASS: all-entity hours without duplicate dates/types; ${animate ? 'interactive slide/parallax and cancellation' : 'reduced motion'}; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
+    console.log(`PASS: all-entity hours/types without duplicate dates; ${animate ? 'interactive slide/parallax and cancellation' : 'reduced motion'}; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
   } catch (error) {
     if (page) await page.screenshot({ path: '/tmp/gastalo-back-navigation-error.png', fullPage: true });
     throw error;
