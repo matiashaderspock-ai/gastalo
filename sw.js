@@ -1,10 +1,10 @@
 /* Bump CACHE and both versioned FILES with index.html whenever JS/CSS changes. */
-const CACHE = "gastalo-v41";
+const CACHE = "gastalo-v42";
 const FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=41",
-  "./app.js?v=41",
+  "./styles.css?v=42",
+  "./app.js?v=42",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
