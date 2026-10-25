@@ -944,8 +944,49 @@ html.is-dragging {
   display: block;
   width: 100%;
   height: auto;
-  margin-top: 8px;
   overflow: visible;
+}
+.chart-interactive {
+  position: relative;
+  margin-top: 8px;
+}
+.chart-plot {
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+  border-radius: 4px;
+}
+.chart-plot:focus-visible {
+  outline: 2px solid var(--row-color);
+  outline-offset: 3px;
+}
+.chart-tooltip {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  transform: translateX(-50%);
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.chart-selection {
+  pointer-events: none;
+}
+.chart-selection line {
+  stroke: var(--row-color);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+.chart-selection circle {
+  fill: var(--row-color);
+  stroke: var(--paper);
+  stroke-width: 2;
 }
 .entity-chart svg text {
   font-size: 16px;
@@ -968,17 +1009,6 @@ html.is-dragging {
 }
 .chart-dot {
   fill: var(--row-color);
-}
-.chart-data {
-  color: var(--muted);
-  font-size: 11px;
-}
-.chart-data summary {
-  padding: 6px 0;
-}
-.chart-data table {
-  font-size: 12px;
-  width: 100%;
 }
 .history-scope {
   display: flex;

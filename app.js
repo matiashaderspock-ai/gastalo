@@ -1967,6 +1967,10 @@
         <label class="wide">Buscar en nota<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="Ej. almuerzo"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">Aplicar filtros</button><button data-action="clear-filters">Ver todo</button></div></details>`;
     }
     function transactionRow(t, contextId = null) {
+      const categoryContext = contextId && state.categories.some((category) => category.id === contextId);
+      const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
+      const metadata = categoryContext ? time
+        : `${formatDate(t.occurred_on)}${time ? ` · ${time}` : ""} · ${labels[t.kind]}`;
       const sign = !contextId
         ? ""
         : t.kind === "expense"
@@ -1974,7 +1978,7 @@
           : t.kind === "income" || t.to_id === contextId
             ? "+"
             : "−";
-      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${formatDate(t.occurred_on)}${t.occurred_time ? ` · ${esc(t.occurred_time.slice(0, 5))}` : ""} · ${labels[t.kind]}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong>${metadata ? `<span>${metadata}</span>` : ""}${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${sign}${money(t.amount_cents)}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
       return contextId
         ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
         : row;
@@ -1998,7 +2002,67 @@
         notation: "compact",
         maximumFractionDigits: 1,
       });
-      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><svg viewBox="0 0 610 190" role="img" aria-labelledby="chart-title chart-description"><title id="chart-title">${caption} · ${esc(name(id))}</title><desc id="chart-description">${series.map((p) => `${formatMonth(p.month)}: ${money(p.value)}`).join("; ")}. Datos disponibles en la tabla siguiente.</desc>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${series[i].month.slice(5)}/${series[i].month.slice(2, 4)}</text>`).join("")}</svg><details class="chart-data"><summary>Ver datos del gráfico</summary><table><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p) => `<tr><td>${formatMonth(p.month)}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></details></section>`;
+      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><div class="chart-interactive"><output class="chart-tooltip" aria-hidden="true" hidden></output><svg class="chart-plot" viewBox="0 0 610 190" tabindex="0" role="slider" aria-label="Mes e importe · ${caption}" aria-describedby="chart-help" aria-valuemin="0" aria-valuemax="11" aria-valuenow="11" aria-valuetext="${formatMonth(series[11].month)} · ${money(series[11].value)}"><title>${caption} · ${esc(name(id))}</title>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/><g class="chart-selection" hidden><line y1="20" y2="150"/><circle r="5"/></g>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${formatMonth(series[i].month)}</text>`).join("")}</svg></div><p id="chart-help" class="sr-only">Toca o desliza sobre el gráfico para consultar cada mes. Con teclado, usa las flechas izquierda y derecha, Inicio y Fin.</p><div class="chart-data sr-only"><table><caption>${caption} · ${esc(name(id))}</caption><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p, i) => `<tr data-chart-month="${p.month}" data-value="${p.value}" data-x="${x(i)}" data-y="${y(p.value)}"><td>${formatMonth(p.month)}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></div></section>`;
+    }
+    function bindEntityChart() {
+      const chart = $(".entity-chart"), plot = chart?.querySelector(".chart-plot");
+      if (!plot) return;
+      const rows = [...chart.querySelectorAll("[data-chart-month]")],
+        tooltip = chart.querySelector(".chart-tooltip"),
+        selection = chart.querySelector(".chart-selection");
+      let selected = rows.length - 1, pointerId = null;
+      const show = (index) => {
+        selected = Math.max(0, Math.min(rows.length - 1, index));
+        const point = rows[selected].dataset;
+        tooltip.textContent = `${formatMonth(point.chartMonth)} · ${money(Number(point.value))}`;
+        tooltip.style.left = `${Number(point.x) / 610 * 100}%`;
+        tooltip.hidden = false;
+        selection.removeAttribute("hidden");
+        const line = selection.querySelector("line"), dot = selection.querySelector("circle");
+        line.setAttribute("x1", point.x);
+        line.setAttribute("x2", point.x);
+        dot.setAttribute("cx", point.x);
+        dot.setAttribute("cy", point.y);
+        plot.setAttribute("aria-valuenow", selected);
+        plot.setAttribute("aria-valuetext", tooltip.textContent);
+        // Keep the bubble inside the chart, including the first and last month.
+        const half = tooltip.offsetWidth / 2, width = plot.getBoundingClientRect().width;
+        tooltip.style.left = `${Math.max(half, Math.min(width - half, Number(point.x) / 610 * width))}px`;
+      };
+      const hide = () => {
+        tooltip.hidden = true;
+        selection.setAttribute("hidden", "");
+      };
+      const showAt = (clientX) => {
+        const box = plot.getBoundingClientRect();
+        if (box.width) show(Math.round(((clientX - box.left) / box.width * 610 - 90) / 45));
+      };
+      plot.addEventListener("pointerdown", (event) => {
+        if (!event.isPrimary || event.button !== 0 || pointerId !== null) return;
+        pointerId = event.pointerId;
+        plot.setPointerCapture(pointerId);
+        showAt(event.clientX);
+      });
+      plot.addEventListener("pointermove", (event) => {
+        if (event.pointerId === pointerId || (pointerId === null && event.pointerType === "mouse")) showAt(event.clientX);
+      });
+      plot.addEventListener("pointerup", (event) => {
+        if (event.pointerId !== pointerId) return;
+        showAt(event.clientX);
+        pointerId = null;
+        if (plot.hasPointerCapture(event.pointerId)) plot.releasePointerCapture(event.pointerId);
+      });
+      const cancel = () => { pointerId = null; hide(); };
+      plot.addEventListener("pointercancel", cancel);
+      plot.addEventListener("lostpointercapture", () => { if (pointerId !== null) cancel(); });
+      plot.addEventListener("pointerleave", (event) => { if (pointerId === null && event.pointerType === "mouse") hide(); });
+      plot.addEventListener("focus", () => show(selected));
+      plot.addEventListener("blur", cancel);
+      plot.addEventListener("keydown", (event) => {
+        const index = { ArrowLeft: selected - 1, ArrowRight: selected + 1, Home: 0, End: rows.length - 1 }[event.key];
+        if (index !== undefined) { event.preventDefault(); show(index); }
+        else if (event.key === "Escape") hide();
+      });
     }
     function detailHeader() {
       const type = TYPES.find((key) => state[key].some((e) => e.id === detailId));
@@ -2195,6 +2259,7 @@
         reports,
         settings,
       }[view]();
+      if (view === "detail") bindEntityChart();
       if (view === "home") setEntityEditing(editingEntities);
       document.querySelectorAll("nav button").forEach((button) => {
         button.classList.toggle(

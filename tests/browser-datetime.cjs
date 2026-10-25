@@ -148,7 +148,6 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(await page.locator('#app-menu').isVisible(), true, 'Returning home restores navigation');
     await page.locator(`[data-entity="${bank.id}"]`).click();
     for (const text of await page.locator(".history-day h3").allTextContents()) assert.match(text, /^\d{2}\/\d{2}\/\d{2}$/);
-    await page.locator(".chart-data > summary").click();
     for (const text of await page.locator(".chart-data tbody td:first-child").allTextContents()) assert.match(text, /^\d{2}\/\d{2}$/);
     await page.getByRole("button", { name: "Volver a Inicio", exact: true }).click();
     await go("Límites de categoría");
