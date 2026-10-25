@@ -478,7 +478,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await card("Banco").tap();
     const incomeRow = page
       .locator(".transaction")
-      .filter({ hasText: "Ingreso" });
+      .filter({ has: page.locator(".transaction-symbol.income") });
     await incomeRow.locator('[data-action="delete-transaction"]').click();
     await incomeRow.waitFor({ state: "detached" });
     assert.equal(await page.locator(".entity-history .transaction").count(), 1);

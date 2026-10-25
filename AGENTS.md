@@ -1,5 +1,7 @@
 # Instructions for Codex
 
+Los cambios de interfaz pedidos para una categoría se aplican también a fuentes y cuentas cuando comparten el mismo componente, salvo que Matias limite explícitamente el cambio a un tipo de entidad.
+
 Por defecto, dejá que el workflow Auto-merge fusione los PRs. La etiqueta `needs-matias` requiere revisión de Matias: sin autorización explícita, dejá el PR abierto.
 
 Si Matias indica que revisó un PR y pide fusionarlo (por ejemplo, «ya lo revisé, mergealo»), esa instrucción autoriza a Codex a fusionar ese PR por API o web, incluso si conserva `needs-matias`. No vuelvas a pedir confirmación por esta regla o por esa etiqueta. La autorización se aplica al PR indicado, no a otros PRs pendientes o futuros.

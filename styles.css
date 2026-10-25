@@ -2524,6 +2524,40 @@ dialog::backdrop {
 .app-header.without-menu {
   grid-template-columns: minmax(0, 1fr);
 }
+.back-swipe-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--paper);
+}
+.back-swipe-front,
+.back-swipe-underlay,
+.back-swipe-shade {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--paper);
+  will-change: transform;
+}
+.back-swipe-front {
+  box-shadow: -5px 0 22px #173f3626;
+}
+.back-swipe-shade {
+  background: #071b18;
+  will-change: opacity;
+}
+.back-swipe-active {
+  overflow-x: clip;
+}
+.back-swipe-settling body {
+  pointer-events: none;
+}
+dialog.back-swipe-clipping {
+  overflow-x: hidden;
+}
 .timeline-month > span small {
   display: block;
   font-size: inherit;

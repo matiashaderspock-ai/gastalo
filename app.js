@@ -1967,9 +1967,8 @@
         <label class="wide">Buscar en nota<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="Ej. almuerzo"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">Aplicar filtros</button><button data-action="clear-filters">Ver todo</button></div></details>`;
     }
     function transactionRow(t, contextId = null) {
-      const categoryContext = contextId && state.categories.some((category) => category.id === contextId);
       const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
-      const metadata = categoryContext ? time
+      const metadata = contextId ? time
         : `${formatDate(t.occurred_on)}${time ? ` · ${time}` : ""} · ${labels[t.kind]}`;
       const sign = !contextId
         ? ""
@@ -2241,7 +2240,8 @@
     function rememberNavigation() {
       navigationStack.push({ view, detailId, detailScope, month, historyLimit,
         scrollX: window.scrollX, scrollY: window.scrollY,
-        strips: [...document.querySelectorAll(".entity-strip")].map(strip => strip.scrollLeft) });
+        strips: [...document.querySelectorAll(".entity-strip")].map(strip => strip.scrollLeft),
+        preview: captureBackPreview() });
     }
     function goBack() {
       const dialog = $("#dialog"), menu = $("#app-menu");
@@ -2287,6 +2287,7 @@
       return true;
     }
     function render() {
+      abortBackAnimation();
       const strips = [...document.querySelectorAll(".entity-strip")], scrollY = window.scrollY;
       if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
       resetTransactionSwipe();
@@ -2365,6 +2366,7 @@
       await commit(next, "Movimiento borrado", true);
     }
     async function handleAction(button) {
+      if (backSwipeAnimation) return;
       const action = button.dataset.action,
         id = button.dataset.id;
       if (button.dataset.view) {
@@ -2686,7 +2688,143 @@
     }, true);
     // Listen to touch events so horizontal back gestures can be claimed without
     // restricting native horizontal scrolling in descendant tables and pickers.
-    let backSwipe = null, backSwipeClick = false, backSwipeClickTimer;
+    let backSwipe = null, backSwipeClick = false, backSwipeClickTimer,
+      backSwipeAnimation = null, backPreviewCSS;
+    function captureBackPreview() {
+      return [$(".app-header"), $("#main"), $(".app-footer")].map(node => {
+        const clone = node.cloneNode(true), box = node.getBoundingClientRect();
+        const selector = "input, select, textarea, .entity-strip, .table-scroll, .tag-choices";
+        const originals = [...node.querySelectorAll(selector)];
+        clone.querySelectorAll(selector).forEach((field, index) => {
+          const original = originals[index];
+          if (field.matches('input[type="password"], input[type="file"]')) field.removeAttribute("value");
+          else if (field.matches("input")) {
+            field.setAttribute("value", original.value);
+            field.toggleAttribute("checked", original.checked);
+          } else if (field.matches("textarea")) field.textContent = original.value;
+          else if (field.matches("select")) [...field.options].forEach((option, i) => {
+            option.toggleAttribute("selected", original.options[i].selected);
+          });
+          if (original.scrollLeft) field.dataset.previewScrollLeft = original.scrollLeft;
+          if (original.scrollTop) field.dataset.previewScrollTop = original.scrollTop;
+        });
+        const menu = clone.querySelector("#app-menu");
+        if (menu) menu.open = false;
+        Object.assign(clone.style, { position: "absolute", top: `${box.top}px`, left: `${box.left}px`,
+          width: `${box.width}px`, maxWidth: "none", margin: "0" });
+        return clone.outerHTML;
+      }).join("");
+    }
+    function backPreview(html, className) {
+      const host = document.createElement("div");
+      host.className = className;
+      host.inert = true;
+      // Closed shadow roots keep visual copies out of app queries and focus.
+      const shadow = host.attachShadow({ mode: "closed" });
+      backPreviewCSS ??= [...document.styleSheets].map(sheet => {
+        try { return [...sheet.cssRules].map(rule => rule.cssText).join("\n"); }
+        catch { return ""; }
+      }).join("\n");
+      shadow.innerHTML = `<style>${backPreviewCSS}</style>${html}`;
+      return { host, restoreScroll: () => shadow.querySelectorAll("[data-preview-scroll-left], [data-preview-scroll-top]").forEach(node => {
+        node.scrollLeft = Number(node.dataset.previewScrollLeft || 0);
+        node.scrollTop = Number(node.dataset.previewScrollTop || 0);
+      }) };
+    }
+    function startBackVisual(p) {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const dialog = $("#dialog"), menu = $("#app-menu");
+      if (!dialog.open && !menu.open && !editingEntities && view !== "home") {
+        const stage = document.createElement("div");
+        stage.className = "back-swipe-stage";
+        stage.setAttribute("aria-hidden", "true");
+        const previous = navigationStack.at(-1);
+        stage.dataset.previousView = previous?.view || "home";
+        const underlay = backPreview(previous?.preview || captureBackPreview(), "back-swipe-underlay"),
+          front = backPreview(captureBackPreview(), "back-swipe-front"), shade = document.createElement("div");
+        shade.className = "back-swipe-shade";
+        stage.append(underlay.host, shade, front.host);
+        document.body.append(stage);
+        underlay.restoreScroll();
+        front.restoreScroll();
+        p.visual = { element: front.host, underlay: underlay.host, shade, stage,
+          width: innerWidth, end: innerWidth, offset: 0 };
+      } else {
+        const element = dialog.open ? dialog.classList.contains("choosing-tags") ? $("#tag-picker")
+          : $("#icon-picker") && !$("#icon-picker").hidden ? $("#icon-picker") : dialog
+          : menu.open ? $("#app-menu nav") : editingEntities ? $("#entity-edit-bar") : null;
+        if (!element) return;
+        const saved = Object.fromEntries(["transform", "willChange"].map(key => [key, element.style[key]]));
+        element.style.willChange = "transform";
+        dialog.classList.add("back-swipe-clipping");
+        p.visual = { element, saved, width: innerWidth,
+          end: innerWidth - element.getBoundingClientRect().left + 20, offset: 0 };
+      }
+      document.documentElement.classList.add("back-swipe-active");
+    }
+    function paintBackVisual(p, dx) {
+      const visual = p.visual;
+      if (!visual) return;
+      visual.offset = Math.max(0, Math.min(visual.end, dx));
+      visual.element.style.transform = `translate3d(${visual.offset}px, 0, 0)`;
+      if (visual.underlay) {
+        visual.underlay.style.transform = `translate3d(${(visual.offset - visual.width) * .25}px, 0, 0)`;
+        visual.shade.style.opacity = .12 * Math.max(0, 1 - visual.offset / visual.width);
+      }
+    }
+    function cleanBackVisual(p) {
+      const visual = p?.visual;
+      if (!visual) return;
+      visual.stage?.remove();
+      if (visual.saved) Object.assign(visual.element.style, visual.saved);
+      $("#dialog").classList.remove("back-swipe-clipping");
+      document.documentElement.classList.remove("back-swipe-active", "back-swipe-settling");
+      p.visual = null;
+    }
+    function abortBackAnimation() {
+      const p = backSwipe || backSwipeAnimation;
+      backSwipe = null;
+      if (p) {
+        p.cancelled = true;
+        p.animations?.forEach(animation => animation.cancel());
+        cleanBackVisual(p);
+      }
+      backSwipeAnimation = null;
+    }
+    async function finishBackSwipe(p, navigate) {
+      const visual = p?.visual;
+      if (!visual) { if (navigate) goBack(); return; }
+      backSwipeAnimation = p;
+      document.documentElement.classList.add("back-swipe-settling");
+      const end = navigate ? visual.end : 0;
+      const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0
+        : Math.min(240, Math.max(100, Math.abs(end - visual.offset) / visual.width * 240));
+      const options = { duration, easing: "cubic-bezier(.22,.7,.25,1)", fill: "forwards" };
+      p.animations = [visual.element.animate([
+        { transform: `translate3d(${visual.offset}px, 0, 0)` }, { transform: `translate3d(${end}px, 0, 0)` },
+      ], options)];
+      if (visual.underlay) {
+        p.animations.push(visual.underlay.animate([
+          { transform: `translate3d(${(visual.offset - visual.width) * .25}px, 0, 0)` },
+          { transform: `translate3d(${(end - visual.width) * .25}px, 0, 0)` },
+        ], options), visual.shade.animate([
+          { opacity: .12 * Math.max(0, 1 - visual.offset / visual.width) }, { opacity: navigate ? 0 : .12 },
+        ], options));
+      }
+      try {
+        await Promise.allSettled(p.animations.map(animation => animation.finished));
+        if (navigate && !p.cancelled && p.layer === backLayer()) goBack();
+      } finally {
+        p.animations.forEach(animation => animation.cancel());
+        cleanBackVisual(p);
+        if (backSwipeAnimation === p) backSwipeAnimation = null;
+      }
+    }
+    function cancelBackSwipe() {
+      const p = backSwipe;
+      backSwipe = null;
+      if (p?.dragging) void finishBackSwipe(p, false);
+    }
     const backLayer = () => {
       const dialog = $("#dialog"), icons = $("#icon-picker");
       if (dialog.open) return dialog.classList.contains("choosing-tags") ? $("#tag-picker")
@@ -2694,7 +2832,8 @@
       return $("#app-menu").open ? $("#app-menu") : $("#main").firstElementChild;
     };
     document.addEventListener("touchstart", (event) => {
-      backSwipe = null;
+      cancelBackSwipe();
+      if (backSwipeAnimation) return;
       backSwipeClick = false;
       clearTimeout(backSwipeClickTimer);
       const target = event.target, dialog = $("#dialog");
@@ -2713,15 +2852,18 @@
       if (!p) return;
       const touch = [...event.touches].find(touch => touch.identifier === p.id);
       if (!touch || event.touches.length !== 1 || p.layer !== backLayer() || busy ||
-          event.timeStamp - p.started > 1000) { backSwipe = null; return; }
+          event.timeStamp - p.started > 1000) { cancelBackSwipe(); return; }
       const dx = touch.clientX - p.x, dy = touch.clientY - p.y;
       if (!p.dragging) {
         if (dx < -12 || (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx))) { backSwipe = null; return; }
         if (dx < 12 || dx < Math.abs(dy) * 1.7) return;
         p.dragging = true;
+        startBackVisual(p);
       }
-      if (event.cancelable) event.preventDefault();
-      else backSwipe = null;
+      if (event.cancelable) {
+        event.preventDefault();
+        paintBackVisual(p, dx);
+      } else cancelBackSwipe();
     }, { passive: false });
     document.addEventListener("touchend", (event) => {
       const p = backSwipe;
@@ -2731,19 +2873,24 @@
       backSwipeClick = true;
       backSwipeClickTimer = setTimeout(() => { backSwipeClick = false; }, 350);
       const touch = [...event.changedTouches].find(touch => touch.identifier === p.id);
-      if (!touch || event.touches.length || p.layer !== backLayer() || window.getSelection()?.toString()) return;
+      if (!touch || event.touches.length || p.layer !== backLayer() || window.getSelection()?.toString()) {
+        void finishBackSwipe(p, false);
+        return;
+      }
       const dx = touch.clientX - p.x, dy = Math.abs(touch.clientY - p.y);
       const threshold = Math.min(110, Math.max(64, window.innerWidth * .22));
-      if (dx >= threshold && dy <= 64 && dx > dy * 1.7 && event.timeStamp - p.started <= 1000) goBack();
+      paintBackVisual(p, dx);
+      void finishBackSwipe(p, dx >= threshold && dy <= 64 && dx > dy * 1.7 && event.timeStamp - p.started <= 1000);
     }, { passive: true });
-    document.addEventListener("touchcancel", () => { backSwipe = null; }, { passive: true });
-    window.addEventListener("blur", () => { backSwipe = null; });
-    document.addEventListener("visibilitychange", () => { if (document.hidden) backSwipe = null; });
+    document.addEventListener("touchcancel", cancelBackSwipe, { passive: true });
+    window.addEventListener("blur", abortBackAnimation);
+    document.addEventListener("resize", abortBackAnimation);
+    document.addEventListener("visibilitychange", () => { if (document.hidden) abortBackAnimation(); });
     document.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "mouse") backSwipeClick = false;
     });
     document.addEventListener("click", (event) => {
-      if (backSwipeClick && event.detail > 0) {
+      if ((backSwipeClick || backSwipeAnimation) && event.detail > 0) {
         event.preventDefault();
         event.stopImmediatePropagation();
       }
@@ -3159,7 +3306,7 @@
     let checkingAppVersion = false, availableAppVersion = null;
     function applyAppUpdate() {
       if (!availableAppVersion || document.visibilityState !== "visible" ||
-          $("#dialog").open || view === "settings" || busy || editingEntities || pointer || settling) return;
+          $("#dialog").open || view === "settings" || busy || editingEntities || pointer || settling || backSwipe || backSwipeAnimation) return;
       const url = new URL(location.href);
       url.searchParams.set("app-version", availableAppVersion);
       availableAppVersion = null;
