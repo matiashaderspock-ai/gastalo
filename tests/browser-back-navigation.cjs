@@ -9,7 +9,8 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox'] });
   let page;
   try {
-    const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'es-BO', reducedMotion: 'reduce' });
+    const animate = process.env.GASTALO_ANIMATE_BACK === '1';
+    const context = await browser.newContext({ ...devices['iPhone 13'], locale: 'es-BO', reducedMotion: animate ? 'no-preference' : 'reduce' });
     page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -18,6 +19,11 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
     const state = A.importCSV(fs.readFileSync(__dirname + '/fixtures/coinkeeper.csv', 'utf8'), '2026-01');
     const [source, account, category] = [state.sources[0], state.accounts[0], state.categories[0]];
+    for (const [i, kind] of ['income', 'transfer', 'expense'].entries()) {
+      const transaction = state.transactions.find(transaction => transaction.kind === kind);
+      transaction.occurred_time = `09:${15 + i}:00`;
+      transaction.occurred_timezone = 'America/La_Paz';
+    }
     for (let i = 0; i < 28; i++) {
       state.accounts.push({ ...account, id: `extra-account-${i}`, name: `Cuenta ${i}`, opening_balance_cents: 0 });
       state.categories.push({ ...category, id: `extra-category-${i}`, name: `Categoría ${i}` });
@@ -37,15 +43,32 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     const cdp = await context.newCDPSession(page);
     const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const touch = (type, points = []) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
-    async function swipe(locator, { dx = 160, dy = 0, cancel = false } = {}) {
+    async function swipe(locator, { dx = 160, dy = 0, cancel = false, inspect = false } = {}) {
       await locator.scrollIntoViewIfNeeded();
       const box = await locator.boundingBox();
       const start = { x: box.x + Math.min(24, box.width / 3), y: box.y + Math.min(12, box.height / 2) };
       await touch('touchStart', [start]);
-      for (const progress of [.01, .03, .05, .07, .1, .2, .4, .6, .8, 1])
+      for (const progress of [.01, .03, .05, .07, .1, .2, .4, .6, .8, 1]) {
         await touch('touchMove', [{ x: start.x + dx * progress, y: start.y + dy * progress }]);
+        if (inspect && progress === .4) {
+          if (animate) {
+            await page.waitForFunction(offset => {
+              const front = document.querySelector('.back-swipe-front');
+              return front && Math.abs(new DOMMatrixReadOnly(getComputedStyle(front).transform).m41 - offset) < 2;
+            }, dx * progress);
+            assert.equal(await page.locator('.back-swipe-stage').getAttribute('data-previous-view'), 'home');
+            assert.equal(await page.locator('.entity-detail').count(), 1, 'The live route stays unchanged while the finger moves');
+            const rear = await page.locator('.back-swipe-underlay').evaluate(element => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
+            assert.ok(Math.abs(rear - (dx * progress - page.viewportSize().width) * .25) < 2, 'The previous screen moves with parallax');
+            if (page.viewportSize().width === 390 && !cancel) await page.screenshot({ path: '/tmp/gastalo-back-animation.png' });
+          } else assert.equal(await page.locator('.back-swipe-stage').count(), 0, 'Reduced motion skips sliding previews');
+        }
+      }
       await touch(cancel ? 'touchCancel' : 'touchEnd');
       await settle();
+      await page.waitForFunction(() => !document.documentElement.classList.contains('back-swipe-settling'));
+      assert.equal(await page.locator('.back-swipe-stage').count(), 0, 'The visual preview is removed after finishing or cancelling');
+      assert.equal(await page.locator('#dialog').evaluate(element => element.style.transform), '', 'Form transforms are restored');
     }
     async function go(name) {
       await page.locator('#app-menu > summary').click();
@@ -69,16 +92,39 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
         assert.equal(await page.locator('#app-menu').isVisible(), false, 'Every entity detail omits the menu');
         const header = await page.locator('.app-header').boundingBox(), arrow = await back().boundingBox();
         assert.ok(arrow.x - header.x < 35, 'The back arrow uses the leftmost header space');
+        await page.getByRole('button', { name: 'Todo el historial', exact: true }).click();
+        const expectedHours = state.transactions.filter(transaction => transaction.from_id === item.id || transaction.to_id === item.id)
+          .sort(A.compareTransactionDates).filter(transaction => transaction.occurred_time).map(transaction => transaction.occurred_time.slice(0, 5));
+        assert.deepEqual(await page.locator('.transaction-info > span').allTextContents(), expectedHours, 'All entity types show only known hours per record');
+        for (const date of await page.locator('.history-day > h3').allTextContents()) assert.match(date, /^\d{2}\/\d{2}\/\d{2}$/);
         await swipe(back(), { dx: 30 });
         assert.equal(await page.locator('.entity-detail').count(), 1, 'A short swipe on the back button cannot activate it');
         await swipe(page.locator('.detail-totals'), { dx: -50 });
         assert.equal(await page.locator('.entity-detail').count(), 1, 'Left gestures never navigate back');
-        await swipe(page.locator('.detail-totals'), { cancel: true });
+        await swipe(page.locator('.detail-totals'), { cancel: true, inspect: true });
         assert.equal(await page.locator('.entity-detail').count(), 1, 'Cancelled gestures never navigate');
-        await swipe(page.locator('.detail-totals'));
+        await swipe(page.locator('.detail-totals'), { inspect: true });
         await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
         assert.equal(await page.locator('#app-menu').isVisible(), true);
       }
+    }
+    if (animate) {
+      // An interrupted gesture must not leave a preview or a blocked page.
+      await entity(account).tap();
+      const totals = await page.locator('.detail-totals').boundingBox();
+      const start = { x: totals.x + 24, y: totals.y + 8 };
+      await touch('touchStart', [start]);
+      await touch('touchMove', [{ x: start.x + 80, y: start.y }]);
+      await page.locator('.back-swipe-stage').waitFor();
+      await page.setViewportSize({ width: 400, height: 844 });
+      await touch('touchCancel');
+      await settle();
+      await page.locator('.back-swipe-stage').waitFor({ state: 'detached' });
+      assert.equal(await page.locator('.back-swipe-stage').count(), 0);
+      assert.equal(await page.locator('html').evaluate(element => element.classList.contains('back-swipe-settling')), false);
+      assert.equal(await page.locator('.entity-detail').count(), 1, 'Resizing aborts the gesture without changing the route');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await back().click();
     }
     // Returning restores both page and horizontal entity-strip position.
     const strip = page.locator('.row-1 .entity-strip');
@@ -178,9 +224,11 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await openMovementFromMenu(page);
     await swipe(page.locator('.movement-extras > summary'));
     assert.equal(await page.locator('#dialog').evaluate(element => element.open), false);
+    await go('Historial');
+    for (const text of await page.locator('.transaction-info > span').allTextContents()) assert.match(text, /^\d{2}\/\d{2}\/\d{2}(?: · \d{2}:\d{2})? · (Ingreso|Gasto|Transferencia)$/);
     assert.deepEqual(await saved(), state, 'Navigation never saves staged forms, deletes data or changes financial state');
     assert.deepEqual(errors, []);
-    console.log('PASS: source/account/category headers, right-swipe back, short/left/cancelled gestures, menu-button click suppression, view stack, scroll/month restoration, nested tags/icons, form cancellation, chart/row gesture isolation and unchanged financial data at 320/390px.');
+    console.log(`PASS: all-entity hours without duplicate dates/types; ${animate ? 'interactive slide/parallax and cancellation' : 'reduced motion'}; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
   } catch (error) {
     if (page) await page.screenshot({ path: '/tmp/gastalo-back-navigation-error.png', fullPage: true });
     throw error;

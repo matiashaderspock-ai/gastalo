@@ -31,6 +31,9 @@ async function app(local, remote, savedConfig = config) {
       innerHTML: "", textContent: "", value: "", open: false, disabled: false,
       classList: { toggle() {}, add() {}, remove() {} },
       focus() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
+      getBoundingClientRect() { return { top: 0, left: 0, width: 390 }; },
+      querySelectorAll() { return []; },
+      cloneNode() { return { style: {}, outerHTML: "", querySelector() { return null; }, querySelectorAll() { return []; } }; },
       showModal() { this.open = true; }, close() { this.open = false; },
       addEventListener() {},
     });
