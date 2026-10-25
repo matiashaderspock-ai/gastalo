@@ -1028,13 +1028,26 @@ html.is-dragging {
   color: var(--ink);
   background: #e6ecdf;
 }
-.history-day h3 {
+.history-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 16px 0 0;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
+}
+.history-day h3 {
+  margin: 0;
   font-size: 12px;
   font-weight: 500;
   text-transform: none;
+}
+.history-day-total {
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .entity-history .transaction {
   padding: 12px 0;
