@@ -2237,14 +2237,62 @@
       <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
       <section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>`;
     }
+    const navigationStack = [];
+    function rememberNavigation() {
+      navigationStack.push({ view, detailId, detailScope, month, historyLimit,
+        scrollX: window.scrollX, scrollY: window.scrollY,
+        strips: [...document.querySelectorAll(".entity-strip")].map(strip => strip.scrollLeft) });
+    }
+    function goBack() {
+      const dialog = $("#dialog"), menu = $("#app-menu");
+      if (busy || $('#modal-form button[type="submit"]')?.disabled || settling || pointer) return false;
+      if (dialog.open) {
+        if (dialog.classList.contains("choosing-tags")) $("#tag-picker-done").click();
+        else if ($("#icon-picker") && !$("#icon-picker").hidden) {
+          $("#icon-picker").hidden = true;
+          $(".icon-preview").setAttribute("aria-expanded", "false");
+          $(".icon-preview").focus({ preventScroll: true });
+        } else if (dialog.dispatchEvent(new Event("cancel", { cancelable: true }))) dialog.close();
+        return true;
+      }
+      if (menu.open) {
+        menu.open = false;
+        $("#app-menu summary").focus({ preventScroll: true });
+        return true;
+      }
+      if (editingEntities) {
+        setEntityEditing(false);
+        return true;
+      }
+      if (view === "home") return false;
+      const previousEntity = view === "detail" ? detailId : null;
+      const previous = navigationStack.pop() || { view: "home", detailId: null,
+        detailScope: "month", month, historyLimit: 100, scrollX: 0,
+        scrollY: homeScroll, strips: homeStripScroll };
+      ({ view, detailId, detailScope, month, historyLimit } = previous);
+      if (view === "detail" && !entity(detailId)) {
+        view = "home";
+        detailId = null;
+        navigationStack.length = 0;
+      }
+      render();
+      if (view === "home") document.querySelectorAll(".entity-strip").forEach((strip, i) => {
+        strip.scrollLeft = previous.strips[i] || 0;
+      });
+      window.scrollTo(previous.scrollX, previous.scrollY);
+      const focus = view === "home" && previousEntity
+        ? [...document.querySelectorAll("[data-entity]")].find(card => card.dataset.entity === previousEntity)
+        : $("#main");
+      focus?.focus({ preventScroll: true });
+      return true;
+    }
     function render() {
       const strips = [...document.querySelectorAll(".entity-strip")], scrollY = window.scrollY;
       if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
       resetTransactionSwipe();
       $("#main").classList.toggle("compact-page", ["history", "budgets", "reports", "settings"].includes(view));
-      const categoryDetail = view === "detail" && state.categories.some((item) => item.id === detailId);
-      $("#app-menu").hidden = categoryDetail;
-      $(".app-header").classList.toggle("without-menu", categoryDetail);
+      $("#app-menu").hidden = view === "detail";
+      $(".app-header").classList.toggle("without-menu", view === "detail");
       $("#header-totals").innerHTML = view === "home" ? homeTotals()
         : view === "detail" ? detailHeader() : "";
       $("#main").classList.toggle(
@@ -2320,6 +2368,8 @@
       const action = button.dataset.action,
         id = button.dataset.id;
       if (button.dataset.view) {
+        if (button.dataset.view === "home") navigationStack.length = 0;
+        else if (button.dataset.view !== view) rememberNavigation();
         view = button.dataset.view;
         if (view === "budgets") archivedBudgetsOpen = false;
         editingEntities = false;
@@ -2367,12 +2417,7 @@
         return;
       }
       if (action === "back-home") {
-        view = "home";
-        render();
-        window.scrollTo(0, homeScroll);
-        [...document.querySelectorAll("[data-entity]")]
-          .find((card) => card.dataset.entity === detailId)
-          ?.focus({ preventScroll: true });
+        goBack();
         return;
       }
       if (action === "detail-scope") {
@@ -2517,6 +2562,7 @@
       void saveEntityOrder(key, ids, card.dataset.entity);
     });
     function openEntity(id) {
+      rememberNavigation();
       homeScroll = window.scrollY;
       detailId = id;
       detailScope = "month";
@@ -2636,6 +2682,70 @@
       if (swipeClickSuppressed && e.target.closest("[data-swipe-transaction]")) {
         e.preventDefault();
         e.stopImmediatePropagation();
+      }
+    }, true);
+    // Listen to touch events so horizontal back gestures can be claimed without
+    // restricting native horizontal scrolling in descendant tables and pickers.
+    let backSwipe = null, backSwipeClick = false, backSwipeClickTimer;
+    const backLayer = () => {
+      const dialog = $("#dialog"), icons = $("#icon-picker");
+      if (dialog.open) return dialog.classList.contains("choosing-tags") ? $("#tag-picker")
+        : icons && !icons.hidden ? icons : $("#dialog-body").firstElementChild;
+      return $("#app-menu").open ? $("#app-menu") : $("#main").firstElementChild;
+    };
+    document.addEventListener("touchstart", (event) => {
+      backSwipe = null;
+      backSwipeClick = false;
+      clearTimeout(backSwipeClickTimer);
+      const target = event.target, dialog = $("#dialog");
+      if (event.touches.length !== 1 || busy || pointer || settling ||
+          (dialog.open && !dialog.contains(target)) || window.getSelection()?.toString()) return;
+      if (target.closest('input, select, textarea, [contenteditable], .date-control, .chart-interactive, .entity-strip, [data-entity], [data-swipe-transaction], .icon-pages, .tag-choices, .movement-tags, #tag-picker-list')) return;
+      for (let node = target; node && node !== document.body; node = node.parentElement) {
+        if (node.scrollWidth > node.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(node).overflowX)) return;
+      }
+      const touch = event.touches[0];
+      backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY,
+        started: event.timeStamp, layer: backLayer(), dragging: false };
+    }, { passive: true });
+    document.addEventListener("touchmove", (event) => {
+      const p = backSwipe;
+      if (!p) return;
+      const touch = [...event.touches].find(touch => touch.identifier === p.id);
+      if (!touch || event.touches.length !== 1 || p.layer !== backLayer() || busy ||
+          event.timeStamp - p.started > 1000) { backSwipe = null; return; }
+      const dx = touch.clientX - p.x, dy = touch.clientY - p.y;
+      if (!p.dragging) {
+        if (dx < -12 || (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx))) { backSwipe = null; return; }
+        if (dx < 12 || dx < Math.abs(dy) * 1.7) return;
+        p.dragging = true;
+      }
+      if (event.cancelable) event.preventDefault();
+      else backSwipe = null;
+    }, { passive: false });
+    document.addEventListener("touchend", (event) => {
+      const p = backSwipe;
+      backSwipe = null;
+      if (!p?.dragging) return;
+      // Prevent a swiped button from activating, while allowing the next tap.
+      backSwipeClick = true;
+      backSwipeClickTimer = setTimeout(() => { backSwipeClick = false; }, 350);
+      const touch = [...event.changedTouches].find(touch => touch.identifier === p.id);
+      if (!touch || event.touches.length || p.layer !== backLayer() || window.getSelection()?.toString()) return;
+      const dx = touch.clientX - p.x, dy = Math.abs(touch.clientY - p.y);
+      const threshold = Math.min(110, Math.max(64, window.innerWidth * .22));
+      if (dx >= threshold && dy <= 64 && dx > dy * 1.7 && event.timeStamp - p.started <= 1000) goBack();
+    }, { passive: true });
+    document.addEventListener("touchcancel", () => { backSwipe = null; }, { passive: true });
+    window.addEventListener("blur", () => { backSwipe = null; });
+    document.addEventListener("visibilitychange", () => { if (document.hidden) backSwipe = null; });
+    document.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse") backSwipeClick = false;
+    });
+    document.addEventListener("click", (event) => {
+      if (backSwipeClick && event.detail > 0) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
       }
     }, true);
     const dropTarget = (p, x, y) => {
