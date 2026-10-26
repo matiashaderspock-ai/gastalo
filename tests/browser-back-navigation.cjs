@@ -43,7 +43,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     const cdp = await context.newCDPSession(page);
     const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const touch = (type, points = []) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points });
-    async function swipe(locator, { dx = 160, dy = 0, cancel = false, inspect = false } = {}) {
+    async function swipe(locator, { dx = 160, dy = 0, cancel = false, inspect = false, hold = false } = {}) {
       await locator.scrollIntoViewIfNeeded();
       const box = await locator.boundingBox();
       const start = { x: box.x + Math.min(24, box.width / 3), y: box.y + Math.min(12, box.height / 2) };
@@ -51,17 +51,20 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
       for (const progress of [.01, .03, .05, .07, .1, .2, .4, .6, .8, 1]) {
         await touch('touchMove', [{ x: start.x + dx * progress, y: start.y + dy * progress }]);
         if (inspect && progress === .4) {
-          if (animate) {
-            await page.waitForFunction(offset => {
-              const front = document.querySelector('.back-swipe-front');
-              return front && Math.abs(new DOMMatrixReadOnly(getComputedStyle(front).transform).m41 - offset) < 2;
-            }, dx * progress);
-            assert.equal(await page.locator('.back-swipe-stage').getAttribute('data-previous-view'), 'home');
-            assert.equal(await page.locator('.entity-detail').count(), 1, 'The live route stays unchanged while the finger moves');
-            const rear = await page.locator('.back-swipe-underlay').evaluate(element => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
-            assert.ok(Math.abs(rear - (dx * progress - page.viewportSize().width) * .25) < 2, 'The previous screen moves with parallax');
-            if (page.viewportSize().width === 390 && !cancel) await page.screenshot({ path: '/tmp/gastalo-back-animation.png' });
-          } else assert.equal(await page.locator('.back-swipe-stage').count(), 0, 'Reduced motion skips sliding previews');
+          await page.waitForFunction(offset => {
+            const front = document.querySelector('.back-swipe-front');
+            return front && Math.abs(new DOMMatrixReadOnly(getComputedStyle(front).transform).m41 - offset) < 2;
+          }, dx * progress);
+          assert.equal(await page.locator('.back-swipe-stage').getAttribute('data-previous-view'), 'home');
+          assert.equal(await page.locator('.entity-detail').count(), 1, 'The live route stays unchanged while the finger moves');
+          const rear = await page.locator('.back-swipe-underlay').evaluate(element => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41);
+          const expectedRear = animate ? (dx * progress - page.viewportSize().width) * .25 : 0;
+          assert.ok(Math.abs(rear - expectedRear) < 2, 'Reduced motion omits parallax but still follows the finger');
+          if (page.viewportSize().width === 390 && !cancel) await page.screenshot({ path: '/tmp/gastalo-back-animation.png' });
+          if (hold) {
+            await page.waitForTimeout(1250);
+            assert.equal(await page.locator('.back-swipe-stage').count(), 1, 'Holding the finger never times out the preview');
+          }
         }
       }
       await touch(cancel ? 'touchCancel' : 'touchEnd');
@@ -108,6 +111,21 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
         assert.equal(await page.locator('#app-menu').isVisible(), true);
       }
     }
+    // Slow starts must claim a horizontal gesture before WebKit starts a native pan.
+    await entity(account).tap();
+    const earlyClaim = await page.locator('.detail-totals').evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const point = x => new Touch({ identifier: 71, target: element, clientX: x, clientY: box.y + 8 });
+      element.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, touches: [point(box.x + 24)], changedTouches: [point(box.x + 24)] }));
+      const move = new TouchEvent('touchmove', { bubbles: true, cancelable: true,
+        touches: [point(box.x + 28)], changedTouches: [point(box.x + 28)] });
+      element.dispatchEvent(move);
+      element.dispatchEvent(new TouchEvent('touchcancel', { bubbles: true, touches: [], changedTouches: [point(box.x + 28)] }));
+      return move.defaultPrevented;
+    });
+    assert.equal(earlyClaim, true, 'A small rightward start reserves the gesture before the animation threshold');
+    await swipe(page.locator('.detail-totals'), { inspect: true, hold: true });
+    await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
     if (animate) {
       // An interrupted gesture must not leave a preview or a blocked page.
       await entity(account).tap();
@@ -117,9 +135,9 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
       await touch('touchMove', [{ x: start.x + 80, y: start.y }]);
       await page.locator('.back-swipe-stage').waitFor();
       await page.setViewportSize({ width: 400, height: 844 });
-      await touch('touchCancel');
       await settle();
       await page.locator('.back-swipe-stage').waitFor({ state: 'detached' });
+      await touch('touchCancel');
       assert.equal(await page.locator('.back-swipe-stage').count(), 0);
       assert.equal(await page.locator('html').evaluate(element => element.classList.contains('back-swipe-settling')), false);
       assert.equal(await page.locator('.entity-detail').count(), 1, 'Resizing aborts the gesture without changing the route');
@@ -228,7 +246,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     for (const text of await page.locator('.transaction-info > span').allTextContents()) assert.match(text, /^\d{2}\/\d{2}\/\d{2}(?: · \d{2}:\d{2})? · (Ingreso|Gasto|Transferencia)$/);
     assert.deepEqual(await saved(), state, 'Navigation never saves staged forms, deletes data or changes financial state');
     assert.deepEqual(errors, []);
-    console.log(`PASS: all-entity hours/types without duplicate dates; ${animate ? 'interactive slide/parallax and cancellation' : 'reduced motion'}; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
+    console.log(`PASS: all-entity hours/types without duplicate dates; ${animate ? 'interactive slide/parallax' : 'direct tracking with reduced motion'}; slow starts, held gestures and cancellation; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
   } catch (error) {
     if (page) await page.screenshot({ path: '/tmp/gastalo-back-navigation-error.png', fullPage: true });
     throw error;

@@ -2744,7 +2744,9 @@
       }) };
     }
     function startBackVisual(p) {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      // Direct manipulation still follows the finger with Reduce Motion enabled;
+      // only the automatic settling and the background parallax are omitted.
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
       const dialog = $("#dialog"), menu = $("#app-menu");
       if (!dialog.open && !menu.open && !editingEntities && view !== "home") {
         const stage = document.createElement("div");
@@ -2772,6 +2774,7 @@
         p.visual = { element, saved, width: innerWidth,
           end: innerWidth - element.getBoundingClientRect().left + 20, offset: 0 };
       }
+      if (p.visual) p.visual.reducedMotion = reducedMotion;
       document.documentElement.classList.add("back-swipe-active");
     }
     function paintBackVisual(p, dx) {
@@ -2780,7 +2783,7 @@
       visual.offset = Math.max(0, Math.min(visual.end, dx));
       visual.element.style.transform = `translate3d(${visual.offset}px, 0, 0)`;
       if (visual.underlay) {
-        visual.underlay.style.transform = `translate3d(${(visual.offset - visual.width) * .25}px, 0, 0)`;
+        visual.underlay.style.transform = `translate3d(${visual.reducedMotion ? 0 : (visual.offset - visual.width) * .25}px, 0, 0)`;
         visual.shade.style.opacity = .12 * Math.max(0, 1 - visual.offset / visual.width);
       }
     }
@@ -2809,13 +2812,13 @@
       backSwipeAnimation = p;
       document.documentElement.classList.add("back-swipe-settling");
       const end = navigate ? visual.end : 0;
-      const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0
+      const duration = visual.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches ? 0
         : Math.min(240, Math.max(100, Math.abs(end - visual.offset) / visual.width * 240));
       const options = { duration, easing: "cubic-bezier(.22,.7,.25,1)", fill: "forwards" };
       p.animations = [visual.element.animate([
         { transform: `translate3d(${visual.offset}px, 0, 0)` }, { transform: `translate3d(${end}px, 0, 0)` },
       ], options)];
-      if (visual.underlay) {
+      if (visual.underlay && !visual.reducedMotion) {
         p.animations.push(visual.underlay.animate([
           { transform: `translate3d(${(visual.offset - visual.width) * .25}px, 0, 0)` },
           { transform: `translate3d(${(end - visual.width) * .25}px, 0, 0)` },
@@ -2857,18 +2860,22 @@
       }
       const touch = event.touches[0];
       backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY,
-        started: event.timeStamp, layer: backLayer(), dragging: false };
+        layer: backLayer(), dragging: false };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
       const p = backSwipe;
       if (!p) return;
       const touch = [...event.touches].find(touch => touch.identifier === p.id);
-      if (!touch || event.touches.length !== 1 || p.layer !== backLayer() || busy ||
-          event.timeStamp - p.started > 1000) { cancelBackSwipe(); return; }
+      if (!touch || event.touches.length !== 1 || p.layer !== backLayer() || busy) { cancelBackSwipe(); return; }
       const dx = touch.clientX - p.x, dy = touch.clientY - p.y;
       if (!p.dragging) {
         if (dx < -12 || (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx))) { backSwipe = null; return; }
-        if (dx < 12 || dx < Math.abs(dy) * 1.7) return;
+        if (dx < 3 || dx < Math.abs(dy) * 1.7) return;
+        // WebKit can commit to native scrolling after the first touchmove.
+        // Reserve a clear rightward start before waiting for the visual threshold.
+        if (!event.cancelable) { cancelBackSwipe(); return; }
+        event.preventDefault();
+        if (dx < 12) return;
         p.dragging = true;
         startBackVisual(p);
       }
@@ -2892,11 +2899,11 @@
       const dx = touch.clientX - p.x, dy = Math.abs(touch.clientY - p.y);
       const threshold = Math.min(110, Math.max(64, window.innerWidth * .22));
       paintBackVisual(p, dx);
-      void finishBackSwipe(p, dx >= threshold && dy <= 64 && dx > dy * 1.7 && event.timeStamp - p.started <= 1000);
+      void finishBackSwipe(p, dx >= threshold && dy <= 64 && dx > dy * 1.7);
     }, { passive: true });
     document.addEventListener("touchcancel", cancelBackSwipe, { passive: true });
     window.addEventListener("blur", abortBackAnimation);
-    document.addEventListener("resize", abortBackAnimation);
+    window.addEventListener("resize", abortBackAnimation);
     document.addEventListener("visibilitychange", () => { if (document.hidden) abortBackAnimation(); });
     document.addEventListener("pointerdown", (event) => {
       if (event.pointerType === "mouse") backSwipeClick = false;
