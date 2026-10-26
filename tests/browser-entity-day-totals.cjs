@@ -43,10 +43,24 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     const row = id => page.locator(`[data-swipe-transaction="${id}"]`);
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
-      for (const [item, expected] of [[bank, '+Bs 70,00'], [cash, '+Bs 15,00'], [source, '+Bs 120,00'], [category, '−Bs 35,00']]) {
+      for (const [item, expected, tone] of [[bank, 'Bs 70,00', 'positive'], [cash, 'Bs 15,00', 'positive'], [source, 'Bs 120,00', 'positive'], [category, 'Bs 35,00', 'negative']]) {
         await page.locator(`[data-entity="${item.id}"]`).click();
         assert.equal(await total('2026-02-10').innerText(), expected);
-        assert.equal(await total('2026-02-10').getAttribute('aria-label'), `Total neto del día: ${expected}`);
+        assert.equal(await total('2026-02-10').getAttribute('aria-label'), `Total neto del día: ${tone === "positive" ? "positivo" : "negativo"}, ${expected}`);
+        assert.equal(await total('2026-02-10').evaluate(element => getComputedStyle(element).color), tone === 'positive' ? 'rgb(35, 99, 82)' : 'rgb(163, 49, 49)');
+        const amounts = await page.locator('[data-swipe-transaction]').evaluateAll(rows => rows.map(row => {
+          const amount = row.querySelector('.transaction-end > strong');
+          return { id: row.dataset.swipeTransaction, text: amount.textContent,
+            color: getComputedStyle(amount).color, label: amount.getAttribute('aria-label') };
+        }));
+        for (const amount of amounts) {
+          const transaction = state.transactions.find(t => t.id === amount.id);
+          const positive = A.entityMovementAmount(transaction, item.id) > 0;
+          assert.match(amount.text, /^Bs \d/);
+          assert.doesNotMatch(amount.text, /[+−-]/);
+          assert.equal(amount.color, positive ? 'rgb(35, 99, 82)' : 'rgb(163, 49, 49)');
+          assert.match(amount.label, positive ? /positivo/ : /negativo/);
+        }
         assert.equal(await day('2026-02-10').locator('h3').innerText(), '10/02/26');
         const dateBox = await day('2026-02-10').locator('h3').boundingBox(), amountBox = await total('2026-02-10').boundingBox();
         assert.ok(Math.abs(dateBox.y - amountBox.y) < 2 && amountBox.x > dateBox.x + dateBox.width, 'Date and net amount share one line');
@@ -57,13 +71,15 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
         }
         if (item.id === bank.id) {
           assert.equal(await total('2026-02-11').innerText(), 'Bs 0,00');
+          assert.equal(await total('2026-02-11').evaluate(element => getComputedStyle(element).color), 'rgb(105, 118, 109)');
+          assert.equal(await total('2026-02-11').getAttribute('aria-label'), 'Total neto del día: cero, Bs 0,00');
           assert.equal(await page.locator('.transaction').count(), 100);
           assert.equal(await row('expense').locator('.transaction-info > span').innerText(), '19:00 · Gasto');
           assert.equal(await row('transfer-out').locator('.transaction-info > span').innerText(), '18:00 · Transferencia');
           assert.equal(await row('income-0').locator('.transaction-info > span').innerText(), '09:15 · Ingreso');
           await page.getByRole('button', { name: 'Mostrar 100 más', exact: true }).click();
           assert.equal(await page.locator('.transaction').count(), 125);
-          assert.equal(await total('2026-02-10').innerText(), '+Bs 70,00', 'Loading more does not change the complete-day total');
+          assert.equal(await total('2026-02-10').innerText(), 'Bs 70,00', 'Loading more does not change the complete-day total');
           if (width === 390) {
             await day('2026-02-10').locator('.history-day-heading').scrollIntoViewIfNeeded();
             await page.screenshot({ path: '/tmp/gastalo-entity-day-totals.png' });
@@ -77,21 +93,41 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.locator('[name="amount"]').fill('45,00');
     await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
     await page.locator('#dialog').waitFor({ state: 'hidden' });
-    assert.equal(await total('2026-02-10').innerText(), '+Bs 60,00');
+    assert.equal(await total('2026-02-10').innerText(), 'Bs 60,00');
     await row('transfer-in').locator('[data-action="delete-transaction"]').click();
-    await page.waitForFunction(() => document.querySelector('.history-day:has(time[datetime="2026-02-10"]) .history-day-total').textContent === '+Bs 50,00');
+    await page.waitForFunction(() => document.querySelector('.history-day:has(time[datetime="2026-02-10"]) .history-day-total').textContent === 'Bs 50,00');
     await page.locator('#toast [data-action="undo"]').click();
-    await page.waitForFunction(() => document.querySelector('.history-day:has(time[datetime="2026-02-10"]) .history-day-total').textContent === '+Bs 60,00');
+    await page.waitForFunction(() => document.querySelector('.history-day:has(time[datetime="2026-02-10"]) .history-day-total').textContent === 'Bs 60,00');
     await page.getByRole('button', { name: 'Mes anterior', exact: true }).click();
-    assert.equal(await total('2026-01-03').innerText(), '−Bs 7,77');
+    assert.equal(await total('2026-01-03').innerText(), 'Bs 7,77');
     await page.getByRole('button', { name: 'Mes siguiente', exact: true }).click();
-    assert.equal(await total('2026-02-10').innerText(), '+Bs 60,00');
+    assert.equal(await total('2026-02-10').innerText(), 'Bs 60,00');
     await page.getByRole('button', { name: 'Todo el historial', exact: true }).click();
     await page.getByRole('button', { name: 'Mostrar 100 más', exact: true }).click();
-    assert.equal(await total('2026-01-03').innerText(), '−Bs 7,77');
-    assert.equal(await total('2026-02-10').innerText(), '+Bs 60,00');
+    assert.equal(await total('2026-01-03').innerText(), 'Bs 7,77');
+    assert.equal(await total('2026-02-10').innerText(), 'Bs 60,00');
+    await row('expense').locator('[data-action="edit-transaction"]').click();
+    await page.locator('[name="amount"]').fill('135,00');
+    await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+    await page.locator('#dialog').waitFor({ state: 'hidden' });
+    assert.equal(await total('2026-02-10').innerText(), 'Bs 30,00');
+    assert.equal(await total('2026-02-10').evaluate(element => getComputedStyle(element).color), 'rgb(163, 49, 49)', 'Editing can turn a green net into a red net');
+    assert.equal(await total('2026-02-10').getAttribute('aria-label'), 'Total neto del día: negativo, Bs 30,00');
+    await page.getByRole('button', { name: 'Volver a Inicio', exact: true }).click();
+    await page.locator('#app-menu > summary').click();
+    await page.getByRole('button', { name: 'Historial', exact: true }).click();
+    const generalAmounts = await page.locator('.transaction').evaluateAll(rows => rows.map(row => ({
+      kind: row.querySelector('.transaction-symbol').className.split(' ').at(-1),
+      text: row.querySelector('.transaction-end > strong').textContent,
+      color: getComputedStyle(row.querySelector('.transaction-end > strong')).color,
+    })));
+    assert.ok(generalAmounts.some(amount => amount.kind === 'transfer'));
+    for (const amount of generalAmounts) {
+      assert.doesNotMatch(amount.text, /[+−-]/);
+      assert.equal(amount.color, { income: 'rgb(35, 99, 82)', expense: 'rgb(163, 49, 49)', transfer: 'rgb(105, 118, 109)' }[amount.kind]);
+    }
     assert.deepEqual(errors, []);
-    console.log('PASS: hour/type labels and complete daily net totals across all entities, positive/negative/zero, pagination, editing, deletion/undo and month/all-history scopes at 320/390/1280px.');
+    console.log('PASS: signless red/green/neutral amounts and accessible polarity across all entities and general history; complete daily totals, pagination, sign-changing edits, deletion/undo and month/all-history scopes at 320/390/1280px.');
   } catch (error) {
     if (page) await page.screenshot({ path: '/tmp/gastalo-day-totals-error.png', fullPage: true });
     throw error;

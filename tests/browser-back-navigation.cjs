@@ -126,6 +126,30 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.equal(earlyClaim, true, 'A small rightward start reserves the gesture before the animation threshold');
     await swipe(page.locator('.detail-totals'), { inspect: true, hold: true });
     await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
+    // Trusted touches distinguish a quick short flick from a held partial drag.
+    async function gesture(points, pauseBeforeRelease = 0) {
+      const box = await page.locator('.detail-totals').boundingBox();
+      const start = { x: box.x + 24, y: box.y + 8 };
+      await touch('touchStart', [start]);
+      for (const [dx, pause = 0] of points) {
+        await touch('touchMove', [{ x: start.x + dx, y: start.y }]);
+        if (pause) await page.waitForTimeout(pause);
+      }
+      if (pauseBeforeRelease) await page.waitForTimeout(pauseBeforeRelease);
+      await touch('touchEnd');
+      await settle();
+      await page.waitForFunction(() => !document.documentElement.classList.contains('back-swipe-settling'));
+    }
+    await entity(account).tap();
+    await gesture([[20], [54]], 180);
+    assert.equal(await page.locator('.entity-detail').count(), 1, 'A short drag held still returns to its place');
+    await gesture([[20], [220, 150], [180], [120]]);
+    assert.equal(await page.locator('.entity-detail').count(), 1, 'Reversing cancels even after crossing the completion distance');
+    await gesture([[20], [54]]);
+    await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
+    await entity(account).tap();
+    await gesture([[20], [100]], 180);
+    await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
     if (animate) {
       // An interrupted gesture must not leave a preview or a blocked page.
       await entity(account).tap();
