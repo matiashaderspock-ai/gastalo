@@ -425,6 +425,17 @@
     if (offset >= -32) return "closed";
     return -offset >= Math.max(140, width * 0.65) ? "delete" : "revealed";
   }
+  function backSwipeOutcome({ dx, dy, width, samples }) {
+    const end = samples.at(-1);
+    const start = samples.find(sample => sample.time >= end.time - 120);
+    const elapsed = end.time - start.time;
+    const velocity = elapsed > 0 ? (end.x - start.x) / elapsed : 0;
+    // A short flick projects forward; holding still removes momentum, and a
+    // deliberate reversal cancels even after passing the distance threshold.
+    if (dx < 36 || Math.abs(dy) > 64 || dx <= Math.abs(dy) * 1.7 || velocity < -.15) return "cancel";
+    const threshold = Math.min(110, Math.max(64, width * .22));
+    return dx + Math.max(0, velocity) * 180 >= threshold ? "back" : "cancel";
+  }
   function scrollEntityStrip({ x, y, left, right, top, bottom,
     scrollLeft, scrollWidth, clientWidth }, elapsedMs) {
     const max = Math.max(0, scrollWidth - clientWidth);
@@ -1131,6 +1142,7 @@
     canDrop,
     gestureIntent,
     transactionSwipeOutcome,
+    backSwipeOutcome,
     scrollEntityStrip,
     balances,
     filterTransactions,
@@ -1180,7 +1192,9 @@
       Math.trunc(Math.abs(n) / 100).toLocaleString("es-BO") +
       "," +
       String(Math.abs(n) % 100).padStart(2, "0");
-    const signedMoney = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + money(Math.abs(n));
+    const amountClass = (n) => n > 0 ? "amount-positive" : n < 0 ? "amount-negative" : "amount-neutral";
+    const amountDescription = (n, label = "Importe") =>
+      `${label}: ${n > 0 ? "positivo" : n < 0 ? "negativo" : "cero"}, ${money(Math.abs(n))}`;
     const decimal = (n) =>
       (n < 0 ? "-" : "") +
       Math.trunc(Math.abs(n) / 100) +
@@ -1987,8 +2001,12 @@
       const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
       const metadata = contextId ? `${time ? time + " · " : ""}${labels[t.kind]}`
         : `${formatDate(t.occurred_on)}${time ? ` · ${time}` : ""} · ${labels[t.kind]}`;
-      const amount = contextId ? signedMoney(entityMovementAmount(t, contextId)) : money(t.amount_cents);
-      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${metadata}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong>${amount}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      const value = contextId ? entityMovementAmount(t, contextId)
+        : t.kind === "expense" ? -t.amount_cents : t.kind === "income" ? t.amount_cents : null;
+      const amount = money(t.amount_cents);
+      const amountAttributes = value === null ? 'class="amount-neutral"'
+        : `class="${amountClass(value)}" aria-label="${amountDescription(value)}"`;
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${metadata}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong ${amountAttributes}>${amount}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
       return contextId
         ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
         : row;
@@ -2123,7 +2141,7 @@
                     budget(state, detailId, month).limit,
                   )
                 : "");
-      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3><strong class="history-day-total" aria-label="Total neto del día: ${signedMoney(dayTotals.get(date))}">${signedMoney(dayTotals.get(date))}</strong></div><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3><strong class="history-day-total ${amountClass(dayTotals.get(date))}" aria-label="${amountDescription(dayTotals.get(date), "Total neto del día")}">${money(Math.abs(dayTotals.get(date)))}</strong></div><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
     }
     function history() {
       const ts = filterTransactions(state, filters).sort(
@@ -2860,7 +2878,7 @@
       }
       const touch = event.touches[0];
       backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY,
-        layer: backLayer(), dragging: false };
+        layer: backLayer(), dragging: false, samples: [{ x: touch.clientX, time: event.timeStamp }] };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
       const p = backSwipe;
@@ -2868,6 +2886,8 @@
       const touch = [...event.touches].find(touch => touch.identifier === p.id);
       if (!touch || event.touches.length !== 1 || p.layer !== backLayer() || busy) { cancelBackSwipe(); return; }
       const dx = touch.clientX - p.x, dy = touch.clientY - p.y;
+      p.samples = p.samples.filter(sample => sample.time >= event.timeStamp - 120);
+      p.samples.push({ x: touch.clientX, time: event.timeStamp });
       if (!p.dragging) {
         if (dx < -12 || (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx))) { backSwipe = null; return; }
         if (dx < 3 || dx < Math.abs(dy) * 1.7) return;
@@ -2897,9 +2917,9 @@
         return;
       }
       const dx = touch.clientX - p.x, dy = Math.abs(touch.clientY - p.y);
-      const threshold = Math.min(110, Math.max(64, window.innerWidth * .22));
+      p.samples.push({ x: touch.clientX, time: event.timeStamp });
       paintBackVisual(p, dx);
-      void finishBackSwipe(p, dx >= threshold && dy <= 64 && dx > dy * 1.7);
+      void finishBackSwipe(p, backSwipeOutcome({ dx, dy, width: innerWidth, samples: p.samples }) === "back");
     }, { passive: true });
     document.addEventListener("touchcancel", cancelBackSwipe, { passive: true });
     window.addEventListener("blur", abortBackAnimation);

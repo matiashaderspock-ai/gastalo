@@ -1049,6 +1049,15 @@ html.is-dragging {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.amount-positive {
+  color: var(--green);
+}
+.amount-negative {
+  color: #a33131;
+}
+.amount-neutral {
+  color: var(--muted);
+}
 .entity-history .transaction {
   padding: 12px 0;
 }

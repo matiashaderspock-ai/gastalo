@@ -242,12 +242,12 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       if (name === "Comida")
         assert.match(
           await page.locator(".transaction-end > strong").innerText(),
-          /^−Bs /,
+          /^Bs /,
         );
       if (name === "Trabajo")
         assert.match(
           await page.locator(".transaction-end > strong").innerText(),
-          /^\+Bs /,
+          /^Bs /,
         );
       assert.equal(
         await page.evaluate(
