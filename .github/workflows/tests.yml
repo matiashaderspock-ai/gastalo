@@ -17,7 +17,8 @@ jobs:
     # A queued auto-merge cannot outrun labeling: the required check finishes afterwards.
     needs: label-guard
     if: always()
-    runs-on: ubuntu-latest
+    # Match the pinned Playwright browser/dependency support matrix.
+    runs-on: ubuntu-24.04
     steps:
       - name: Require successful label guard
         if: github.event_name == 'pull_request' && needs.label-guard.result != 'success'
