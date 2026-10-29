@@ -1,3 +1,4 @@
+const { openDisclosure } = require("./browser-helpers.cjs");
 const { setHomeMonth } = require("./browser-helpers.cjs");
 const { chromium, devices } = require("playwright");
 const assert = require("node:assert/strict");
@@ -40,8 +41,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       await page.setViewportSize({ width, height: 844 });
       for (const name of ["Historial", "Gráficos"]) {
         await go(name);
+        await openDisclosure(page, ".filters");
         for (const id of ["f-start", "f-end", "f-entities", "f-tags"])
-          assert.ok((await page.locator(`#${id}`).boundingBox()).height <= 32.5, `${name}: ${id} is compact`);
+          assert.ok((await page.locator(`#${id}`).boundingBox()).height <= 44.5, `${name}: ${id} is compact`);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       }
       assert.equal(await page.locator(".pie-slice").count(), 8);
@@ -60,11 +62,13 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         await page.screenshot({ path: "/tmp/gastalo-report-pie.png", fullPage: true });
       }
     }
+    await openDisclosure(page, ".filters");
     await page.locator("#f-entities").selectOption("pie-category-0");
     await page.getByRole("button", { name: "Aplicar filtros" }).click();
     assert.equal(await page.locator(".pie-slice").count(), 1);
     assert.equal(await page.locator(".pie-slice").getAttribute("data-percent"), "100");
     assert.equal(await page.locator(".pie-others").count(), 0);
+    await openDisclosure(page, ".filters");
     await page.locator("#f-start").fill("2030-01-01");
     await page.getByRole("button", { name: "Aplicar filtros" }).click();
     assert.equal(await page.locator(".expense-pie").count(), 0);

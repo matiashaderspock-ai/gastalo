@@ -2592,3 +2592,87 @@ dialog.back-swipe-clipping {
     grid-template-columns: 1fr;
   }
 }
+/* Compact hierarchy with comfortable touch targets; financial meanings stay unchanged. */
+:root { --muted: #526257; }
+.row-0 { --row-color: #49691f; }
+.eyebrow { color: #52623d; }
+.entity-card strong.budget-gray { color: #526257; }
+.entity-card strong.budget-orange { color: #975009; }
+.entity-card strong.budget-red { color: #a33131; }
+.home-totals .stat span { font-size: 11px; line-height: 1.25; }
+.home-totals .stat strong { white-space: nowrap; }
+.compact-page .page-heading { padding: 8px 0; }
+.compact-page .page-heading > p { font-size: 13px; }
+.compact-page button, .compact-dialog button, .detail-period > button,
+.history-scope button, .transaction-end button, .budget-heading button {
+  min-height: 44px; min-width: 44px; font-size: 14px;
+}
+.compact-month { grid-template-columns: 44px auto 44px; }
+.compact-month button, .compact-page .compact-month button { min-width: 44px; min-height: 44px; }
+.compact-month .month-picker { min-width: 44px; height: 44px; font-size: 13px; }
+.compact-month .month-picker input { min-height: 44px; height: 44px; }
+.compact-page summary, .compact-dialog summary { min-height: 44px; }
+.compact-page .filters { padding: 8px 12px; }
+.compact-page .filters > summary { min-height: 48px; padding: 4px 0; font-size: 14px; }
+.filters > summary small { display: block; margin: 3px 0 0 16px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.35; }
+.filters:not([open]) > summary { margin-bottom: 0; }
+.compact-page .filters input, .compact-page .filters select { min-height: 44px; height: 44px; font-size: 16px; }
+.compact-page label { font-size: 13px; }
+.filter-sharing { margin: 4px 0; font-size: 12px; }
+.compact-page .inline-actions { margin-top: 8px; }
+.transaction-actions { display: block; }
+.transaction-actions > summary { list-style: none; min-width: 44px; min-height: 44px; display: inline-grid; place-items: center; font-size: 22px; cursor: pointer; border-radius: 8px; }
+.transaction-actions > summary::-webkit-details-marker { display: none; }
+.transaction-actions[open] > div { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.transaction-end { align-self: start; }
+.transaction-note { font-size: 13px; margin-top: 4px; }
+.transaction-note > summary { list-style: none; cursor: pointer; color: var(--muted); min-height: 44px; display: flex; align-items: center; }
+.transaction-note > summary::-webkit-details-marker { display: none; }
+.note-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.note-close { display: none; }
+.transaction-note[open] .note-preview { display: none; }
+.transaction-note[open] .note-close { display: inline; }
+.transaction-note p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.compact-page .transaction, .entity-history .transaction { padding: 8px 0; gap: 8px; }
+.transaction-info > span, .compact-page .transaction-info > span { font-size: 12px; }
+.tags { font-size: 12px; }
+.compact-page .history-day-heading { margin-top: 8px; }
+.budget-card { min-width: 0; }
+.budget-heading h2 { overflow-wrap: anywhere; }
+.budget-card.budget-red .budget-spent, .budget-card.budget-red dd { color: #a33131; }
+.budget-card.budget-red progress { accent-color: #a33131; }
+.budget-card.budget-red progress::-webkit-progress-value { background: #a33131; }
+.budget-card.budget-orange progress { accent-color: #975009; }
+.budget-card.budget-orange progress::-webkit-progress-value { background: #975009; }
+.budget-unlimited, .limit-contributions { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.settings-group > summary { font-weight: 650; font-size: 15px; }
+.settings-group[open] > summary { margin-bottom: 8px; }
+.report-breakdown > summary, .report-table > summary { font-size: 14px; color: var(--green); }
+.draft-notice { padding: 8px; margin-bottom: 8px; background: #e6ecdf; border-radius: 10px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.draft-notice span { flex-basis: 100%; }
+#movement-clock-info { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; }
+#change-movement-clock { background: transparent; border: 0; color: var(--green); text-decoration: underline; padding: 4px 0; }
+.gesture-help { font-size: 13px; padding: 8px 0; color: var(--muted); }
+.gesture-help > summary { min-height: 44px; cursor: pointer; }
+.exact-amount { font-size: 12px; }
+.exact-amount summary { min-height: 44px; color: var(--green); cursor: pointer; }
+.exact-amount span { display: block; overflow-wrap: anywhere; font-size: 13px; }
+@media (max-width: 360px) {
+  .home-totals { gap: 6px; }
+  .home-totals .stat span { font-size: 11px; }
+  .home-totals .stat strong { font-size: 12px; }
+  .compact-page .budget-grid { grid-template-columns: 1fr; }
+}
+
+.compact-page .transaction-end button, .compact-page .budget-heading button, .detail-toolbar button { min-height: 44px; min-width: 44px; }
+
+.tags:empty { display: none; }
+@media (max-width: 600px) { .compact-page .budget-grid.budget-long-names { grid-template-columns: 1fr; } }
+
+.entity-card strong.budget-green { color: var(--green); }
+.entity-planned { font-size: 12px; line-height: 14px; }
+.stat strong small { opacity: 1; font-size: 12px; }
+.compact-dialog .dialog-heading button { min-height: 44px; min-width: 44px; width: 44px; }
+.titleless-dialog:not(.choosing-tags) .movement-tags { margin-right: 50px; }
+
+.compact-page .budget-spent span { font-size: 12px; }

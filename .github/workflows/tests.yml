@@ -27,3 +27,19 @@ jobs:
         with:
           node-version: 22
       - run: node --test tests/*.test.cjs
+      - name: Install browser checks
+        run: |
+          npm install --prefix /tmp/gastalo-browser playwright@1.58.2 --no-audit --no-fund
+          node /tmp/gastalo-browser/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Check mobile flows and offline updates
+        env:
+          NODE_PATH: /tmp/gastalo-browser/node_modules
+          GASTALO_URL: http://127.0.0.1:4173/
+        run: |
+          export CHROMIUM_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/gastalo-browser-server.log 2>&1 &
+          node tests/browser-review.cjs
+          node tests/browser-back-navigation.cjs
+          GASTALO_ANIMATE_BACK=1 node tests/browser-back-navigation.cjs
+          node tests/browser-entity-chart.cjs
+          node tests/browser-app-update.cjs

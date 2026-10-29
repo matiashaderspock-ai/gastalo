@@ -129,7 +129,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     }
     await page.locator('#app-menu > summary').click();
     await page.getByRole('button', { name: 'Historial', exact: true }).click();
-    assert.match(await page.locator('.transaction-info > span').first().innerText(), /^08\/10\/26 · 13:20 · Gasto$/, 'General history retains date and movement type');
+    assert.match(await page.locator('.transaction-info > span').first().innerText(), /^13:20 · Gasto$/, 'General history retains hour/type while the day heading owns its date');
     assert.deepEqual(await saved(), state, 'Exploring the chart never writes financial data');
     assert.deepEqual(errors, []);
     console.log('PASS: category metadata, touch scrubbing of 12 months, mouse hover, keyboard, bounds, cancellation, month changes, zero/negative series, accessible table and unchanged financial data at 320/390/1280px.');
