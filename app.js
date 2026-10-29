@@ -1585,7 +1585,7 @@
       } catch { /* Keep an in-memory draft when session storage is unavailable. */ }
     }
     function movement(from = "", to = "", transaction = null, reviewId = null) {
-      const t = transaction, pendingTags = [], returnView = view,
+      const t = transaction, draftOwner = uid(), pendingTags = [], returnView = view,
         scrollY = window.scrollY, scrollX = window.scrollX,
         stripScroll = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
       const eventTimezone = t?.occurred_timezone || state.profile.timezone;
@@ -1613,6 +1613,7 @@
         ${t || reviewId ? "" : `<div id="movement-clock-info"><p class="movement-timestamp muted"><time datetime="${clock.date}T${initialTime}">${formatDate(clock.date)} · ${initialTime.slice(0, 5)}</time></p><button type="button" id="change-movement-clock">Cambiar fecha y hora</button></div>`}
         <p id="movement-timezone" class="movement-timezone muted">Hora local · ${esc(eventTimezone)}${t && !t.occurred_time ? " · Hora anterior no registrada" : ""}</p></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
         async (data) => {
+          captureMovementDraft();
           // Existing records and metadata are immutable. Copy only collections
           // this form changes; the complete next state is still validated and
           // committed in one revision-checked IndexedDB transaction.
@@ -1662,7 +1663,7 @@
             !!t,
           );
           submitted = true;
-          if (recovered || !draft) keepMovementDraft(null);
+          if (movementDraft?.owner === draftOwner) keepMovementDraft(null);
         },
         {
           compact: true,
@@ -1784,7 +1785,7 @@
         const values = Object.fromEntries(new FormData(form));
         const dirty = ["amount", "note", "from", "to", "date", "time"].some(key => values[key] !== initial[key]) ||
           selectedTags.join("|") !== (t?.tag_ids || []).join("|");
-        if (dirty || recovered) keepMovementDraft({ ...values, transactionId: t?.id || null, tagIds: selectedTags, pendingTags });
+        if (dirty || recovered) keepMovementDraft({ ...values, owner: draftOwner, transactionId: t?.id || null, tagIds: selectedTags, pendingTags });
       }
       const draftInput = event => {
         if (event.target.matches("[name], [data-movement-tag]")) captureMovementDraft();

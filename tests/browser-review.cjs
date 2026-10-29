@@ -131,6 +131,24 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.locator('#recover-draft').click();
     assert.equal(await page.locator('[name="amount"]').inputValue(), '23,75', 'Reloading a live form preserves its unregistered amount');
     await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    // Ignore and discard an old draft, then register another movement. Neither
+    // path may offer the posted payload for recovery and create a duplicate.
+    for (const discard of [false, true]) {
+      const beforeCount = (await readState()).transactions.length;
+      await openMovementFromMenu(page);
+      assert.equal(await page.locator('#recover-draft').count(), 1, 'The old pending draft is present before testing ignore/discard');
+      if (discard) await page.locator('#discard-draft').click();
+      await page.locator('[name="from"]').selectOption(bank.id);
+      await page.locator('[name="to"]').selectOption(category.id);
+      await page.locator('[name="amount"]').fill(discard ? '42,25' : '31,25');
+      await page.getByRole('button', { name: 'Registrar', exact: true }).click();
+      await page.locator('#dialog').waitFor({ state: 'hidden' });
+      assert.equal((await readState()).transactions.length, beforeCount + 1);
+      await openMovementFromMenu(page);
+      assert.equal(await page.locator('#recover-draft').count(), 0, 'A posted movement must never be offered as an unregistered draft');
+      await page.locator('[name="amount"]').fill('29,25');
+      await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    }
     await go('Gráficos');
     assert.equal(await page.locator('.filters').evaluate(e => e.open), false);
     assert.equal(await page.locator('.report-breakdown').evaluate(e => e.open), false);

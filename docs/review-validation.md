@@ -5,7 +5,7 @@ This change keeps the label and calculation of **Gastos planeados** intact. Arch
 ## Functional checks
 
 - 120 unit tests, including independent BigInt accounting over 5,000 mixed posted/deleted records and equivalence of prepared monthly budgets with archived categories.
-- Mobile browser coverage for filters, grouped dates, contextual transaction actions, optional dates/times, session draft recovery including reload of an open form, edit/Undo restoring every collection, budget states and invalid JSON preservation.
+- Mobile browser coverage for filters, grouped dates, contextual transaction actions, optional dates/times, session draft recovery including reload of an open form and clearing posted drafts after ignoring/discarding an earlier draft, edit/Undo restoring every collection, budget states and invalid JSON preservation.
 - Existing flows cover income/expense/transfers, imports, recurring historical limits, deletion/Undo, ordering and edge scrolling, charts, concurrency, reset/sync guards and offline updates.
 - Browser update regression holds a version response in flight while a new foreground event arrives, ensuring the new check is queued instead of dropped.
 - Chromium accessibility scan of Home, History, Limits, Reports and Import/Export found no violations for the WCAG 2 A/AA, WCAG 2.1 AA and best-practice rules exercised in the synthetic 390 px scenario. This is not a VoiceOver or complete accessibility certification.
