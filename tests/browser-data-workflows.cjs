@@ -1,3 +1,4 @@
+const { openDisclosure } = require("./browser-helpers.cjs");
 const { setHomeMonth } = require("./browser-helpers.cjs");
 /* Uses synthetic data and intercepted GitHub requests; never contacts a real backup repo. */
 const { chromium, devices } = require("playwright");
@@ -124,7 +125,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.getByRole("button", { name: "Cancelar", exact: true }).click();
     assert.deepEqual((await records()).main.data, saved);
     // Enable a synthetic backup and verify reset is atomic against concurrent writes.
+    await openDisclosure(page, "#backup-settings");
     await page.locator("#sync-token").fill("synthetic-reset-test");
+    await openDisclosure(page, "#backup-settings");
     await page.getByRole("button", { name: "Sincronizar ahora", exact: true }).click();
     await page.waitForFunction(() => document.querySelector("#sync-status").textContent.includes("Última sincronización"));
     await page.locator('[data-action="reset-app"]').click();
@@ -147,7 +150,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     // Hold a synthetic request open so reset also exercises in-flight sync cancellation.
     holdRead = true;
     const started = new Promise(resolve => { readStarted = resolve; });
+    await openDisclosure(page, "#backup-settings");
     await page.locator("#sync-token").fill("synthetic-reset-test-changed");
+    await openDisclosure(page, "#backup-settings");
     await page.getByRole("button", { name: "Sincronizar ahora", exact: true }).click();
     await started;
     await page.locator('[data-action="reset-app"]').click();
@@ -188,6 +193,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal((await records()).sync_config.paused, true);
     assert.equal(syncCalls.filter(method => method === "PUT").length, putsBefore);
     await go("Importar/Exportar");
+    await openDisclosure(page, "#backup-settings");
     await page.getByRole("button", { name: "Sincronizar ahora", exact: true }).click();
     await page.getByRole("heading", { name: "Confirmar reemplazo del respaldo" }).waitFor();
     await page.getByRole("button", { name: "Reemplazar", exact: true }).click();

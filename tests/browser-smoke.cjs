@@ -1,3 +1,4 @@
+const { openDisclosure, openRowActions } = require("./browser-helpers.cjs");
 const { openMovementFromMenu, setHomeMonth } = require("./browser-helpers.cjs");
 /* Optional real-browser smoke test. Requires Playwright; runtime app has no dependencies.
    Start a server first. GASTALO_URL may include a Pages-style subdirectory. */
@@ -25,10 +26,10 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.goto(base);
     await page.getByRole("heading", { name: "Un mes más claro." }).waitFor();
     assert.equal(await page.title(), "gástalo");
-    assert.deepEqual(
-      await page.locator(".home-totals .stat > span").allTextContents(),
-      ["Balance actual", "Gastos efectuados", "Gastos planeados"],
-    );
+    const homeLabels = await page.locator(".home-totals .stat > span").allTextContents();
+    assert.equal(homeLabels[0], "Balance actual");
+    assert.match(homeLabels[1], /^Gastos efectuados · \d{2}\/\d{2}$/);
+    assert.equal(homeLabels[2], "Gastos planeados");
     async function go(name, target = page) {
       await target.locator("#app-menu > summary").click();
       await target.getByRole("button", { name, exact: true }).click();
@@ -193,7 +194,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       "0px",
     );
     await go("Límites de categoría");
-    assert.ok((await page.locator(".compact-month").boundingBox()).height <= 36);
+    assert.ok((await page.locator(".compact-month").boundingBox()).height <= 44.5);
     const consultedMonth = await page.locator("#month").inputValue();
     await page.locator(".month-picker input").click();
     await page.keyboard.press("Escape");
@@ -262,6 +263,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       );
       await page.getByRole("button", { name: "Cancelar", exact: true }).click();
       if (name === "Trabajo") {
+        await openRowActions(page.locator('[data-action="delete-transaction"]'));
         await page.locator('[data-action="delete-transaction"]').click();
         await page
           .getByText("No hay movimientos en este período.", { exact: true })
@@ -298,9 +300,11 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.match(await page.locator(".budget-card").innerText(), /174,50/);
     await go("Historial");
     assert.equal(await page.locator(".transaction").count(), 3);
+    await openDisclosure(page, ".filters");
     await page.locator("#f-text").fill("almuerzo");
     await page.getByRole("button", { name: "Aplicar filtros" }).click();
     assert.equal(await page.locator(".transaction").count(), 1);
+    await openRowActions(page.locator('[data-action="edit-transaction"]'));
     await page.locator('[data-action="edit-transaction"]').click();
     await page.locator('#dialog [name="amount"]').fill("30");
     await page.locator('#dialog button[type="submit"]').click();
@@ -315,6 +319,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.clock.fastForward(5000);
     assert.equal(await page.locator("#toast").isVisible(), false);
     assert.equal(await page.locator("#undo-button").isVisible(), true);
+    await openRowActions(page.locator('[data-action="delete-transaction"]'));
     await page.locator('[data-action="delete-transaction"]').click();
     await page.getByText("No hay movimientos con estos filtros.").waitFor();
     await page.locator('#toast [data-action="undo"]').click();
@@ -392,14 +397,15 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         style.color = getComputedStyle(e).getPropertyValue("--budget-color");
         return style.color;
       });
-      assert.equal(await card("Comida").locator("strong").evaluate(e => getComputedStyle(e).color), iconColor);
+      assert.equal(iconColor, { green: "rgb(39, 130, 79)", orange: "rgb(226, 135, 36)", red: "rgb(215, 55, 66)", gray: "rgb(174, 181, 176)" }[tone]);
+      assert.equal(await card("Comida").locator("strong").evaluate(e => getComputedStyle(e).color), { green: "rgb(35, 99, 82)", orange: "rgb(151, 80, 9)", red: "rgb(163, 49, 49)", gray: "rgb(82, 98, 87)" }[tone]);
       assert.doesNotMatch(await card("Comida").innerText(), /límite|disponible|exceso/);
       const caption = card("Comida").locator(".entity-planned");
       if (planned === null) assert.equal(await caption.count(), 0);
       else {
         assert.equal(await caption.innerText(), planned);
-        assert.equal(await caption.evaluate(e => getComputedStyle(e).fontSize), "10px");
-        assert.equal(await caption.evaluate(e => getComputedStyle(e).color), "rgb(105, 118, 109)");
+        assert.equal(await caption.evaluate(e => getComputedStyle(e).fontSize), "12px");
+        assert.equal(await caption.evaluate(e => getComputedStyle(e).color), "rgb(82, 98, 87)");
         const current = await card("Comida").locator("strong").boundingBox();
         assert.ok((await caption.boundingBox()).y >= current.y + current.height);
       }
@@ -479,6 +485,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     const incomeRow = page
       .locator(".transaction")
       .filter({ has: page.locator(".transaction-symbol.income") });
+    await openRowActions(incomeRow.locator('[data-action="delete-transaction"]'));
     await incomeRow.locator('[data-action="delete-transaction"]').click();
     await incomeRow.waitFor({ state: "detached" });
     assert.equal(await page.locator(".entity-history .transaction").count(), 1);

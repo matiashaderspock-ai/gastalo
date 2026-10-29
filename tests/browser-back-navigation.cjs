@@ -130,13 +130,17 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     async function gesture(points, pauseBeforeRelease = 0) {
       const box = await page.locator('.detail-totals').boundingBox();
       const start = { x: box.x + 24, y: box.y + 8 };
-      await touch('touchStart', [start]);
+      let timestamp = Date.now() / 1000;
+      const timed = (type, points) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: points, timestamp });
+      await timed('touchStart', [start]);
       for (const [dx, pause = 0] of points) {
-        await touch('touchMove', [{ x: start.x + dx, y: start.y }]);
-        if (pause) await page.waitForTimeout(pause);
+        timestamp += .025;
+        await timed('touchMove', [{ x: start.x + dx, y: start.y }]);
+        if (pause) { await page.waitForTimeout(pause); timestamp += pause / 1000; }
       }
-      if (pauseBeforeRelease) await page.waitForTimeout(pauseBeforeRelease);
-      await touch('touchEnd');
+      if (pauseBeforeRelease) { await page.waitForTimeout(pauseBeforeRelease); timestamp += pauseBeforeRelease / 1000; }
+      timestamp += .015;
+      await timed('touchEnd', []);
       await settle();
       await page.waitForFunction(() => !document.documentElement.classList.contains('back-swipe-settling'));
     }
@@ -267,7 +271,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await swipe(page.locator('.movement-extras > summary'));
     assert.equal(await page.locator('#dialog').evaluate(element => element.open), false);
     await go('Historial');
-    for (const text of await page.locator('.transaction-info > span').allTextContents()) assert.match(text, /^\d{2}\/\d{2}\/\d{2}(?: · \d{2}:\d{2})? · (Ingreso|Gasto|Transferencia)$/);
+    for (const text of await page.locator('.transaction-info > span').allTextContents()) assert.match(text, /^(?:\d{2}:\d{2} · )?(Ingreso|Gasto|Transferencia)$/);
     assert.deepEqual(await saved(), state, 'Navigation never saves staged forms, deletes data or changes financial state');
     assert.deepEqual(errors, []);
     console.log(`PASS: all-entity hours/types without duplicate dates; ${animate ? 'interactive slide/parallax' : 'direct tracking with reduced motion'}; slow starts, held gestures and cancellation; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);

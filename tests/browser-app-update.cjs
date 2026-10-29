@@ -1,3 +1,4 @@
+const { openDisclosure } = require("./browser-helpers.cjs");
 const { openMovementFromMenu } = require("./browser-helpers.cjs");
 /* Serve successive app releases locally; no production requests or real tokens. */
 const { chromium, devices } = require("playwright");
@@ -8,7 +9,8 @@ const path = require("node:path");
 const A = require("../app.js");
 const root = path.join(__dirname, "..");
 const current = Number(/app\.js\?v=(\d+)/.exec(fs.readFileSync(path.join(root, "index.html"), "utf8"))[1]);
-let release = current, failCheck = false, checks = 0;
+let release = current, failCheck = false, checks = 0, holdCheck = false, checkRequestObserved;
+const pendingChecks = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost"), check = url.searchParams.has("app-check");
   if (check) checks++;
@@ -20,11 +22,14 @@ const server = http.createServer((req, res) => {
   let body = fs.readFileSync(path.join(root, name));
   if (["index.html", "sw.js"].includes(name)) body = Buffer.from(body.toString()
     .replaceAll(`?v=${current}`, `?v=${release}`).replace(`gastalo-v${current}`, `gastalo-v${release}`));
-  res.writeHead(200, {
+  const respond = () => res.writeHead(200, {
     "Content-Type": ({ ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml" })[path.extname(name)] || "image/png",
-    // Deliberately cache HTML to reproduce stale installed shells.
     "Cache-Control": "public, max-age=86400",
   }).end(body);
+  if (check && holdCheck) {
+    pendingChecks.push(respond);
+    checkRequestObserved?.();
+  } else respond();
 });
 (async () => {
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -62,15 +67,21 @@ const server = http.createServer((req, res) => {
       return keys.includes(`gastalo-v${v}`) && !keys.includes(`gastalo-v${v - 1}`);
     }, release);
     assert.equal(await page.locator('#dialog [name="amount"]').inputValue(), "123.45");
+    holdCheck = true;
     await page.getByRole("button", { name: "Cancelar", exact: true }).click();
     await page.waitForFunction(v => document.querySelector("#app-version")?.textContent === `v${v}`, release);
     assert.equal(new URL(page.url()).searchParams.get("app-version"), String(release));
-    // A restored page checks on pageshow too, without a full user navigation.
+    // An early pageshow during an in-flight check must queue a fresh check,
+    // rather than silently discard the foreground event and miss this release.
+    await new Promise(resolve => { if (pendingChecks.length) resolve(); else checkRequestObserved = resolve; });
     release++;
     await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
+    holdCheck = false;
+    for (const respond of pendingChecks.splice(0)) respond();
     await page.waitForFunction(v => document.querySelector("#app-version")?.textContent === `v${v}`, release);
     await page.locator("#app-menu > summary").click();
     await page.getByRole("button", { name: "Importar/Exportar", exact: true }).click();
+    await openDisclosure(page, "#backup-settings");
     await page.locator("#sync-token").fill("unsaved-token-draft");
     release++;
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));

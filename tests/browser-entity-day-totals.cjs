@@ -1,3 +1,4 @@
+const { openRowActions } = require("./browser-helpers.cjs");
 const { chromium, devices } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -71,7 +72,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
         }
         if (item.id === bank.id) {
           assert.equal(await total('2026-02-11').innerText(), 'Bs 0,00');
-          assert.equal(await total('2026-02-11').evaluate(element => getComputedStyle(element).color), 'rgb(105, 118, 109)');
+          assert.equal(await total('2026-02-11').evaluate(element => getComputedStyle(element).color), 'rgb(82, 98, 87)');
           assert.equal(await total('2026-02-11').getAttribute('aria-label'), 'Total neto del día: cero, Bs 0,00');
           assert.equal(await page.locator('.transaction').count(), 100);
           assert.equal(await row('expense').locator('.transaction-info > span').innerText(), '19:00 · Gasto');
@@ -89,11 +90,13 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
       }
     }
     await page.locator(`[data-entity="${bank.id}"]`).click();
+    await openRowActions(row('expense').locator('[data-action="edit-transaction"]'));
     await row('expense').locator('[data-action="edit-transaction"]').click();
     await page.locator('[name="amount"]').fill('45,00');
     await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
     await page.locator('#dialog').waitFor({ state: 'hidden' });
     assert.equal(await total('2026-02-10').innerText(), 'Bs 60,00');
+    await openRowActions(row('transfer-in').locator('[data-action="delete-transaction"]'));
     await row('transfer-in').locator('[data-action="delete-transaction"]').click();
     await page.waitForFunction(() => document.querySelector('.history-day:has(time[datetime="2026-02-10"]) .history-day-total').textContent === 'Bs 50,00');
     await page.locator('#toast [data-action="undo"]').click();
@@ -106,6 +109,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.getByRole('button', { name: 'Mostrar 100 más', exact: true }).click();
     assert.equal(await total('2026-01-03').innerText(), 'Bs 7,77');
     assert.equal(await total('2026-02-10').innerText(), 'Bs 60,00');
+    await openRowActions(row('expense').locator('[data-action="edit-transaction"]'));
     await row('expense').locator('[data-action="edit-transaction"]').click();
     await page.locator('[name="amount"]').fill('135,00');
     await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
@@ -124,7 +128,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.ok(generalAmounts.some(amount => amount.kind === 'transfer'));
     for (const amount of generalAmounts) {
       assert.doesNotMatch(amount.text, /[+−-]/);
-      assert.equal(amount.color, { income: 'rgb(35, 99, 82)', expense: 'rgb(163, 49, 49)', transfer: 'rgb(105, 118, 109)' }[amount.kind]);
+      assert.equal(amount.color, { income: 'rgb(35, 99, 82)', expense: 'rgb(163, 49, 49)', transfer: 'rgb(82, 98, 87)' }[amount.kind]);
     }
     assert.deepEqual(errors, []);
     console.log('PASS: signless red/green/neutral amounts and accessible polarity across all entities and general history; complete daily totals, pagination, sign-changing edits, deletion/undo and month/all-history scopes at 320/390/1280px.');

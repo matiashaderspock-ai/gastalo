@@ -450,8 +450,9 @@
     const distance = strength * 0.7 * Math.max(0, Math.min(32, elapsedMs));
     return Math.max(0, Math.min(max, current + distance));
   }
-  function direction(state, fromId, toId) {
+  function direction(state, fromId, toId, index = null) {
     const resolve = (id) => {
+      if (index) return index.get(id) || null;
       const type = TYPES.find((key) => state[key].some((e) => e.id === id));
       return type ? { id, type } : null;
     };
@@ -467,21 +468,13 @@
   const posted = (state) =>
     state.transactions.filter((t) => t.status === "posted");
   function balances(state) {
-    return Object.fromEntries(
-      state.accounts.map((a) => [
-        a.id,
-        sum([
-          a.opening_balance_cents,
-          ...posted(state).flatMap((t) =>
-            t.to_id === a.id
-              ? [t.amount_cents]
-              : t.from_id === a.id
-                ? [-t.amount_cents]
-                : [],
-          ),
-        ]),
-      ]),
-    );
+    const totals = new Map(state.accounts.map(a => [a.id, BigInt(a.opening_balance_cents)]));
+    for (const t of state.transactions) {
+      if (t.status !== "posted") continue;
+      if (totals.has(t.to_id)) totals.set(t.to_id, totals.get(t.to_id) + BigInt(t.amount_cents));
+      if (totals.has(t.from_id)) totals.set(t.from_id, totals.get(t.from_id) - BigInt(t.amount_cents));
+    }
+    return Object.fromEntries([...totals].map(([id, value]) => [id, sum([value])]));
   }
   function filterTransactions(state, filters = {}) {
     return posted(state).filter(
@@ -548,10 +541,10 @@
     }
     return latest?.limit_cents ?? null;
   }
-  function budget(state, categoryId, month) {
+  function budget(state, categoryId, month, monthly = report(state, month)) {
     const limit = budgetLimit(state, categoryId, month);
     const spent =
-      report(state, month).categories.find((c) => c.id === categoryId)?.spent ||
+      monthly.categories.find((c) => c.id === categoryId)?.spent ||
       0;
     return {
       limit,
@@ -559,8 +552,8 @@
       remaining: limit === null ? null : sum([limit, -spent]),
     };
   }
-  function budgetTotals(state, month) {
-    const categories = report(state, month).categories.map((c) => {
+  function budgetTotals(state, month, monthly = report(state, month)) {
+    const categories = monthly.categories.map((c) => {
       const limit = budgetLimit(state, c.id, month) ?? 0;
       return { limit, remaining: Math.max(0, sum([limit, -c.spent])) };
     });
@@ -712,15 +705,24 @@
       );
       months.add(k);
     }
+    const entityIndex = new Map(TYPES.flatMap(type => s[type].map(e => [e.id, { id: e.id, type }])));
+    const tagIndex = new Set(s.tags.map(tag => tag.id));
+    const validatedDates = new Set();
+    const validTransactionDate = value => {
+      if (validatedDates.has(value)) return true;
+      if (!dateOK(value)) return false;
+      validatedDates.add(value);
+      return true;
+    };
     for (const t of s.transactions) {
       assert(
-        direction(s, t.from_id, t.to_id) === t.kind && t.kind !== null,
+        direction(s, t.from_id, t.to_id, entityIndex) === t.kind && t.kind !== null,
         "Dirección de movimiento inválida.",
       );
       assert(
         integer(t.amount_cents) &&
           t.amount_cents > 0 &&
-          dateOK(t.occurred_on) &&
+          validTransactionDate(t.occurred_on) &&
           t.currency === "BOB",
         "Importe, moneda o fecha inválida.",
       );
@@ -738,7 +740,7 @@
       assert(
         Array.isArray(t.tag_ids) &&
           new Set(t.tag_ids).size === t.tag_ids.length &&
-          t.tag_ids.every((id) => s.tags.some((tag) => tag.id === id)),
+          t.tag_ids.every((id) => tagIndex.has(id)),
         "Etiquetas inválidas.",
       );
     }
@@ -1360,7 +1362,7 @@
       }).format(new Date());
     let month = today().slice(0, 7);
     let archivedBudgetsOpen = false;
-    const openManageGroups = new Set();
+    const openManageGroups = new Set(), openSettingsGroups = new Set();
     const defaultFilters = () => ({
       start: "",
       end: "",
@@ -1370,13 +1372,29 @@
       kind: "",
       text: "",
     });
-    let filters = defaultFilters();
+    let filters = defaultFilters(), filtersOpen = false;
     const allEntities = () => [
       ...state.sources,
       ...state.accounts,
       ...state.categories,
     ];
-    const entity = (id) => allEntities().find((e) => e.id === id);
+    let renderCache = { state: null, reports: new Map() };
+    function cachedReport(period = month) {
+      if (renderCache.state !== state) renderCache = { state, reports: new Map() };
+      if (!renderCache.reports.has(period)) renderCache.reports.set(period, report(state, period));
+      return renderCache.reports.get(period);
+    }
+    const currentBudget = (id) => budget(state, id, month, cachedReport());
+    const currentBudgetTotals = () => budgetTotals(state, month, cachedReport());
+    function currentBalances() {
+      cachedReport();
+      return renderCache.balances ??= balances(state);
+    }
+    const entity = (id) => {
+      cachedReport();
+      renderCache.entities ??= new Map(allEntities().map(e => [e.id, e]));
+      return renderCache.entities.get(id);
+    };
     const name = (id) => entity(id)?.name || "Sin entidad";
     const labels = {
       income: "Ingreso",
@@ -1419,7 +1437,8 @@
         clearTimeout(syncTimer);
         syncQueued = false;
       }
-      const before = copy(state);
+      // App writes replace state; retaining the previous snapshot keeps Undo atomic without a redundant JSON copy.
+      const before = reversible ? state : null;
       try {
         validateState(next);
         await new Promise((resolve, reject) => {
@@ -1455,6 +1474,10 @@
         if (reset) {
           syncConfig = eraseSync ? defaultSyncConfig() : { ...syncConfig, checkAfterReset: true };
           pendingImport = null;
+          keepMovementDraft(null);
+          gestureHelpDismissed = false;
+          openSettingsGroups.clear();
+          try { localStorage.removeItem("gastalo-gesture-help"); } catch {}
           detailId = null;
           detailScope = "month";
           homeScroll = 0;
@@ -1552,20 +1575,30 @@
         { compact: true, focusSelector: '[data-action="close"]' },
       );
     }
+    let movementDraft = null;
+    try { movementDraft = JSON.parse(sessionStorage.getItem("gastalo-movement-draft") || "null"); } catch {}
+    function keepMovementDraft(value) {
+      movementDraft = value;
+      try {
+        if (value) sessionStorage.setItem("gastalo-movement-draft", JSON.stringify(value));
+        else sessionStorage.removeItem("gastalo-movement-draft");
+      } catch { /* Keep an in-memory draft when session storage is unavailable. */ }
+    }
     function movement(from = "", to = "", transaction = null, reviewId = null) {
-      const t = transaction, pendingTags = [], returnView = view,
+      const t = transaction, draftOwner = uid(), pendingTags = [], returnView = view,
         scrollY = window.scrollY, scrollX = window.scrollX,
         stripScroll = [...document.querySelectorAll(".entity-strip")].map((strip) => strip.scrollLeft);
       const eventTimezone = t?.occurred_timezone || state.profile.timezone;
       const clock = localClock(new Date(), eventTimezone);
       const initialTime = t || reviewId ? t?.occurred_time || "" : clock.time;
-      let selectedTags = [...(t?.tag_ids || [])];
+      let selectedTags = [...(t?.tag_ids || [])], submitted = false, recovered = false;
+      const draft = movementDraft?.transactionId === (t?.id || null) ? movementDraft : null;
       modal(
         t ? "Editar movimiento" : "Nuevo movimiento",
         `
         <section class="movement-tags" aria-label="Etiquetas del movimiento"><div id="movement-tag-chips" class="tag-choices"></div><button type="button" id="tag-picker-toggle" aria-label="Elegir o crear etiquetas" aria-expanded="false" aria-controls="tag-picker">+</button></section>
         <section id="tag-picker" class="movement-tag-picker" aria-label="Elegir etiquetas" hidden><div class="tag-search"><label>Buscar o crear etiqueta<input id="tag-search" type="search" maxlength="80" autocomplete="off" placeholder="Buscar o crear etiqueta"></label><button type="button" id="tag-create" aria-label="Crear etiqueta" hidden>+</button></div><div id="tag-picker-list"></div><p id="tag-search-empty" class="muted" hidden>Sin coincidencias.</p><button type="button" id="tag-picker-done">Listo</button></section>
-        <div class="movement-fields"><div class="form-grid"><label>Origen<select name="from" required>${options(
+        <div class="movement-fields">${draft ? '<aside class="draft-notice" aria-label="Borrador pendiente"><span>Tienes un borrador sin registrar.</span><button type="button" id="recover-draft">Recuperar</button><button type="button" id="discard-draft">Descartar</button></aside>' : ""}<div class="form-grid"><label>Origen<select name="from" required>${options(
           [...state.sources, ...state.accounts].filter(
             (e) => !e.archived_at || e.id === (t?.from_id || from),
           ),
@@ -1576,10 +1609,15 @@
         <label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
         <details class="movement-extras" ${t?.note ? "open" : ""}><summary>Nota</summary>
         <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label>
-        ${t || reviewId ? `<div class="form-grid"><label>Fecha${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label><label>Hora${dateControl({ name: "time", type: "time", value: initialTime, describedBy: "movement-timezone" })}</label></div>` : `<input type="hidden" name="date" value="${clock.date}"><input type="hidden" name="time" value="${initialTime}"><p class="movement-timestamp muted"><time datetime="${clock.date}T${initialTime}">${formatDate(clock.date)} · ${initialTime.slice(0, 5)}</time></p>`}
+        <div id="movement-date-fields" class="form-grid" ${t || reviewId ? "" : "hidden"}><label>Fecha${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label><label>Hora${dateControl({ name: "time", type: "time", value: initialTime, describedBy: "movement-timezone" })}</label></div>
+        ${t || reviewId ? "" : `<div id="movement-clock-info"><p class="movement-timestamp muted"><time datetime="${clock.date}T${initialTime}">${formatDate(clock.date)} · ${initialTime.slice(0, 5)}</time></p><button type="button" id="change-movement-clock">Cambiar fecha y hora</button></div>`}
         <p id="movement-timezone" class="movement-timezone muted">Hora local · ${esc(eventTimezone)}${t && !t.occurred_time ? " · Hora anterior no registrada" : ""}</p></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
         async (data) => {
-          const next = copy(state),
+          captureMovementDraft();
+          // Existing records and metadata are immutable. Copy only collections
+          // this form changes; the complete next state is still validated and
+          // committed in one revision-checked IndexedDB transaction.
+          const next = { ...state, transactions: [...state.transactions], tags: [...state.tags] },
             fromId = data.get("from"),
             toId = data.get("to"),
             kind = direction(next, fromId, toId),
@@ -1624,6 +1662,8 @@
             t ? "Cambios guardados" : "Movimiento registrado",
             !!t,
           );
+          submitted = true;
+          if (movementDraft?.owner === draftOwner) keepMovementDraft(null);
         },
         {
           compact: true,
@@ -1646,7 +1686,7 @@
         );
       };
       update(t?.to_id || to);
-      fromSelect.onchange = () => update(to);
+      fromSelect.onchange = () => update(toSelect.value || to);
       const availableTags = () => [...state.tags, ...pendingTags].filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id) || selectedTags.includes(tag.id) ||
         (search.value.trim() && fold(tag.name).includes(fold(search.value))));
       const fold = (name) => name.trim().toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -1705,6 +1745,7 @@
         selectedTags.push(tag.id);
         search.value = "";
         renderTags();
+        captureMovementDraft();
         search.focus({ preventScroll: true });
       };
       search.onkeydown = (e) => {
@@ -1712,7 +1753,51 @@
         if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePicker(); }
       };
       renderTags();
+      const form = $("#modal-form"), initial = Object.fromEntries(new FormData(form));
+      const changeClock = $("#change-movement-clock");
+      if (changeClock) changeClock.onclick = () => {
+        $("#movement-date-fields").hidden = false;
+        $("#movement-clock-info").hidden = true;
+        fitDialogToViewport();
+      };
+      if (draft) {
+        $("#discard-draft").onclick = () => { keepMovementDraft(null); $(".draft-notice").remove(); };
+        $("#recover-draft").onclick = () => {
+          fromSelect.value = draft.from || "";
+          update(draft.to || "");
+          for (const key of ["amount", "note", "date", "time"]) if (typeof draft[key] === "string") form.elements[key].value = draft[key];
+          pendingTags.push(...(Array.isArray(draft.pendingTags) ? draft.pendingTags : []).filter(tag => typeof tag?.id === "string" && typeof tag.name === "string" && !state.tags.some(e => e.id === tag.id)));
+          selectedTags = (Array.isArray(draft.tagIds) ? draft.tagIds : []).filter(id => state.tags.concat(pendingTags).some(tag => tag.id === id));
+          renderTags();
+          if (draft.note || draft.date !== clock.date || draft.time !== initialTime) {
+            $(".movement-extras").open = true;
+            changeClock?.click();
+          }
+          document.querySelectorAll("#movement-date-fields input").forEach(updateDateControl);
+          recovered = true;
+          captureMovementDraft();
+          $(".draft-notice").remove();
+          form.elements.amount.focus();
+        };
+      }
+      function captureMovementDraft() {
+        if (submitted) return;
+        const values = Object.fromEntries(new FormData(form));
+        const dirty = ["amount", "note", "from", "to", "date", "time"].some(key => values[key] !== initial[key]) ||
+          selectedTags.join("|") !== (t?.tag_ids || []).join("|");
+        if (dirty || recovered) keepMovementDraft({ ...values, owner: draftOwner, transactionId: t?.id || null, tagIds: selectedTags, pendingTags });
+      }
+      const draftInput = event => {
+        if (event.target.matches("[name], [data-movement-tag]")) captureMovementDraft();
+      };
+      form.addEventListener("input", draftInput);
+      form.addEventListener("change", draftInput);
+      window.addEventListener("pagehide", captureMovementDraft);
       dialog.addEventListener("close", () => {
+        captureMovementDraft();
+        form.removeEventListener("input", draftInput);
+        form.removeEventListener("change", draftInput);
+        window.removeEventListener("pagehide", captureMovementDraft);
         closeButton.removeEventListener("click", dismissPicker);
         dialog.removeEventListener("cancel", dismissPicker);
         dialog.classList.remove("choosing-tags");
@@ -1736,7 +1821,7 @@
         <label>Nombre<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
         ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial${dateControl({ name: "openingDate", required: true, value: e?.opening_date || today() })}</label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
         ${key === "sources" ? `<label>Ingreso mensual previsto · BOB (opcional)<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
-        ${key === "categories" ? `<label>Límite mensual · desde ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && budget(state, e.id, month).limit !== null ? decimal(budget(state, e.id, month).limit) : ""}" placeholder="Sin límite"></label>` : ""}
+        ${key === "categories" ? `<label>Límite mensual · desde ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && currentBudget(e.id).limit !== null ? decimal(currentBudget(e.id).limit) : ""}" placeholder="Sin límite"></label>` : ""}
         ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>Archivar (conserva historial)</label>` : ""}${actions()}`,
         async (data) => {
           const next = copy(state),
@@ -1804,7 +1889,7 @@
       );
     }
     function editBudget(id) {
-      const b = budget(state, id, month);
+      const b = currentBudget(id);
       modal(
         "Presupuesto · " + name(id),
         `<p>${esc(monthLabel(month))}. Desde este mes, el límite se mantiene en los meses siguientes hasta que lo cambies.</p><label>Límite · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="Vacío = sin límite"></label><p class="muted">Cero es un límite válido. El restante no pasa al siguiente mes.</p>${actions()}`,
@@ -1829,8 +1914,11 @@
         { compact: true, focusSelector: '[name="limit"]' },
       );
     }
+    const compactMoney = (n) => Math.abs(n) < 100000000 ? money(n)
+      : "Bs " + new Intl.NumberFormat("es-BO", { notation: "compact", maximumFractionDigits: 2 }).format(n / 100);
     function stat(label, amount, cls = "") {
-      return `<div class="stat ${cls}"><span>${label}</span><strong><small>Bs</small>${money(amount).slice(3)}</strong></div>`;
+      const large = Math.abs(amount) >= 100000000;
+      return `<div class="stat ${cls}"><span>${label}</span><strong title="${money(amount)}" aria-label="${money(amount)}"><small>Bs</small>${compactMoney(amount).slice(3)}</strong>${large ? `<details class="exact-amount"><summary>Ver completo</summary><span>${money(amount)}</span></details>` : ""}</div>`;
     }
     function monthNav(compact = false, showArrows = true) {
       const picker = compact
@@ -1919,19 +2007,22 @@
       await commit(next, "Entidad restaurada en Inicio", true);
     }
     function homeTotals() {
-      const r = report(state, month),
-        bs = balances(state);
+      const r = cachedReport(),
+        bs = currentBalances();
       const balance = sum(
         state.accounts
           .filter((a) => !a.exclude_from_total)
           .map((a) => bs[a.id]),
       );
-      const remaining = budgetTotals(state, month).remaining;
-      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", remaining)}</section>`;
+      const remaining = currentBudgetTotals().remaining;
+      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat(`Gastos efectuados · ${monthLabel(month)}`, r.expense)}${stat("Gastos planeados", remaining)}</section>`;
     }
+    let gestureHelpDismissed = false;
+    try { gestureHelpDismissed = localStorage.getItem("gastalo-gesture-help") === "dismissed"; } catch {}
+    const gestureGuide = () => '<p>Arrastra el círculo de una cuenta hacia una categoría para registrar un gasto, o hacia otra cuenta para transferir. Desde una fuente hacia una cuenta registras un ingreso. Mantén pulsado un círculo para ordenar entidades. También puedes usar + Movimiento en el menú.</p>';
     function home() {
-      const bs = balances(state);
-      return `<h1 class="sr-only">Un mes más claro.</h1>
+      const bs = currentBalances();
+      return `<h1 class="sr-only">Un mes más claro.</h1>${!gestureHelpDismissed && state.transactions.length === 0 && state.accounts.length ? `<aside class="gesture-help">${gestureGuide()}<button data-action="dismiss-gesture-help">Entendido</button></aside>` : ""}
         <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Arrastra los círculos para ordenar</span><button data-action="finish-editing">Listo</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
@@ -1954,9 +2045,9 @@
                           )
                           .map((t) => t.amount_cents),
                       )
-                    : budget(state, e.id, month).spent;
+                    : currentBudget(e.id).spent;
               const b =
-                key === "categories" ? budget(state, e.id, month) : null;
+                key === "categories" ? currentBudget(e.id) : null;
               const progress = b ? budgetVisual(b.limit, b.spent) : null;
               const plannedLabel = b && b.limit !== null
                 ? `Gastos planeados: ${money(b.limit)}` : "";
@@ -1967,7 +2058,7 @@
                     ? "Presupuesto excedido"
                     : `${progress.fill}% del presupuesto utilizado`
                 : "";
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${plannedLabel ? plannedLabel + ". " : ""}${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${money(value)}</strong>${plannedLabel ? `<small class="entity-planned" title="${plannedLabel}">${money(b.limit).slice(3)}</small>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${plannedLabel ? plannedLabel + ". " : ""}${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${compactMoney(value)}</strong>${plannedLabel ? `<small class="entity-planned" title="${plannedLabel}">${money(b.limit).slice(3)}</small>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",
@@ -1977,7 +2068,11 @@
         )}`;
     }
     function filterPanel() {
-      return `<details class="panel filters" open><summary>Filtros compartidos con reportes</summary><div class="form-grid">
+      const selected = [filters.start || filters.end ? `${formatDate(filters.start) || "Sin inicio"}–${formatDate(filters.end) || "Sin final"}` : "Todas las fechas",
+        filters.entities.length ? filters.entities.slice(0, 2).map(name).join(", ") + (filters.entities.length > 2 ? ` +${filters.entities.length - 2}` : "") : "Todas las entidades",
+        filters.tags.length ? `${filters.tagMode === "all" ? "Todas" : "Cualquiera"}: ` + filters.tags.slice(0, 2).map(id => state.tags.find(t => t.id === id)?.name || "Etiqueta").join(", ") + (filters.tags.length > 2 ? ` +${filters.tags.length - 2}` : "") : "",
+        filters.kind ? labels[filters.kind] : "", filters.text ? `Nota: ${filters.text.slice(0, 40)}${filters.text.length > 40 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
+      return `<details id="shared-filters" class="panel filters" ${filtersOpen ? "open" : ""}><summary><span>Filtros</span><small>${esc(selected)}</small></summary><p class="muted filter-sharing">Compartidos con Gráficos e Historial.</p><div class="form-grid">
         <label>Desde${dateControl({ id: "f-start", value: filters.start })}</label><label>Hasta${dateControl({ id: "f-end", value: filters.end })}</label>
         <label>Cuentas, fuentes o categorías<select multiple size="1" id="f-entities">${allEntities()
           .map(
@@ -1997,16 +2092,25 @@
           .join("")}</select></label>
         <label class="wide">Buscar en nota<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="Ej. almuerzo"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">Aplicar filtros</button><button data-action="clear-filters">Ver todo</button></div></details>`;
     }
+    function groupByDay(transactions) {
+      const groups = new Map();
+      for (const t of transactions) {
+        if (!groups.has(t.occurred_on)) groups.set(t.occurred_on, []);
+        groups.get(t.occurred_on).push(t);
+      }
+      return groups;
+    }
     function transactionRow(t, contextId = null) {
       const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
-      const metadata = contextId ? `${time ? time + " · " : ""}${labels[t.kind]}`
-        : `${formatDate(t.occurred_on)}${time ? ` · ${time}` : ""} · ${labels[t.kind]}`;
+      const metadata = `${time ? time + " · " : ""}${labels[t.kind]}`;
+      const counterpart = contextId ? `${t.from_id === contextId ? "A" : "Desde"} ${name(t.from_id === contextId ? t.to_id : t.from_id)}`
+        : `${name(t.from_id)} → ${name(t.to_id)}`;
       const value = contextId ? entityMovementAmount(t, contextId)
         : t.kind === "expense" ? -t.amount_cents : t.kind === "income" ? t.amount_cents : null;
       const amount = money(t.amount_cents);
       const amountAttributes = value === null ? 'class="amount-neutral"'
         : `class="${amountClass(value)}" aria-label="${amountDescription(value)}"`;
-      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(name(t.from_id))} → ${esc(name(t.to_id))}</strong><span>${metadata}</span>${t.note ? `<p>${esc(t.note)}</p>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong ${amountAttributes}>${amount}</strong><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></div></article>`;
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(counterpart)}</strong><span>${metadata}</span>${t.note ? `<details class="transaction-note"><summary><span class="note-preview">${esc(t.note)}</span><span class="note-close">Ocultar nota</span></summary><p>${esc(t.note)}</p></details>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong ${amountAttributes}>${amount}</strong><details class="transaction-actions"><summary aria-label="Acciones del movimiento">⋯</summary><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></details></div></article>`;
       return contextId
         ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
         : row;
@@ -2129,16 +2233,16 @@
       }
       const summary =
         type === "accounts"
-          ? stat("Saldo actual", balances(state)[detailId]) +
+          ? stat("Saldo actual", currentBalances()[detailId]) +
             stat("Entradas del mes", incoming) +
             stat("Salidas del mes", outgoing)
           : type === "sources"
             ? stat("Ingresos del mes", incoming)
             : stat("Gastos del mes", outgoing) +
-              (budget(state, detailId, month).limit !== null
+              (currentBudget(detailId).limit !== null
                 ? stat(
                     "Presupuesto del mes",
-                    budget(state, detailId, month).limit,
+                    currentBudget(detailId).limit,
                   )
                 : "");
       return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3><strong class="history-day-total ${amountClass(dayTotals.get(date))}" aria-label="${amountDescription(dayTotals.get(date), "Total neto del día")}">${money(Math.abs(dayTotals.get(date)))}</strong></div><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
@@ -2153,22 +2257,23 @@
         expense = sum(
           ts.filter((t) => t.kind === "expense").map((t) => t.amount_cents),
         );
-      return `<div class="page-heading"><div class="eyebrow">CADA MOVIMIENTO CUENTA</div><h1>Historial</h1><p>Consulta, edita o borra movimientos individuales.</p></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
-        ts
-          .slice(0, historyLimit)
-          .map((t) => transactionRow(t))
-          .join("") ||
+      return `<div class="page-heading"><h1>Historial</h1></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
+        [...groupByDay(ts.slice(0, historyLimit))].map(([date, rows]) =>
+            `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3></div>${rows.map(t => transactionRow(t)).join("")}</section>`).join("") ||
         '<p class="empty">No hay movimientos con estos filtros.</p>'
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
     }
     function budgetCard(c, archived = false) {
-      const b = budget(state, c.id, month);
-      return `<article class="panel budget-card"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div><progress max="${Math.max(b.limit || 0, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)}"></progress><dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl>${archived ? `<button class="budget-restore" data-action="restore-entity" data-key="categories" data-id="${esc(c.id)}" aria-label="Restaurar ${esc(c.name)} en Inicio">Restaurar en Inicio</button>` : ""}</article>`;
+      const b = currentBudget(c.id), visual = budgetVisual(b.limit, b.spent);
+      return `<article class="panel budget-card budget-${visual.tone}"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div>${b.limit === null ? "" : `<progress max="${Math.max(b.limit, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)} de un límite de ${money(b.limit)}"></progress>`}<dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl>${archived ? `<button class="budget-restore" data-action="restore-entity" data-key="categories" data-id="${esc(c.id)}" aria-label="Restaurar ${esc(c.name)} en Inicio">Restaurar en Inicio</button>` : ""}</article>`;
     }
     function budgets() {
       const currentCategories = state.categories.filter((c) => !c.archived_at);
       const archivedCategories = state.categories.filter((c) => c.archived_at);
-      return `<div class="page-heading"><div class="eyebrow">ESPACIO PARA TUS PLANES</div><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", budgetTotals(state, month).limit)}</section><section class="budget-grid">${currentCategories.map((c) => budgetCard(c)).join("") || '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>Categorías archivadas (${archivedCategories.length})</summary><div class="budget-grid">${archivedCategories.map((c) => budgetCard(c, true)).join("") || '<p class="empty">No hay categorías archivadas.</p>'}</div></details><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
+      const longNames = state.categories.some(c => c.name.length > 18 || Math.abs(currentBudget(c.id).spent) >= 100000000);
+      const archivedLimit = sum(archivedCategories.map(c => currentBudget(c.id).limit || 0));
+      const activeLimit = sum(currentCategories.map(c => currentBudget(c.id).limit || 0));
+      return `<div class="page-heading"><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", currentBudgetTotals().limit)}</section><p class="limit-contributions">Activas: ${money(activeLimit)} · Archivadas: ${money(archivedLimit)}. Ambos importes están incluidos en el total.</p><section class="budget-grid ${longNames ? "budget-long-names" : ""}">${currentCategories.map((c) => budgetCard(c)).join("") || '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>Categorías archivadas (${archivedCategories.length})</summary><div class="budget-grid ${longNames ? "budget-long-names" : ""}">${archivedCategories.map((c) => budgetCard(c, true)).join("") || '<p class="empty">No hay categorías archivadas.</p>'}</div></details><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
     }
     function expensePie(categories) {
       const total = sum(categories.map((c) => c.spent));
@@ -2227,8 +2332,8 @@
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
-      return `<div class="page-heading"><div class="eyebrow">MIRA EL PANORAMA</div><div class="page-title"><h1>Gráficos</h1>${monthNav(true)}</div><p>Totales por categoría y evolución mensual de ingresos y gastos.</p></div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
-      <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p>${expensePie(r.categories)}<div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
+      return `<div class="page-heading"><div class="page-title"><h1>Gráficos</h1>${monthNav(true)}</div></div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
+      <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p>${expensePie(r.categories)}<details class="report-breakdown"><summary>Ver detalle por categoría</summary><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
         r.categories
           .filter((c) => c.spent)
           .map(
@@ -2237,20 +2342,20 @@
           )
           .join("") ||
         '<p class="empty">Todavía no hay gastos en este período.</p>'
-      }</div><div class="table-scroll"><table><thead><tr><th>Categoría</th><th>Gasto · BOB</th><th>Participación</th></tr></thead><tbody>${r.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${money(c.spent)}</td><td>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</td></tr>`).join("")}</tbody></table></div></section>
-      <section class="panel"><h2>Doce meses de perspectiva</h2><p class="legend"><span class="income-key">Ingresos</span><span class="expense-key">Gastos</span></p><div class="timeline" role="img" aria-label="Evolución mensual de ingresos y gastos; datos en la tabla siguiente">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}<small>/${m.month.slice(2, 4)}</small></span></div>`).join("")}</div><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead><tbody>${series.map((m) => `<tr><td>${formatMonth(m.month)}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></section><p class="footnote">Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.</p>`;
+      }</div><details class="report-table"><summary>Ver tabla por categoría</summary><div class="table-scroll"><table><thead><tr><th>Categoría</th><th>Gasto · BOB</th><th>Participación</th></tr></thead><tbody>${r.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${money(c.spent)}</td><td>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</td></tr>`).join("")}</tbody></table></div></details></details></section>
+      <section class="panel"><h2>Doce meses de perspectiva</h2><p class="legend"><span class="income-key">Ingresos</span><span class="expense-key">Gastos</span></p><div class="timeline" role="img" aria-label="Evolución mensual de ingresos y gastos; datos en la tabla siguiente">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}<small>/${m.month.slice(2, 4)}</small></span></div>`).join("")}</div><details class="report-table"><summary>Ver tabla mensual</summary><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead><tbody>${series.map((m) => `<tr><td>${formatMonth(m.month)}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></details></section><p class="footnote">Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.</p>`;
     }
     function settings() {
-      return `<div class="page-heading"><div class="eyebrow">TU ARCHIVO PERSONAL</div><h1>Importar/Exportar</h1><p>Todo queda en este dispositivo. Tu respaldo viaja contigo.</p></div>
+      return `<div class="page-heading"><h1>Importar/Exportar</h1><p>Respalda, restaura y organiza tus datos.</p></div>
       <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
-      <section class="panel"><h2>Sincronización</h2><p>Respaldo automático en tu repositorio privado de GitHub. Solo se envían datos; no se restaura desde GitHub.</p>
+      <details class="panel settings-group" id="backup-settings" ${openSettingsGroups.has("backup-settings") ? "open" : ""}><summary>Respaldo automático en GitHub</summary><p>Respaldo automático en tu repositorio privado de GitHub. Solo se envían datos; no se restaura desde GitHub.</p>
       <form id="sync-form"><label>Repo<input id="sync-repo" value="${esc(syncConfig.repo)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Branch<input id="sync-branch" value="${esc(syncConfig.branch)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Path<input id="sync-path" value="${esc(syncConfig.path)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Token<input id="sync-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${esc(syncConfig.token ? "••••" + syncConfig.token.slice(-4) : "")}"></label>
       <p class="muted">Usa un token con permiso de escritura de Contents en el repositorio elegido. «Sincronizar ahora» guarda la configuración en este dispositivo.</p>
       <button class="primary" type="submit">Sincronizar ahora</button> <button type="button" data-action="sync-disable">Desactivar</button></form>
-      <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></section>
+      <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></details>
       <section class="panel"><h2>Importar historial completo</h2><p>Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.</p><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>Importar también límites de categoría (opcional)</summary><p>El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.</p><label>Aplicar límites desde (opcional)${dateControl({ id: "import-budget-month", type: "month", describedBy: "import-budget-help" })}</label><p id="import-budget-help" class="muted">Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.</p></details><p class="muted">CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
@@ -2261,17 +2366,19 @@
           )
           .join("") || '<p class="muted">Sin filas pendientes.</p>'
       }${state.review.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section>
-      <section class="panel"><h2>Tu calendario</h2><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></section>
+      <details class="panel settings-group" id="calendar-settings" ${openSettingsGroups.has("calendar-settings") ? "open" : ""}><summary>Calendario y zona horaria</summary><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></details>
       <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Restaurar ${esc(e.name)}${key === "tags" ? "" : " en Inicio"}">${key === "tags" ? "Restaurar" : "Restaurar en Inicio"}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div></div>`).join("")}</details>`).join("")}</section>
-      <section class="panel"><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
+      <section class="panel"><details class="gesture-help"><summary>Ayuda de gestos</summary>${gestureGuide()}</details><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
       <section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>`;
     }
     const navigationStack = [];
     function rememberNavigation() {
+      for (const previous of navigationStack.slice(0, -3)) previous.preview = null;
       navigationStack.push({ view, detailId, detailScope, month, historyLimit,
         scrollX: window.scrollX, scrollY: window.scrollY,
         strips: [...document.querySelectorAll(".entity-strip")].map(strip => strip.scrollLeft),
         preview: captureBackPreview() });
+      if (navigationStack.length > 24) navigationStack.shift();
     }
     function goBack() {
       const dialog = $("#dialog"), menu = $("#app-menu");
@@ -2373,6 +2480,7 @@
         `<p>${esc(source)}</p><dl class="import-summary">${period}<div><dt>Movimientos aceptados</dt><dd>${next.transactions.length}</dd></div><div><dt>Filas pendientes</dt><dd>${next.review.length}</dd></div><div><dt>Cuentas</dt><dd>${next.accounts.length}</dd></div><div><dt>Categorías</dt><dd>${next.categories.length}</dd></div><div><dt>Límites de categoría</dt><dd>${limits}</dd></div></dl><p>Se reemplazarán los datos actuales (${state.transactions.length} movimientos). Puedes descargar un respaldo antes de continuar.</p><button type="button" data-action="export">Descargar respaldo actual</button><label class="check"><input name="confirm" type="checkbox" required>Entiendo que se reemplazarán los datos de este dispositivo.</label>${actions("Importar y reemplazar")}`,
         async () => {
           await commit(pendingImport, "Importación guardada");
+          keepMovementDraft(null);
           pendingImport = null;
         },
       );
@@ -2440,6 +2548,12 @@
         $("#icon-picker").hidden = true;
         $(".icon-preview").setAttribute("aria-expanded", "false");
         $(".icon-preview").focus();
+        return;
+      }
+      if (action === "dismiss-gesture-help") {
+        gestureHelpDismissed = true;
+        try { localStorage.setItem("gastalo-gesture-help", "dismissed"); } catch {}
+        render();
         return;
       }
       if (action === "close") return $("#dialog").close();
@@ -2547,6 +2661,11 @@
     });
     document.addEventListener("toggle", (e) => {
       if (e.target.id === "archived-categories") archivedBudgetsOpen = e.target.open;
+      if (["backup-settings", "calendar-settings"].includes(e.target.id) && e.target.isConnected) {
+        if (e.target.open) openSettingsGroups.add(e.target.id);
+        else openSettingsGroups.delete(e.target.id);
+      }
+      if (e.target.id === "shared-filters" && e.target.isConnected) filtersOpen = e.target.open;
       if (e.target.matches?.("[data-manage-key]")) {
         const key = e.target.dataset.manageKey;
         if (e.target.open) openManageGroups.add(key);
@@ -2644,7 +2763,7 @@
       if (!e.isPrimary || e.button !== 0 || transactionSwipe) return;
       const row = e.target.closest("[data-swipe-transaction]");
       if (openTransactionRow && openTransactionRow !== row) closeTransactionRow();
-      if (!row || e.target.closest(".transaction-swipe-delete, a, input, select, textarea")) return;
+      if (!row || e.target.closest(".transaction-swipe-delete, a, input, select, textarea, button, .transaction-note")) return;
       transactionSwipe = {
         id: e.pointerId, row, front: row.querySelector(".transaction"),
         startX: e.clientX, startY: e.clientY,
@@ -3271,9 +3390,16 @@
           if (!file) return;
           assert(file.size <= 32 * 1024 * 1024, "El archivo supera 32 MB.");
           const text = await file.text();
-          if (e.target.id === "json-file")
-            await previewImport(restore(text), file.name);
-          else {
+          if (e.target.id === "json-file") {
+            let restored;
+            try { restored = restore(text); }
+            catch (error) {
+              throw new Error(error instanceof SyntaxError
+                ? "Este archivo no es un respaldo JSON válido. Tus datos no se cambiaron."
+                : `No se puede restaurar este respaldo: ${error.message} Tus datos no se cambiaron.`);
+            }
+            await previewImport(restored, file.name);
+          } else {
             const digest = await crypto.subtle.digest(
               "SHA-256",
               new TextEncoder().encode(text),
@@ -3342,17 +3468,22 @@
     const appScript = new URL(document.querySelector('script[src*="app.js?v="]').src),
       appVersion = Number(appScript.searchParams.get("v"));
     $("#app-version").textContent = `v${appVersion}`;
-    let checkingAppVersion = false, availableAppVersion = null;
+    let checkingAppVersion = false, availableAppVersion = null, queuedVersionCheck = 0, applyingAppUpdate = false;
     function applyAppUpdate() {
-      if (!availableAppVersion || document.visibilityState !== "visible" ||
+      if (applyingAppUpdate || !availableAppVersion || document.visibilityState !== "visible" ||
           $("#dialog").open || view === "settings" || busy || editingEntities || pointer || settling || backSwipe || backSwipeAnimation) return;
       const url = new URL(location.href);
       url.searchParams.set("app-version", availableAppVersion);
       availableAppVersion = null;
+      applyingAppUpdate = true;
       location.replace(url.href);
     }
     async function checkAppVersion(manual = false) {
-      if (checkingAppVersion || document.visibilityState !== "visible") return;
+      if (applyingAppUpdate || document.visibilityState !== "visible") return;
+      if (checkingAppVersion) {
+        queuedVersionCheck = Math.max(queuedVersionCheck, manual ? 2 : 1);
+        return;
+      }
       if (!navigator.onLine) {
         if (manual) notify("Conéctate a internet para actualizar la app.");
         return;
@@ -3381,6 +3512,9 @@
       } finally {
         clearTimeout(timeout);
         checkingAppVersion = false;
+        const queued = queuedVersionCheck;
+        queuedVersionCheck = 0;
+        if (queued && !applyingAppUpdate) void checkAppVersion(queued === 2);
       }
     }
     $("#update-app").onclick = () => checkAppVersion(true);

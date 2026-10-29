@@ -1,3 +1,4 @@
+const { openRowActions } = require("./browser-helpers.cjs");
 const { openMovementFromMenu } = require("./browser-helpers.cjs");
 /* Real touch gestures, IndexedDB and compact movement tags, using synthetic data. */
 const { chromium, devices } = require('playwright');
@@ -156,6 +157,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.ok(data.transactions.slice(-4).every(t => t.amount_cents === 125 && t.tag_ids.length === 0));
     await page.locator('#app-menu > summary').click();
     await page.getByRole('button', { name: 'Historial', exact: true }).click();
+    await openRowActions(page.locator(`[data-action="edit-transaction"][data-id="${expense.id}"]`));
     await page.locator(`[data-action="edit-transaction"][data-id="${expense.id}"]`).click();
     assert.equal(await page.locator('#movement-tag-chips input:checked').count(), 3, 'Editing preserves selected uncommon and new tags');
     await submit();

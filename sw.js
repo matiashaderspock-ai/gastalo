@@ -1,10 +1,10 @@
 /* Bump CACHE and both versioned FILES with index.html whenever JS/CSS changes. */
-const CACHE = "gastalo-v46";
+const CACHE = "gastalo-v47";
 const FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=46",
-  "./app.js?v=46",
+  "./styles.css?v=47",
+  "./app.js?v=47",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
@@ -48,6 +48,14 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);
+      // The installed shell is immutable and can paint immediately. Foreground
+      // app-check requests still reach the network; newer explicit releases must
+      // bypass an older worker so a cached index cannot trap the update loop.
+      const navigate = event.request.mode === "navigate";
+      const installedVersion = Number(CACHE.match(/v(\d+)$/)[1]);
+      const newerRelease = Number(url.searchParams.get("app-version")) > installedVersion;
+      const cached = (await cache.match(event.request)) || (navigate ? await cache.match("./index.html") : null);
+      if (cached && !newerRelease) return cached;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 4000);
       try {
