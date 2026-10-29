@@ -28,7 +28,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     assert.equal(await page.title(), "gástalo");
     const homeLabels = await page.locator(".home-totals .stat > span").allTextContents();
     assert.equal(homeLabels[0], "Balance actual");
-    assert.match(homeLabels[1], /^Gastos efectuados · \d{2}\/\d{2}$/);
+    assert.equal(homeLabels[1], "Gastos efectuados");
     assert.equal(homeLabels[2], "Gastos planeados");
     async function go(name, target = page) {
       await target.locator("#app-menu > summary").click();
@@ -285,6 +285,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
         .click();
     }
     await go("Límites de categoría");
+    await page.locator("#month").fill(consultedMonth);
     await page
       .getByRole("button", { name: "Editar límite de Comida" })
       .click();
@@ -418,6 +419,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await assertBudgetMark("green", 12.75);
     for (const [limit, tone, fill, planned] of [["30", "orange", 85, "30,00"], ["25.50", "orange", 100, "25,50"], ["20", "red", 100, "20,00"], ["0", "red", 100, "0,00"], ["", "gray", 0, null], ["200", "green", 12.75, "200,00"]]) {
       await go("Límites de categoría");
+      await page.locator("#month").fill("2026-01");
       await page.getByRole("button", { name: "Editar límite de Comida" }).click();
       await page.locator('#dialog [name="limit"]').fill(limit);
       await page.locator('#dialog button[type="submit"]').click();
