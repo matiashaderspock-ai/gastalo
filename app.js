@@ -1361,6 +1361,7 @@
         timeZone: state.profile.timezone,
       }).format(new Date());
     let month = today().slice(0, 7);
+    let budgetMonth = month;
     let archivedBudgetsOpen = false;
     const openManageGroups = new Set(), openSettingsGroups = new Set();
     const defaultFilters = () => ({
@@ -1384,8 +1385,8 @@
       if (!renderCache.reports.has(period)) renderCache.reports.set(period, report(state, period));
       return renderCache.reports.get(period);
     }
-    const currentBudget = (id) => budget(state, id, month, cachedReport());
-    const currentBudgetTotals = () => budgetTotals(state, month, cachedReport());
+    const currentBudget = (id, period = month) => budget(state, id, period, cachedReport(period));
+    const currentBudgetTotals = (period = month) => budgetTotals(state, period, cachedReport(period));
     function currentBalances() {
       cachedReport();
       return renderCache.balances ??= balances(state);
@@ -1889,24 +1890,24 @@
       );
     }
     function editBudget(id) {
-      const b = currentBudget(id);
+      const period = budgetMonth, b = currentBudget(id, period);
       modal(
         "Presupuesto · " + name(id),
-        `<p>${esc(monthLabel(month))}. Desde este mes, el límite se mantiene en los meses siguientes hasta que lo cambies.</p><label>Límite · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="Vacío = sin límite"></label><p class="muted">Cero es un límite válido. El restante no pasa al siguiente mes.</p>${actions()}`,
+        `<p>${esc(monthLabel(period))}. Desde este mes, el límite se mantiene en los meses siguientes hasta que lo cambies.</p><label>Límite · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="Vacío = sin límite"></label><p class="muted">Cero es un límite válido. El restante no pasa al siguiente mes.</p>${actions()}`,
         async (data) => {
           const next = copy(state),
             n =
               data.get("limit").trim() === "" ? null : cents(data.get("limit"));
           assert(n === null || n >= 0, "El límite no puede ser negativo.");
           let record = next.budgets.find(
-            (b) => b.category_id === id && b.month === month,
+            (b) => b.category_id === id && b.month === period,
           );
           if (record) record.limit_cents = n;
           else if (n !== b.limit)
             next.budgets.push({
               id: uid(),
               category_id: id,
-              month,
+              month: period,
               limit_cents: n,
             });
           await commit(next, "Presupuesto guardado");
@@ -1920,10 +1921,10 @@
       const large = Math.abs(amount) >= 100000000;
       return `<div class="stat ${cls}"><span>${label}</span><strong title="${money(amount)}" aria-label="${money(amount)}"><small>Bs</small>${compactMoney(amount).slice(3)}</strong>${large ? `<details class="exact-amount"><summary>Ver completo</summary><span>${money(amount)}</span></details>` : ""}</div>`;
     }
-    function monthNav(compact = false, showArrows = true) {
+    function monthNav(compact = false, showArrows = true, period = month) {
       const picker = compact
-        ? `<label class="month-picker"><span aria-hidden="true">${formatMonth(month)}</span><input type="month" id="month" aria-label="Mes consultado" value="${month}" required></label>`
-        : `<label><span class="sr-only">Mes consultado</span>${dateControl({ type: "month", id: "month", value: month, required: true })}</label>`;
+        ? `<label class="month-picker"><span aria-hidden="true">${formatMonth(period)}</span><input type="month" id="month" aria-label="Mes consultado" value="${period}" required></label>`
+        : `<label><span class="sr-only">Mes consultado</span>${dateControl({ type: "month", id: "month", value: period, required: true })}</label>`;
       const arrow = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
       return `<div class="month-nav ${compact ? "compact-month" : ""} ${showArrows ? "" : "month-only"}">${showArrows ? `<button data-action="prev" aria-label="Mes anterior">${arrow("m14 6-6 6 6 6")}</button>` : ""}${picker}${showArrows ? `<button data-action="next" aria-label="Mes siguiente">${arrow("m10 6 6 6-6 6")}</button>` : ""}</div>`;
     }
@@ -2015,7 +2016,7 @@
           .map((a) => bs[a.id]),
       );
       const remaining = currentBudgetTotals().remaining;
-      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat(`Gastos efectuados · ${monthLabel(month)}`, r.expense)}${stat("Gastos planeados", remaining)}</section>`;
+      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", remaining)}</section>`;
     }
     let gestureHelpDismissed = false;
     try { gestureHelpDismissed = localStorage.getItem("gastalo-gesture-help") === "dismissed"; } catch {}
@@ -2264,16 +2265,16 @@
       }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
     }
     function budgetCard(c, archived = false) {
-      const b = currentBudget(c.id), visual = budgetVisual(b.limit, b.spent);
+      const b = currentBudget(c.id, budgetMonth), visual = budgetVisual(b.limit, b.spent);
       return `<article class="panel budget-card budget-${visual.tone}"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div>${b.limit === null ? "" : `<progress max="${Math.max(b.limit, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)} de un límite de ${money(b.limit)}"></progress>`}<dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl>${archived ? `<button class="budget-restore" data-action="restore-entity" data-key="categories" data-id="${esc(c.id)}" aria-label="Restaurar ${esc(c.name)} en Inicio">Restaurar en Inicio</button>` : ""}</article>`;
     }
     function budgets() {
       const currentCategories = state.categories.filter((c) => !c.archived_at);
       const archivedCategories = state.categories.filter((c) => c.archived_at);
-      const longNames = state.categories.some(c => c.name.length > 18 || Math.abs(currentBudget(c.id).spent) >= 100000000);
-      const archivedLimit = sum(archivedCategories.map(c => currentBudget(c.id).limit || 0));
-      const activeLimit = sum(currentCategories.map(c => currentBudget(c.id).limit || 0));
-      return `<div class="page-heading"><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", currentBudgetTotals().limit)}</section><p class="limit-contributions">Activas: ${money(activeLimit)} · Archivadas: ${money(archivedLimit)}. Ambos importes están incluidos en el total.</p><section class="budget-grid ${longNames ? "budget-long-names" : ""}">${currentCategories.map((c) => budgetCard(c)).join("") || '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>Categorías archivadas (${archivedCategories.length})</summary><div class="budget-grid ${longNames ? "budget-long-names" : ""}">${archivedCategories.map((c) => budgetCard(c, true)).join("") || '<p class="empty">No hay categorías archivadas.</p>'}</div></details><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
+      const longNames = state.categories.some(c => c.name.length > 18 || Math.abs(currentBudget(c.id, budgetMonth).spent) >= 100000000);
+      const archivedLimit = sum(archivedCategories.map(c => currentBudget(c.id, budgetMonth).limit || 0));
+      const activeLimit = sum(currentCategories.map(c => currentBudget(c.id, budgetMonth).limit || 0));
+      return `<div class="page-heading"><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true, true, budgetMonth)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", currentBudgetTotals(budgetMonth).limit)}</section><p class="limit-contributions">Activas: ${money(activeLimit)} · Archivadas: ${money(archivedLimit)}. Ambos importes están incluidos en el total.</p><section class="budget-grid ${longNames ? "budget-long-names" : ""}">${currentCategories.map((c) => budgetCard(c)).join("") || '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>Categorías archivadas (${archivedCategories.length})</summary><div class="budget-grid ${longNames ? "budget-long-names" : ""}">${archivedCategories.map((c) => budgetCard(c, true)).join("") || '<p class="empty">No hay categorías archivadas.</p>'}</div></details><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
     }
     function expensePie(categories) {
       const total = sum(categories.map((c) => c.spent));
@@ -2595,7 +2596,8 @@
       if (action === "delete-transaction" || action === "swipe-delete-transaction")
         return deleteTransaction(id);
       if (action === "prev" || action === "next") {
-        month = shiftMonth(month, action === "prev" ? -1 : 1);
+        if (view === "budgets") budgetMonth = shiftMonth(budgetMonth, action === "prev" ? -1 : 1);
+        else month = shiftMonth(month, action === "prev" ? -1 : 1);
         detailScope = "month";
         historyLimit = 100;
         return render();
@@ -3380,7 +3382,8 @@
       try {
         if (e.target.matches(".date-control input")) updateDateControl(e.target);
         if (e.target.id === "month" && monthOK(e.target.value)) {
-          month = e.target.value;
+          if (view === "budgets") budgetMonth = e.target.value;
+          else month = e.target.value;
           detailScope = "month";
           historyLimit = 100;
           render();
