@@ -16,7 +16,7 @@ const server = http.createServer((req, res) => {
   if (check) checks++;
   if (check && failCheck) { res.writeHead(503).end(); return; }
   const name = url.pathname.replace(/^\/gastalo\//, "") || "index.html";
-  if (!/^(index\.html|app\.js|styles\.css|sw\.js|manifest\.json|icons\/[\w.-]+)$/.test(name)) {
+  if (!/^(index\.html|app\.js|styles\.css|sw\.js|manifest\.json|icons\/(?:[\w.-]+|demo\/(?:chase\.svg|robinhood\.png)))$/.test(name)) {
     res.writeHead(404).end(); return;
   }
   let body = fs.readFileSync(path.join(root, name));

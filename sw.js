@@ -1,15 +1,17 @@
 /* Bump CACHE and both versioned FILES with index.html whenever JS/CSS changes. */
-const CACHE = "gastalo-v50";
+const CACHE = "gastalo-v51";
 const FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=50",
-  "./app.js?v=50",
+  "./styles.css?v=51",
+  "./app.js?v=51",
   "./manifest.json",
   "./icons/icon.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
+  "./icons/demo/chase.svg",
+  "./icons/demo/robinhood.png",
 ];
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES)).then(() => self.skipWaiting()));

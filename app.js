@@ -396,46 +396,46 @@
     assert(dateOK(date), "Fecha de demo inválida.");
     const s = emptyState(), month = date.slice(0, 7), previous = shiftMonth(month, -1);
     const entity = (id, name, icon) => ({ id: "demo-" + id, name, icon, currency: "BOB", archived_at: null });
-    s.sources = [{ ...entity("salary", "Salary / Ingresos", "income"), expected_cents: 650000 }];
+    s.sources = [{ ...entity("salary", "Salary", "income"), expected_cents: 650000 }];
     s.accounts = [
       ["wallet", "Wallet", "wallet", 85000],
-      ["bmsc", "BMSC (Banco Mercantil Santa Cruz)", "bank", 420000],
-      ["ganadero", "Banco Ganadero", "bank", 680000],
-      ["economico", "Banco Económico", "bank", 235000],
+      ["bmsc", "BMSC", "banco_mercantil", 420000],
+      ["chase", "Chase", "bank", 680000],
+      ["robinhood", "Robinhood", "investments", 235000],
     ].map(([id, name, icon, opening_balance_cents]) => ({
       ...entity(id, name, icon), opening_balance_cents,
       opening_date: previous + "-01", exclude_from_total: false,
     }));
     s.categories = [
-      ["food", "Comida", "food"], ["transport", "Transporte", "bus"],
-      ["housing", "Vivienda", "home"], ["health", "Salud", "health"],
-      ["entertainment", "Entretenimiento", "cinema"], ["services", "Servicios", "bills"],
+      ["food", "Food", "food"], ["transport", "Transport", "bus"],
+      ["housing", "Housing", "home"], ["health", "Health", "health"],
+      ["entertainment", "Entertainment", "cinema"], ["services", "Utilities", "bills"],
     ].map(([id, name, icon]) => entity(id, name, icon));
-    s.tags = [{ id: "demo-sample", name: "Datos de ejemplo", archived_at: null }];
+    s.tags = [{ id: "demo-sample", name: "Sample data", archived_at: null }];
     const limits = [140000, 45000, 200000, 50000, 60000, 40000];
     // Use the existing effective-month limits, with an explicit current-month plan.
-    // Comida exceeds its new Bs 700 plan; the other five categories stay under.
+    // Food exceeds its new Bs 700 plan; the other five categories stay under.
     s.budgets = [previous, month].flatMap(period => s.categories.map((c, i) => ({
       id: `demo-budget-${period}-${i}`, category_id: c.id, month: period,
       limit_cents: period === month && i === 0 ? 70000 : limits[i],
     })));
     // Fifteen movements per month, including income and cash transfers.
     const movements = [
-      ["salary", "bmsc", 650000, "Sueldo mensual"],
-      ["bmsc", "housing", 180000, "Alquiler"],
-      ["bmsc", "wallet", 50000, "Retiro de efectivo"],
-      ["wallet", "food", 8500, "Almuerzo"],
-      ["wallet", "transport", 1200, "Transporte urbano"],
-      ["ganadero", "food", 32550, "Supermercado"],
-      ["economico", "health", 18500, "Consulta médica"],
-      ["wallet", "entertainment", 6500, "Cine"],
-      ["bmsc", "services", 24000, "Internet y servicios"],
-      ["wallet", "food", 6200, "Café y merienda"],
-      ["ganadero", "transport", 18000, "Combustible"],
-      ["economico", "entertainment", 12500, "Cena con amigos"],
-      ["wallet", "health", 4800, "Farmacia"],
-      ["ganadero", "food", 27800, "Compras de la semana"],
-      ["bmsc", "economico", 45000, "Ahorro del mes"],
+      ["salary", "bmsc", 650000, "Monthly salary"],
+      ["bmsc", "housing", 180000, "Rent"],
+      ["bmsc", "wallet", 50000, "Cash withdrawal"],
+      ["wallet", "food", 8500, "Lunch"],
+      ["wallet", "transport", 1200, "City transport"],
+      ["chase", "food", 32550, "Groceries"],
+      ["robinhood", "health", 18500, "Medical appointment"],
+      ["wallet", "entertainment", 6500, "Cinema"],
+      ["bmsc", "services", 24000, "Internet and utilities"],
+      ["wallet", "food", 6200, "Coffee and snacks"],
+      ["chase", "transport", 18000, "Fuel"],
+      ["robinhood", "entertainment", 12500, "Dinner with friends"],
+      ["wallet", "health", 4800, "Pharmacy"],
+      ["chase", "food", 27800, "Weekly groceries"],
+      ["bmsc", "robinhood", 45000, "Monthly savings"],
     ];
     for (const [periodIndex, period] of [previous, month].entries()) {
       const days = periodIndex === 0
@@ -449,7 +449,7 @@
           id: `demo-transaction-${periodIndex}-${i}`, kind,
           from_id, to_id, amount_cents: amount + (periodIndex && kind === "expense" ? 350 : 0),
           occurred_on, occurred_time: "12:00:00", occurred_timezone: s.profile.timezone,
-          currency: "BOB", tag_ids: ["demo-sample"], note: "Ejemplo · " + note,
+          currency: "BOB", tag_ids: ["demo-sample"], note: "Sample · " + note,
           status: "posted", created_at: timestamp, updated_at: timestamp,
         });
       });
@@ -2040,12 +2040,18 @@
       return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ENTITY_ICONS[iconKey].path}</svg>`;
     }
     function rowIcon(key, item = {}) {
+      // Fixed local artwork for seeded demo accounts only; keep the normal icon picker.
+      if (demoMode && key === "accounts") {
+        const logo = item.id === "demo-chase" && item.icon === "bank" ? "chase.svg"
+          : item.id === "demo-robinhood" && item.icon === "investments" ? "robinhood.png" : null;
+        if (logo) return `<svg viewBox="0 0 24 24" aria-hidden="true"><image href="./icons/demo/${logo}" width="24" height="24"/></svg>`;
+      }
       return iconSvg(entityIconKey(item, key));
     }
     function iconChooser(key, item) {
       const selectedIcon = entityIconKey(item, key);
       const pages = ENTITY_ICON_PAGES.map(page => page.map(id => [id, ENTITY_ICONS[id]]));
-      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${iconSvg(selectedIcon)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="Elegir icono: ${pages.length} páginas">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="Página ${index + 1} de ${pages.length}">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" title="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>Desliza para ver más</span><div role="group" aria-label="Páginas de iconos">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="Página de iconos ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
+      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${rowIcon(key, item)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="Elegir icono: ${pages.length} páginas">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="Página ${index + 1} de ${pages.length}">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" title="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>Desliza para ver más</span><div role="group" aria-label="Páginas de iconos">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="Página de iconos ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
     }
     function showIconPage(index) {
       const pages = $(".icon-pages");
