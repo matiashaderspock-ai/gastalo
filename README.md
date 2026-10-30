@@ -17,6 +17,10 @@ PWA personal de gastos en BOB. HTML/CSS y un `app.js` vanilla, sin dependencias 
 
 ## Usar y desarrollar
 
+Demo pública para el portfolio: [`?demo=1&app-version=50`](https://matiashaderspock-ai.github.io/gastalo/?demo=1&app-version=50). Conserva ambos parámetros en el enlace: `app-version=50` obliga al service worker anterior a consultar la nueva versión, evitando abrir un shell anterior sin soporte de demo. Usa IndexedDB **`gastalo-demo`**, borradores y ayuda de gestos separados; nunca abre `gastalo` ni lee/guarda `sync_config`. La sincronización está bloqueada en todas sus entradas y sus controles no se muestran. El aviso permanente **Demo: sample data, nothing is saved to anyone's account**, con traducción al español, permanece arriba al desplazarse en todas las vistas y se repite en los formularios; el título incluye **DEMO** y **Reset demo** borra solo el contenido de la base de demo y vuelve a cargar ejemplos.
+
+La primera apertura crea Wallet, BMSC, Banco Ganadero y Banco Económico, seis categorías, una fuente Salary / Ingresos, presupuestos mediante los límites de categoría existentes y 30 movimientos ficticios en el mes actual y anterior. Cada categoría tiene gasto y un límite explícito del mes actual: Comida supera su plan de Bs 700 y las otras cinco quedan por debajo. Los saldos de las cuatro cuentas son positivos. Recargar conserva las modificaciones; reset vuelve a generar fechas recientes. Si ya abriste una demo anterior, usa **Reset demo** para cargar estos nuevos planes. Cada movimiento inicial lleva nota y etiqueta de ejemplo. La demo es una vista de navegador: no ofrece el acceso de instalación de la app personal. Comparte únicamente los archivos públicos del shell offline; el service worker nunca guarda datos financieros ni solicitudes a GitHub. La URL habitual conserva su funcionamiento y base personal.
+
 ```sh
 python3 -m http.server 8000
 # Abrir http://localhost:8000 (no file://)
@@ -39,6 +43,7 @@ Prueba opcional de navegador (Chromium instalado; emulación de iPhone, no dispo
 npm install --prefix /tmp/gastalo-browser playwright
 # Con el servidor en el puerto 4173:
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-review.cjs
+NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-demo.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-smoke.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-entity-swipe.cjs
 NODE_PATH=/tmp/gastalo-browser/node_modules node tests/browser-compact-icons.cjs

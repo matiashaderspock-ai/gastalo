@@ -9,7 +9,7 @@ const path = require("node:path");
 const A = require("../app.js");
 const root = path.join(__dirname, "..");
 const current = Number(/app\.js\?v=(\d+)/.exec(fs.readFileSync(path.join(root, "index.html"), "utf8"))[1]);
-let release = current, failCheck = false, checks = 0, holdCheck = false, checkRequestObserved;
+let release = current, failCheck = false, checks = 0, holdCheck = false, checkRequestObserved, legacyApp = false;
 const pendingChecks = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost"), check = url.searchParams.has("app-check");
@@ -20,6 +20,8 @@ const server = http.createServer((req, res) => {
     res.writeHead(404).end(); return;
   }
   let body = fs.readFileSync(path.join(root, name));
+  // Stand-in for the pre-demo app: an old cached script must never boot at the public demo URL.
+  if (name === "app.js" && legacyApp) body = Buffer.from('document.body.dataset.legacy = "true";');
   if (["index.html", "sw.js"].includes(name)) body = Buffer.from(body.toString()
     .replaceAll(`?v=${current}`, `?v=${release}`).replace(`gastalo-v${current}`, `gastalo-v${release}`));
   const respond = () => res.writeHead(200, {
@@ -123,5 +125,43 @@ const server = http.createServer((req, res) => {
     assert.deepEqual(saved.sync_config, config);
     assert.deepEqual(errors, []);
     console.log("PASS: cached shell upgrades on foreground/pageshow, open drafts and settings defer refresh, manual/offline/error checks, Pages subdirectory scope, offline reload and financial data/token preservation.");
+    await context.close();
+
+    // A visitor may already have a pre-demo shell installed on this origin.
+    release = 48; // Last release before demo support; the public entry requests the current release.
+    legacyApp = true;
+    const legacyContext = await browser.newContext({ ...devices["iPhone 13"] }), syncCalls = [];
+    await legacyContext.route("https://api.github.com/**", route => { syncCalls.push(route.request().method()); return route.abort(); });
+    const demo = await legacyContext.newPage();
+    await demo.goto(base);
+    await demo.evaluate(() => navigator.serviceWorker.register("./sw.js"));
+    await demo.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await demo.reload();
+    assert.equal(await demo.locator("body").getAttribute("data-legacy"), "true");
+    await demo.evaluate(({ data, config }) => new Promise(resolve => {
+      const request = indexedDB.open("gastalo", 1);
+      request.onupgradeneeded = () => request.result.createObjectStore("state");
+      request.onsuccess = () => {
+        const db = request.result, tx = db.transaction("state", "readwrite");
+        tx.objectStore("state").put({ data, revision: 7 }, "main");
+        tx.objectStore("state").put(config, "sync_config");
+        tx.oncomplete = () => { db.close(); resolve(); };
+      };
+    }), { data: state, config: { ...config, paused: false } });
+    await legacyContext.addInitScript(() => {
+      window.openedDatabases = [];
+      const open = indexedDB.open.bind(indexedDB);
+      indexedDB.open = (...args) => { window.openedDatabases.push(args[0]); return open(...args); };
+    });
+    release = current;
+    legacyApp = false;
+    await demo.goto(base + `?demo=1&app-version=${current}`);
+    await demo.locator(".home-totals").waitFor();
+    assert.equal(await demo.locator("#demo-banner").isVisible(), true);
+    assert.equal(await demo.locator("body").getAttribute("data-legacy"), null);
+    assert.deepEqual(await demo.evaluate(() => window.openedDatabases), ["gastalo-demo"], "The old shell must never open the personal DB at demo entry");
+    assert.deepEqual(syncCalls, []);
+    console.log("PASS: public demo entry bypasses a pre-demo worker/cache before opening any personal database or syncing.");
+    await legacyContext.close();
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

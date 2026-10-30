@@ -391,6 +391,71 @@
       imports: [],
     };
   }
+  // Fictional data only. Dates are relative to the visitor's first open/reset.
+  function demoState(date) {
+    assert(dateOK(date), "Fecha de demo inválida.");
+    const s = emptyState(), month = date.slice(0, 7), previous = shiftMonth(month, -1);
+    const entity = (id, name, icon) => ({ id: "demo-" + id, name, icon, currency: "BOB", archived_at: null });
+    s.sources = [{ ...entity("salary", "Salary / Ingresos", "income"), expected_cents: 650000 }];
+    s.accounts = [
+      ["wallet", "Wallet", "wallet", 85000],
+      ["bmsc", "BMSC (Banco Mercantil Santa Cruz)", "bank", 420000],
+      ["ganadero", "Banco Ganadero", "bank", 680000],
+      ["economico", "Banco Económico", "bank", 235000],
+    ].map(([id, name, icon, opening_balance_cents]) => ({
+      ...entity(id, name, icon), opening_balance_cents,
+      opening_date: previous + "-01", exclude_from_total: false,
+    }));
+    s.categories = [
+      ["food", "Comida", "food"], ["transport", "Transporte", "bus"],
+      ["housing", "Vivienda", "home"], ["health", "Salud", "health"],
+      ["entertainment", "Entretenimiento", "cinema"], ["services", "Servicios", "bills"],
+    ].map(([id, name, icon]) => entity(id, name, icon));
+    s.tags = [{ id: "demo-sample", name: "Datos de ejemplo", archived_at: null }];
+    const limits = [140000, 45000, 200000, 50000, 60000, 40000];
+    // Use the existing effective-month limits, with an explicit current-month plan.
+    // Comida exceeds its new Bs 700 plan; the other five categories stay under.
+    s.budgets = [previous, month].flatMap(period => s.categories.map((c, i) => ({
+      id: `demo-budget-${period}-${i}`, category_id: c.id, month: period,
+      limit_cents: period === month && i === 0 ? 70000 : limits[i],
+    })));
+    // Fifteen movements per month, including income and cash transfers.
+    const movements = [
+      ["salary", "bmsc", 650000, "Sueldo mensual"],
+      ["bmsc", "housing", 180000, "Alquiler"],
+      ["bmsc", "wallet", 50000, "Retiro de efectivo"],
+      ["wallet", "food", 8500, "Almuerzo"],
+      ["wallet", "transport", 1200, "Transporte urbano"],
+      ["ganadero", "food", 32550, "Supermercado"],
+      ["economico", "health", 18500, "Consulta médica"],
+      ["wallet", "entertainment", 6500, "Cine"],
+      ["bmsc", "services", 24000, "Internet y servicios"],
+      ["wallet", "food", 6200, "Café y merienda"],
+      ["ganadero", "transport", 18000, "Combustible"],
+      ["economico", "entertainment", 12500, "Cena con amigos"],
+      ["wallet", "health", 4800, "Farmacia"],
+      ["ganadero", "food", 27800, "Compras de la semana"],
+      ["bmsc", "economico", 45000, "Ahorro del mes"],
+    ];
+    for (const [periodIndex, period] of [previous, month].entries()) {
+      const days = periodIndex === 0
+        ? new Date(new Date(month + "-01T12:00:00Z").getTime() - 86400000).getUTCDate()
+        : Number(date.slice(8));
+      movements.forEach(([from, to, amount, note], i) => {
+        const occurred_on = period + "-" + String(1 + Math.floor(i * (days - 1) / (movements.length - 1))).padStart(2, "0");
+        const from_id = "demo-" + from, to_id = "demo-" + to;
+        const timestamp = occurred_on + "T16:00:00Z", kind = direction(s, from_id, to_id);
+        s.transactions.push({
+          id: `demo-transaction-${periodIndex}-${i}`, kind,
+          from_id, to_id, amount_cents: amount + (periodIndex && kind === "expense" ? 350 : 0),
+          occurred_on, occurred_time: "12:00:00", occurred_timezone: s.profile.timezone,
+          currency: "BOB", tag_ids: ["demo-sample"], note: "Ejemplo · " + note,
+          status: "posted", created_at: timestamp, updated_at: timestamp,
+        });
+      });
+    }
+    return validateState(s);
+  }
   function movementTagSuggestions(state, selected = [], limit = 6) {
     const counts = new Map();
     for (const t of state.transactions) if (t.status === "posted")
@@ -1139,6 +1204,7 @@
     compareTransactionDates,
     shiftMonth,
     emptyState,
+    demoState,
     movementTagSuggestions,
     direction,
     canDrop,
@@ -1176,6 +1242,23 @@
 
   async function startApp() {
     const $ = (selector) => document.querySelector(selector);
+    // Fixed for this document's lifetime, before any database/draft/config reads.
+    const demoMode = new URL(location.href).searchParams.get("demo") === "1";
+    const databaseName = demoMode ? "gastalo-demo" : "gastalo";
+    const gestureHelpKey = databaseName + "-gesture-help";
+    const movementDraftKey = databaseName + "-movement-draft";
+    if (demoMode) {
+      const banner = $("#demo-banner");
+      banner.hidden = false;
+      document.title = "gástalo · DEMO";
+      // Modal dialogs occupy the browser's top layer, so repeat the notice there.
+      const dialogBanner = banner.cloneNode(true);
+      dialogBanner.id = "demo-dialog-banner";
+      dialogBanner.querySelector("button").remove();
+      $("#dialog").prepend(dialogBanner);
+      // The personal app's install shortcut opens its real start_url. Demo stays a browser preview.
+      $('link[rel="manifest"]')?.remove();
+    }
     const esc = (value) =>
       String(value ?? "").replace(
         /[&<>"']/g,
@@ -1238,7 +1321,7 @@
       path: "gastalo-backup.json",
       token: "",
     });
-    let syncConfig = defaultSyncConfig(), syncReady = false, syncFlight = null,
+    let syncConfig = demoMode ? null : defaultSyncConfig(), syncReady = false, syncFlight = null,
       syncQueued = false, syncTimer, resetting = false;
     function syncStatus() {
       return syncConfig.lastError || (syncConfig.lastSuccess
@@ -1250,6 +1333,7 @@
       if (line) line.textContent = syncStatus();
     }
     function persistSyncConfig(config) {
+      if (demoMode) return Promise.resolve();
       return new Promise((resolve, reject) => {
         const tx = db.transaction("state", "readwrite");
         tx.objectStore("state").put(config, "sync_config");
@@ -1258,10 +1342,12 @@
       });
     }
     function scheduleSync() {
+      if (demoMode) return;
       clearTimeout(syncTimer);
       if (syncConfig.token && !syncConfig.paused) syncTimer = setTimeout(runSync, 30000);
     }
     function confirmSyncReplacement(error, config, hash) {
+      if (demoMode) return;
       if (config !== syncConfig || !config.paused) return;
       const dialog = $("#dialog");
       if (dialog.open) {
@@ -1282,7 +1368,7 @@
       );
     }
     async function runSync(replacement) {
-      if (resetting || !syncReady || !syncConfig.token || syncConfig.paused || !navigator.onLine) return;
+      if (demoMode || resetting || !syncReady || !syncConfig.token || syncConfig.paused || !navigator.onLine) return;
       if (syncFlight) {
         syncQueued = true;
         return;
@@ -1326,7 +1412,7 @@
       }
     }
     async function saveSyncSettings(disable = false) {
-      if (!syncReady) return;
+      if (demoMode || !syncReady) return;
       try {
         const input = $("#sync-token");
         const next = disable ? { ...syncConfig, token: "" } : {
@@ -1420,10 +1506,19 @@
     }
     async function load() {
       const record = await new Promise((resolve, reject) => {
-        const tx = db.transaction("state");
-        const r = tx.objectStore("state").get("main");
-        r.onsuccess = () => resolve(r.result);
-        r.onerror = () => reject(r.error);
+        const tx = db.transaction("state", demoMode ? "readwrite" : "readonly");
+        const store = tx.objectStore("state"), r = store.get("main");
+        let loaded;
+        r.onsuccess = () => {
+          loaded = r.result;
+          // Read and seed atomically: two first-open tabs cannot overwrite each other.
+          if (demoMode && !loaded) {
+            loaded = { data: demoState(today()), revision: 1 };
+            store.put(loaded, "main");
+          }
+        };
+        tx.oncomplete = () => resolve(loaded);
+        tx.onerror = tx.onabort = () => reject(tx.error);
       });
       state = record?.data || emptyState();
       revision = record?.revision || 0;
@@ -1452,8 +1547,9 @@
               conflict = true;
               tx.abort();
             } else {
+              if (reset && demoMode) store.clear();
               store.put({ data: next, revision: revision + 1 }, "main");
-              if (reset) {
+              if (reset && !demoMode) {
                 if (eraseSync) store.delete("sync_config");
                 else store.put({ ...syncConfig, checkAfterReset: true }, "sync_config");
               }
@@ -1473,12 +1569,12 @@
         state = next;
         revision++;
         if (reset) {
-          syncConfig = eraseSync ? defaultSyncConfig() : { ...syncConfig, checkAfterReset: true };
+          if (!demoMode) syncConfig = eraseSync ? defaultSyncConfig() : { ...syncConfig, checkAfterReset: true };
           pendingImport = null;
           keepMovementDraft(null);
           gestureHelpDismissed = false;
           openSettingsGroups.clear();
-          try { localStorage.removeItem("gastalo-gesture-help"); } catch {}
+          try { localStorage.removeItem(gestureHelpKey); } catch {}
           detailId = null;
           detailScope = "month";
           homeScroll = 0;
@@ -1565,6 +1661,7 @@
     const actions = (save = "Guardar") =>
       `<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary" type="submit">${save}</button></div>`;
     function resetApp() {
+      if (demoMode) return resetDemo();
       modal(
         "¿Restablecer todo desde cero?",
         `<p>Se borrarán todos los movimientos, saldos, fuentes, cuentas, categorías, etiquetas, límites e importaciones de este dispositivo, junto con los ajustes de la aplicación.</p><p>Se conservarán los ajustes de sincronización y el respaldo que ya exista en GitHub.</p><button type="button" data-action="export">Descargar respaldo antes de borrar</button><label class="check"><input name="erase-sync" type="checkbox">También borrar el token de sincronización</label><p class="muted">Tendrás que crear y pegar un token nuevo</p><label class="check"><input name="confirm-reset" type="checkbox" required>Entiendo que se borrarán todos los datos de este dispositivo.</label><div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="danger" type="submit">Restablecer todo</button></div>`,
@@ -1576,13 +1673,24 @@
         { compact: true, focusSelector: '[data-action="close"]' },
       );
     }
+    function resetDemo() {
+      if (!demoMode) return;
+      modal(
+        "¿Restablecer la demo?",
+        `<p>Se borrarán tus cambios en la demo y se cargarán nuevos datos de ejemplo. Tus datos personales no se modificarán.</p>${actions("Reset demo")}`,
+        async () => {
+          await commit(demoState(localClock(Date.now(), "America/La_Paz").date), "Demo restablecida · Datos de ejemplo", false, { reset: true });
+        },
+        { compact: true, focusSelector: '[data-action="close"]' },
+      );
+    }
     let movementDraft = null;
-    try { movementDraft = JSON.parse(sessionStorage.getItem("gastalo-movement-draft") || "null"); } catch {}
+    try { movementDraft = JSON.parse(sessionStorage.getItem(movementDraftKey) || "null"); } catch {}
     function keepMovementDraft(value) {
       movementDraft = value;
       try {
-        if (value) sessionStorage.setItem("gastalo-movement-draft", JSON.stringify(value));
-        else sessionStorage.removeItem("gastalo-movement-draft");
+        if (value) sessionStorage.setItem(movementDraftKey, JSON.stringify(value));
+        else sessionStorage.removeItem(movementDraftKey);
       } catch { /* Keep an in-memory draft when session storage is unavailable. */ }
     }
     function movement(from = "", to = "", transaction = null, reviewId = null) {
@@ -2019,7 +2127,7 @@
       return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", remaining)}</section>`;
     }
     let gestureHelpDismissed = false;
-    try { gestureHelpDismissed = localStorage.getItem("gastalo-gesture-help") === "dismissed"; } catch {}
+    try { gestureHelpDismissed = localStorage.getItem(gestureHelpKey) === "dismissed"; } catch {}
     const gestureGuide = () => '<p>Arrastra el círculo de una cuenta hacia una categoría para registrar un gasto, o hacia otra cuenta para transferir. Desde una fuente hacia una cuenta registras un ingreso. Mantén pulsado un círculo para ordenar entidades. También puedes usar + Movimiento en el menú.</p>';
     function home() {
       const bs = currentBalances();
@@ -2349,14 +2457,14 @@
     function settings() {
       return `<div class="page-heading"><h1>Importar/Exportar</h1><p>Respalda, restaura y organiza tus datos.</p></div>
       <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
-      <details class="panel settings-group" id="backup-settings" ${openSettingsGroups.has("backup-settings") ? "open" : ""}><summary>Respaldo automático en GitHub</summary><p>Respaldo automático en tu repositorio privado de GitHub. Solo se envían datos; no se restaura desde GitHub.</p>
+      ${demoMode ? "" : `<details class="panel settings-group" id="backup-settings" ${openSettingsGroups.has("backup-settings") ? "open" : ""}><summary>Respaldo automático en GitHub</summary><p>Respaldo automático en tu repositorio privado de GitHub. Solo se envían datos; no se restaura desde GitHub.</p>
       <form id="sync-form"><label>Repo<input id="sync-repo" value="${esc(syncConfig.repo)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Branch<input id="sync-branch" value="${esc(syncConfig.branch)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Path<input id="sync-path" value="${esc(syncConfig.path)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Token<input id="sync-token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${esc(syncConfig.token ? "••••" + syncConfig.token.slice(-4) : "")}"></label>
       <p class="muted">Usa un token con permiso de escritura de Contents en el repositorio elegido. «Sincronizar ahora» guarda la configuración en este dispositivo.</p>
       <button class="primary" type="submit">Sincronizar ahora</button> <button type="button" data-action="sync-disable">Desactivar</button></form>
-      <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></details>
+      <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></details>`}
       <section class="panel"><h2>Importar historial completo</h2><p>Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.</p><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>Importar también límites de categoría (opcional)</summary><p>El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.</p><label>Aplicar límites desde (opcional)${dateControl({ id: "import-budget-month", type: "month", describedBy: "import-budget-help" })}</label><p id="import-budget-help" class="muted">Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.</p></details><p class="muted">CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.</p></section>
       <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
         state.review
@@ -2369,8 +2477,8 @@
       }${state.review.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section>
       <details class="panel settings-group" id="calendar-settings" ${openSettingsGroups.has("calendar-settings") ? "open" : ""}><summary>Calendario y zona horaria</summary><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></details>
       <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Restaurar ${esc(e.name)}${key === "tags" ? "" : " en Inicio"}">${key === "tags" ? "Restaurar" : "Restaurar en Inicio"}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div></div>`).join("")}</details>`).join("")}</section>
-      <section class="panel"><details class="gesture-help"><summary>Ayuda de gestos</summary>${gestureGuide()}</details><h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p><p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
-      <section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>`;
+      <section class="panel"><details class="gesture-help"><summary>Ayuda de gestos</summary>${gestureGuide()}</details>${demoMode ? '<p>Demo en este navegador · Datos de ejemplo · Sincronización desactivada.</p>' : '<h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p>'}<p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
+      ${demoMode ? '<section class="panel reset-panel"><h2>Datos de ejemplo</h2><p>Descarta tus cambios en la demo y vuelve a cargar los ejemplos.</p><button data-action="reset-demo">Reset demo</button></section>' : '<section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>'}`;
     }
     const navigationStack = [];
     function rememberNavigation() {
@@ -2492,7 +2600,7 @@
       );
       const link = document.createElement("a");
       link.href = url;
-      link.download = `gastalo-${formatDate(today()).replaceAll("/", "-")}.json`;
+      link.download = `${databaseName}-${formatDate(today()).replaceAll("/", "-")}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
@@ -2508,6 +2616,7 @@
       if (backSwipeAnimation) return;
       const action = button.dataset.action,
         id = button.dataset.id;
+      if (action === "reset-demo") return resetDemo();
       if (button.dataset.view) {
         if (button.dataset.view === "home") navigationStack.length = 0;
         else if (button.dataset.view !== view) rememberNavigation();
@@ -2553,7 +2662,7 @@
       }
       if (action === "dismiss-gesture-help") {
         gestureHelpDismissed = true;
-        try { localStorage.setItem("gastalo-gesture-help", "dismissed"); } catch {}
+        try { localStorage.setItem(gestureHelpKey, "dismissed"); } catch {}
         render();
         return;
       }
@@ -2842,7 +2951,7 @@
     let backSwipe = null, backSwipeClick = false, backSwipeClickTimer,
       backSwipeAnimation = null, backPreviewCSS;
     function captureBackPreview() {
-      return [$(".app-header"), $("#main"), $(".app-footer")].map(node => {
+      return [$(".app-top"), $("#main"), $(".app-footer")].map(node => {
         const clone = node.cloneNode(true), box = node.getBoundingClientRect();
         const selector = "input, select, textarea, .entity-strip, .table-scroll, .tag-choices";
         const originals = [...node.querySelectorAll(selector)];
@@ -3431,7 +3540,7 @@
     $("#offline").hidden = navigator.onLine;
     try {
       db = await new Promise((resolve, reject) => {
-        const r = indexedDB.open("gastalo", 1);
+        const r = indexedDB.open(databaseName, 1);
         r.onupgradeneeded = () => r.result.createObjectStore("state");
         r.onsuccess = () => resolve(r.result);
         r.onerror = () => reject(r.error);
@@ -3447,7 +3556,7 @@
       await load();
       render();
       // Load sync settings after rendering; configuration/network failures stay local.
-      void (async () => {
+      if (!demoMode) void (async () => {
         try {
           const config = await new Promise((resolve, reject) => {
             const r = db.transaction("state").objectStore("state").get("sync_config");

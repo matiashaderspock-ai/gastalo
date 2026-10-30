@@ -40,6 +40,7 @@ jobs:
           export CHROMIUM_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
           python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/gastalo-browser-server.log 2>&1 &
           node tests/browser-review.cjs
+          node tests/browser-demo.cjs
           node tests/browser-back-navigation.cjs
           GASTALO_ANIMATE_BACK=1 node tests/browser-back-navigation.cjs
           node tests/browser-entity-chart.cjs
