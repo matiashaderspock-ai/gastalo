@@ -83,3 +83,21 @@ app icon: https://apps.apple.com/us/app/yango-deli-food-delivery/id6444406396
 
 Brand names and marks belong to their respective owners. These adaptations
 identify financial accounts and expense categories; no affiliation is implied.
+
+
+Demo-only account logos (local assets)
+
+Chase: icons/demo/chase.svg retains the original blue octagon paths, extracted
+from the wordmark for legibility at icon size; no path geometry changed.
+Author: JPMorgan Chase; vectorization: Wikimedia user Closeapple.
+https://commons.wikimedia.org/wiki/File:Chase_logo_2007.svg
+https://upload.wikimedia.org/wikipedia/commons/e/ed/Chase_logo_2007.svg
+Commons designation: public domain (PD-textlogo); trademark rights retained.
+
+Robinhood: icons/demo/robinhood.png, unmodified 56 x 76 original.
+Author: Robinhood; uploaded by Wikimedia user Fastily.
+https://commons.wikimedia.org/wiki/File:Robinhood_Logo_Small.png
+https://upload.wikimedia.org/wikipedia/commons/d/d5/Robinhood_Logo_Small.png
+Commons designation: public domain (PD-ineligible); brand rights retained.
+
+BMSC: demo uses the existing banco_mercantil SVG symbol in app.js, credited above.
