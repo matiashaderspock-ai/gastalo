@@ -19,6 +19,26 @@
 body {
   margin: 0;
 }
+.demo-banner:not([hidden]) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px max(16px, calc((100% - 1080px) / 2));
+  background: var(--lime);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.demo-badge {
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: var(--ink);
+  color: var(--white);
+}
+.demo-banner > span {
+  flex: 1;
+  min-width: 150px;
+}
 button,
 input,
 select,

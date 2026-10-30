@@ -22,15 +22,15 @@ const settle = async () => {
 };
 
 // Run the unmodified app with a small DOM/IndexedDB boundary fake; no dependencies or network.
-async function app(local, remote, savedConfig = config) {
+async function app(local, remote, savedConfig = config, demo = false) {
   const records = new Map([["main", { revision: 1, data: local }], ["sync_config", structuredClone(savedConfig)]]);
-  const transactions = [], calls = [], timers = new Map(), nodes = new Map(), listeners = new Map();
+  const transactions = [], reads = [], opens = [], calls = [], timers = new Map(), nodes = new Map(), listeners = new Map();
   let nextTimer = 0, remoteState = remote, remoteSha = "remote-1", pending = Promise.resolve();
   function node(selector) {
     if (!nodes.has(selector)) nodes.set(selector, {
       innerHTML: "", textContent: "", value: "", open: false, disabled: false,
       classList: { toggle() {}, add() {}, remove() {} },
-      focus() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
+      focus() {}, remove() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
       getBoundingClientRect() { return { top: 0, left: 0, width: 390 }; },
       querySelectorAll() { return []; },
       cloneNode() { return { style: {}, outerHTML: "", querySelector() { return null; }, querySelectorAll() { return []; } }; },
@@ -44,9 +44,10 @@ async function app(local, remote, savedConfig = config) {
     const operations = [];
     let aborted = false;
     const store = {
-      get(key) { const request = {}; operations.push(() => { request.result = structuredClone(staged.get(key)); request.onsuccess?.(); }); return request; },
+      get(key) { reads.push(key); const request = {}; operations.push(() => { request.result = structuredClone(staged.get(key)); request.onsuccess?.(); }); return request; },
       put(value, key) { staged.set(key, structuredClone(value)); writes.push(["put", key]); },
       delete(key) { staged.delete(key); writes.push(["delete", key]); },
+      clear() { staged.clear(); writes.push(["clear"]); },
     };
     let staged, writes = [];
     pending = pending.then(() => new Promise(resolve => setImmediate(() => {
@@ -62,7 +63,7 @@ async function app(local, remote, savedConfig = config) {
       resolve();
     })));
     // Defer immediate put/delete calls just as IndexedDB queues its requests.
-    for (const method of ["put", "delete"]) {
+    for (const method of ["put", "delete", "clear"]) {
       const perform = store[method];
       store[method] = (...args) => {
         if (staged) perform(...args);
@@ -79,9 +80,9 @@ async function app(local, remote, savedConfig = config) {
   };
   const context = vm.createContext({
     document, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
-    URL, location: { href: "https://app.test/gastalo/" },
+    URL, location: { href: "https://app.test/gastalo/" + (demo ? "?demo=1" : "") },
     DOMParser: class { parseFromString() { return { querySelector: () => ({ getAttribute: () => "./app.js?v=1" }) }; } },
-    indexedDB: { open() { const request = { result: db }; setImmediate(() => request.onsuccess()); return request; } },
+    indexedDB: { open(name) { opens.push(name); const request = { result: db }; setImmediate(() => request.onsuccess()); return request; } },
     crypto: { subtle: { digest(...args) {
       const result = globalThis.crypto.subtle.digest(...args);
       digests.add(result);
@@ -107,7 +108,7 @@ async function app(local, remote, savedConfig = config) {
     await settle();
   }
   return {
-    records, calls, transactions, node, context,
+    records, reads, opens, calls, transactions, node, context,
     async click(dataset) {
       const button = { dataset, matches: () => false, closest: selector => selector === "[data-action], [data-view]" ? button : null };
       await emit("click", { target: button });
@@ -130,6 +131,33 @@ async function app(local, remote, savedConfig = config) {
   };
 }
 const methods = a => a.calls.map(c => c.method);
+
+test("demo never reads/writes sync_config or calls network sync, even with a stored token", async () => {
+  const a = await app(state(4), state(4), config, true);
+  assert.deepEqual(a.opens, ["gastalo-demo"]);
+  assert.equal(a.reads.includes("sync_config"), false);
+  await a.click({ view: "settings" });
+  assert.doesNotMatch(a.node("#main").innerHTML, /sync-form|sync-token|backup-settings|reset-app/);
+  a.node("#sync-token").value = "synthetic-injected-token";
+  await a.manual();
+  await a.click({ action: "sync-disable" });
+  await a.auto();
+  await a.advance();
+  // A regular save also attempts the automatic sync scheduler.
+  a.node("#timezone").value = "America/La_Paz";
+  await a.click({ action: "timezone" });
+  await a.advance();
+  assert.deepEqual(a.records.get("sync_config"), config, "A demo save cannot persist sync settings");
+  await a.click({ action: "reset-demo" });
+  await a.submit();
+  assert.equal(a.records.has("sync_config"), false, "Reset wipes all keys from the demo store");
+  assert.equal(a.records.get("main").data.transactions.length, 30);
+  await a.manual(); await a.auto(); await a.advance();
+  assert.equal(a.reads.includes("sync_config"), false);
+  assert.equal(a.transactions.flat().some(([op, key]) => op === "put" && key === "sync_config"), false);
+  assert.deepEqual(methods(a), [], "No GET, blob download or PUT sync requests in demo");
+  assert.equal(a.node("#dialog").open, false, "No token or sync replacement prompt");
+});
 
 for (const erase of [false, true]) test(`reset ${erase ? "deletes" : "preserves"} sync_config atomically`, async () => {
   const saved = { ...config, enabled: true, lastHash: "previous" };
