@@ -22,11 +22,49 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     const page = await context.newPage(), errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.clock.install({ time: new Date("2026-02-15T16:00:00Z") });
-    await page.goto(new URL("?demo=1&app-version=49", base).href);
+    await page.goto(new URL("?demo=1&app-version=50", base).href);
     await page.locator(".home-totals").waitFor();
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo-demo"]);
-    assert.equal(await page.locator("#demo-banner").isVisible(), true);
-    assert.match(await page.locator("#demo-banner").innerText(), /Datos de ejemplo/);
+    async function assertDemoNotice(selector = "#demo-banner") {
+      const banner = page.locator(selector);
+      assert.equal(await banner.isVisible(), true);
+      assert.equal(await banner.locator('[lang="en"]').innerText(), "Demo: sample data, nothing is saved to anyone's account");
+      assert.equal(await banner.locator('[lang="es"]').innerText(), "Demo: datos de ejemplo, nada se guarda en la cuenta de nadie");
+      assert.match(await page.title(), /\bDEMO\b/);
+      assert.equal(await banner.evaluate(el => {
+        const r = el.getBoundingClientRect();
+        return r.top >= -1 && r.bottom <= innerHeight &&
+          el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+      }), true, "Demo notice stays visible and unobscured");
+    }
+    async function assertScrolledNotice() {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await assertDemoNotice();
+      assert.ok((await page.locator("#demo-banner").boundingBox()).y <= 1, "Notice stays at the top while scrolling");
+      await page.evaluate(() => window.scrollTo(0, 0));
+    }
+    await assertDemoNotice();
+    assert.equal(await page.locator("#demo-banner button").count(), 1);
+    assert.equal(await page.locator('#demo-banner button').getAttribute("data-action"), "reset-demo", "No dismissal control");
+    await assertScrolledNotice();
+    for (const account of A.demoState("2026-02-15").accounts) {
+      const card = page.locator(`[data-entity="${account.id}"]`);
+      assert.equal(await card.locator(".entity-name").innerText(), account.name);
+      assert.match(await card.locator("strong").getAttribute("title"), /^Bs /);
+    }
+    const categoryCards = page.locator('.entity-card[data-key="categories"]');
+    assert.equal(await categoryCards.count(), 6);
+    assert.equal(await categoryCards.locator(".entity-planned").count(), 6);
+    assert.equal(await categoryCards.locator(".budget-amount.budget-red").count(), 1);
+    for (const category of A.demoState("2026-02-15").categories) {
+      const card = page.locator(`[data-entity="${category.id}"]`);
+      assert.match(await card.getAttribute("aria-description"), /Gastos planeados: Bs/);
+      assert.doesNotMatch(await card.locator("strong").getAttribute("title"), /^Bs 0,00$/);
+    }
+    await page.locator('[data-entity="demo-food"]').click();
+    await page.locator(".entity-detail").waitFor();
+    await assertScrolledNotice();
+    await page.getByRole("button", { name: "Volver a Inicio", exact: true }).click();
     assert.equal(await page.locator('link[rel="manifest"]').count(), 0, "No personal install shortcut");
     async function records(name) {
       return page.evaluate(name => new Promise((resolve, reject) => {
@@ -67,7 +105,23 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     await page.locator(".home-totals").waitFor();
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo-demo"]);
     assert.deepEqual((await records("gastalo-demo")).main, seed, "Reload does not reseed");
+    await assertDemoNotice();
+    await go("Límites de categoría");
+    assert.equal(await page.locator("#month").inputValue(), "2026-02");
+    assert.equal(await page.locator(".budget-card").count(), 6);
+    assert.equal(await page.locator(".budget-card.budget-red").count(), 1);
+    const food = page.locator(".budget-card").filter({ has: page.getByRole("heading", { name: "Comida", exact: true }) });
+    assert.match(await food.innerText(), /Bs 764,50/);
+    assert.match(await food.innerText(), /Límite\s+Bs 700,00/);
+    assert.match(await food.innerText(), /Exceso\s+Bs 64,50/);
+    await assertScrolledNotice();
+    await go("Historial");
+    await assertScrolledNotice();
+    await go("Inicio");
     await openMovementFromMenu(page);
+    await assertDemoNotice("#demo-dialog-banner");
+    await page.locator("#dialog").evaluate(el => { el.scrollTop = el.scrollHeight; });
+    await assertDemoNotice("#demo-dialog-banner");
     assert.equal(await page.locator(".draft-notice").count(), 0, "No personal draft read");
     await page.locator('[name="from"]').selectOption("demo-wallet");
     await page.locator('[name="to"]').selectOption("demo-food");
@@ -83,8 +137,10 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
       await page.getByRole("button", { name, exact: true }).click();
     }
     await go("Gráficos");
+    await assertScrolledNotice();
     assert.equal(await page.locator(".expense-pie svg").count(), 1);
     await go("Importar/Exportar");
+    await assertScrolledNotice();
     assert.equal(await page.locator("#backup-settings, #sync-form, #sync-token, [data-action=reset-app]").count(), 0);
     await page.evaluate(() => {
       const form = document.createElement("form");
@@ -102,7 +158,9 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     await page.screenshot({ path: "/tmp/gastalo-demo-mobile.png", fullPage: true });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await page.locator('#demo-banner [data-action="reset-demo"]').click();
+    await assertDemoNotice("#demo-dialog-banner");
     await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await assertDemoNotice();
     assert.equal((await records("gastalo-demo")).main.data.transactions.length, 31);
     await page.locator('#demo-banner [data-action="reset-demo"]').click();
     await page.locator('#dialog button[type="submit"]').click();
@@ -119,7 +177,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     await page.reload();
     await page.locator(".home-totals").waitFor();
     assert.equal(new URL(page.url()).searchParams.get("demo"), "1");
-    assert.equal(await page.locator("#demo-banner").isVisible(), true);
+    await assertDemoNotice();
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo-demo"]);
     await context.setOffline(false);
     await page.clock.runFor(65000);
@@ -129,13 +187,15 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     await page.goto(base);
     await page.locator(".home-totals").waitFor();
     assert.equal(await page.locator("#demo-banner").isVisible(), false);
+    assert.equal(await page.locator("#demo-dialog-banner").count(), 0);
+    assert.doesNotMatch(await page.title(), /DEMO/);
     await go("Importar/Exportar");
     assert.equal(await page.locator("#sync-form").count(), 1);
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo"]);
     await page.waitForFunction(() => document.querySelector("#sync-status").textContent.includes("Token inválido"));
     assert.deepEqual(syncCalls, ["GET"]);
     assert.deepEqual((await records("gastalo")).main, personal.main);
-    console.log("PASS demo: isolated DB/drafts, seeded charts, persistence/reset, offline, zero sync calls; ordinary URL unchanged");
+    console.log("PASS demo: persistent EN/ES notice on all views/forms, DEMO title, seeded balances/spending/budgets, isolated DB/drafts, persistence/reset, offline, zero sync calls; ordinary URL unchanged");
     await context.close();
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

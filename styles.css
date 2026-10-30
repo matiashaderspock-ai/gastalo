@@ -29,15 +29,20 @@ body {
   border-bottom: 1px solid var(--line);
   font-size: 0.85rem;
 }
-.demo-badge {
-  padding: 5px 10px;
-  border-radius: 20px;
-  background: var(--ink);
-  color: var(--white);
-}
-.demo-banner > span {
+.demo-notice {
   flex: 1;
-  min-width: 150px;
+  min-width: 200px;
+  line-height: 1.4;
+}
+.demo-notice > span {
+  display: block;
+}
+#demo-dialog-banner {
+  position: sticky;
+  top: -25px;
+  z-index: 1;
+  margin: -25px -25px 16px;
+  padding: 12px 16px;
 }
 button,
 input,
@@ -131,10 +136,14 @@ p {
 .footnote {
   margin: 24px 0;
 }
-.app-header {
+.app-top {
   position: sticky;
   top: 0;
   z-index: 20;
+  background: var(--paper);
+  padding-top: env(safe-area-inset-top);
+}
+.app-header {
   gap: 8px;
   max-width: 1160px;
   margin: auto;
@@ -143,7 +152,6 @@ p {
   grid-template-columns: 36px minmax(0, 1fr);
   align-items: center;
   background: var(--paper);
-  padding-top: max(4px, env(safe-area-inset-top));
 }
 .brand {
   display: flex;
@@ -1692,7 +1700,6 @@ dialog::backdrop {
 @media (max-width: 760px) {
   .app-header {
     padding: 4px 16px;
-    padding-top: max(4px, env(safe-area-inset-top));
   }
   .brand {
     font-size: 1.25rem;
@@ -1896,6 +1903,14 @@ dialog::backdrop {
   padding: 14px;
   border-radius: 16px;
   max-height: calc(var(--dialog-viewport-height, 100dvh) - 24px);
+}
+.compact-dialog #demo-dialog-banner {
+  top: -14px;
+  margin: -14px -14px 12px;
+}
+.titleless-dialog:has(#demo-dialog-banner) .dialog-heading {
+  position: static;
+  justify-content: flex-end;
 }
 .compact-dialog .dialog-heading {
   gap: 8px;

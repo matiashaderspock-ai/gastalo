@@ -128,7 +128,7 @@ const server = http.createServer((req, res) => {
     await context.close();
 
     // A visitor may already have a pre-demo shell installed on this origin.
-    release = 48; // Last release before demo support; the public entry requests at least v49.
+    release = 48; // Last release before demo support; the public entry requests the current release.
     legacyApp = true;
     const legacyContext = await browser.newContext({ ...devices["iPhone 13"] }), syncCalls = [];
     await legacyContext.route("https://api.github.com/**", route => { syncCalls.push(route.request().method()); return route.abort(); });
@@ -155,7 +155,7 @@ const server = http.createServer((req, res) => {
     });
     release = current;
     legacyApp = false;
-    await demo.goto(base + "?demo=1&app-version=49");
+    await demo.goto(base + `?demo=1&app-version=${current}`);
     await demo.locator(".home-totals").waitFor();
     assert.equal(await demo.locator("#demo-banner").isVisible(), true);
     assert.equal(await demo.locator("body").getAttribute("data-legacy"), null);

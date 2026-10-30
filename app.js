@@ -413,9 +413,12 @@
     ].map(([id, name, icon]) => entity(id, name, icon));
     s.tags = [{ id: "demo-sample", name: "Datos de ejemplo", archived_at: null }];
     const limits = [140000, 45000, 200000, 50000, 60000, 40000];
-    s.budgets = s.categories.map((c, i) => ({
-      id: "demo-budget-" + i, category_id: c.id, month: previous, limit_cents: limits[i],
-    }));
+    // Use the existing effective-month limits, with an explicit current-month plan.
+    // Comida exceeds its new Bs 700 plan; the other five categories stay under.
+    s.budgets = [previous, month].flatMap(period => s.categories.map((c, i) => ({
+      id: `demo-budget-${period}-${i}`, category_id: c.id, month: period,
+      limit_cents: period === month && i === 0 ? 70000 : limits[i],
+    })));
     // Fifteen movements per month, including income and cash transfers.
     const movements = [
       ["salary", "bmsc", 650000, "Sueldo mensual"],
@@ -1245,8 +1248,14 @@
     const gestureHelpKey = databaseName + "-gesture-help";
     const movementDraftKey = databaseName + "-movement-draft";
     if (demoMode) {
-      $("#demo-banner").hidden = false;
-      document.title = "gástalo · Demo";
+      const banner = $("#demo-banner");
+      banner.hidden = false;
+      document.title = "gástalo · DEMO";
+      // Modal dialogs occupy the browser's top layer, so repeat the notice there.
+      const dialogBanner = banner.cloneNode(true);
+      dialogBanner.id = "demo-dialog-banner";
+      dialogBanner.querySelector("button").remove();
+      $("#dialog").prepend(dialogBanner);
       // The personal app's install shortcut opens its real start_url. Demo stays a browser preview.
       $('link[rel="manifest"]')?.remove();
     }
@@ -2942,7 +2951,7 @@
     let backSwipe = null, backSwipeClick = false, backSwipeClickTimer,
       backSwipeAnimation = null, backPreviewCSS;
     function captureBackPreview() {
-      return [$(".app-header"), $("#main"), $(".app-footer")].map(node => {
+      return [$(".app-top"), $("#main"), $(".app-footer")].map(node => {
         const clone = node.cloneNode(true), box = node.getBoundingClientRect();
         const selector = "input, select, textarea, .entity-strip, .table-scroll, .tag-choices";
         const originals = [...node.querySelectorAll(selector)];

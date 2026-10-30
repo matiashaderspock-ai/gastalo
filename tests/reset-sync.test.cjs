@@ -30,10 +30,10 @@ async function app(local, remote, savedConfig = config, demo = false) {
     if (!nodes.has(selector)) nodes.set(selector, {
       innerHTML: "", textContent: "", value: "", open: false, disabled: false,
       classList: { toggle() {}, add() {}, remove() {} },
-      focus() {}, remove() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
+      focus() {}, remove() {}, prepend() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
       getBoundingClientRect() { return { top: 0, left: 0, width: 390 }; },
       querySelectorAll() { return []; },
-      cloneNode() { return { style: {}, outerHTML: "", querySelector() { return null; }, querySelectorAll() { return []; } }; },
+      cloneNode() { return { style: {}, outerHTML: "", querySelector(selector) { return selector === "button" ? node("#demo-banner button") : null; }, querySelectorAll() { return []; } }; },
       showModal() { this.open = true; }, close() { this.open = false; },
       addEventListener() {},
     });

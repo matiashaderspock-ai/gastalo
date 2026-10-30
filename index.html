@@ -18,56 +18,60 @@
     <link rel="manifest" href="./manifest.json" />
     <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./styles.css?v=49" />
-    <script src="./app.js?v=49" defer></script>
+    <link rel="stylesheet" href="./styles.css?v=50" />
+    <script src="./app.js?v=50" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Ir al contenido</a>
-    <header class="app-header">
-      <details id="app-menu" class="app-menu">
-        <summary aria-label="Abrir menú" title="Menú">
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </summary>
-        <nav aria-label="Navegación principal">
-          <div class="brand menu-brand" aria-label="gástalo">
-            <span class="brand-mark" aria-hidden="true">g</span>gástalo<span class="brand-dot">.</span>
-          </div>
-          <button data-action="movement">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg>+ Movimiento
-          </button>
-          <button data-view="home" class="active">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 10 8-7 8 7v11H4Z" /></svg>Inicio
-          </button>
-          <button data-view="history">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4m8-4v4M3 11h18M8 15h2m4 0h2m-8 3h2" /></svg>Historial
-          </button>
-          <button data-view="budgets">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 17H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5M2 8h16M5 12h3m-3 2h1M10 21a6 6 0 0 1 12 0Zm6-3 3-2" /></svg>Límites de categoría
-          </button>
-          <button data-view="reports">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12 9 6l4 3 7-7m-4 0h4v4" /><path d="M3 16h4v6H3Zm7-4h4v10h-4Zm7-4h4v14h-4Z" /></svg>Gráficos
-          </button>
-          <button data-view="settings">
-            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 18v3h8v-3M6 16V3M3 6l3-3 3 3m5 12v3h8v-3M18 3v13m-3-3 3 3 3-3" /></svg>Importar/Exportar
-          </button>
-        </nav>
-      </details>
-      <div id="header-totals"></div>
-    </header>
-    <aside id="demo-banner" class="demo-banner" aria-label="Demo" hidden>
-      <strong class="demo-badge">Demo</strong>
-      <span>Datos de ejemplo · Solo en este navegador · Sin sincronización</span>
-      <button type="button" data-action="reset-demo">Reset demo</button>
-    </aside>
+    <div class="app-top">
+      <aside id="demo-banner" class="demo-banner" aria-label="Demo" hidden>
+        <div class="demo-notice">
+          <span lang="en"><strong>Demo:</strong> sample data, nothing is saved to anyone's account</span>
+          <span lang="es"><strong>Demo:</strong> datos de ejemplo, nada se guarda en la cuenta de nadie</span>
+        </div>
+        <button type="button" data-action="reset-demo">Reset demo</button>
+      </aside>
+      <header class="app-header">
+        <details id="app-menu" class="app-menu">
+          <summary aria-label="Abrir menú" title="Menú">
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </summary>
+          <nav aria-label="Navegación principal">
+            <div class="brand menu-brand" aria-label="gástalo">
+              <span class="brand-mark" aria-hidden="true">g</span>gástalo<span class="brand-dot">.</span>
+            </div>
+            <button data-action="movement">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14" /></svg>+ Movimiento
+            </button>
+            <button data-view="home" class="active">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m4 10 8-7 8 7v11H4Z" /></svg>Inicio
+            </button>
+            <button data-view="history">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4m8-4v4M3 11h18M8 15h2m4 0h2m-8 3h2" /></svg>Historial
+            </button>
+            <button data-view="budgets">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 17H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5M2 8h16M5 12h3m-3 2h1M10 21a6 6 0 0 1 12 0Zm6-3 3-2" /></svg>Límites de categoría
+            </button>
+            <button data-view="reports">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12 9 6l4 3 7-7m-4 0h4v4" /><path d="M3 16h4v6H3Zm7-4h4v10h-4Zm7-4h4v14h-4Z" /></svg>Gráficos
+            </button>
+            <button data-view="settings">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 18v3h8v-3M6 16V3M3 6l3-3 3 3m5 12v3h8v-3M18 3v13m-3-3 3 3 3-3" /></svg>Importar/Exportar
+            </button>
+          </nav>
+        </details>
+        <div id="header-totals"></div>
+      </header>
+    </div>
     <main id="main" tabindex="-1">
       <p class="empty">Abriendo tu espacio…</p>
     </main>
