@@ -75,12 +75,14 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
   }};
   const document = {
     visibilityState: "visible",
+    documentElement: { lang: "es" },
+    createTreeWalker: () => ({ nextNode: () => false }),
     querySelector: selector => selector.startsWith("script[") ? { src: "https://app.test/gastalo/app.js?v=1" } : node(selector),
     querySelectorAll: () => [],
     addEventListener(type, listener) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(listener); },
   };
   const context = vm.createContext({
-    document, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
+    document, NodeFilter: { SHOW_TEXT: 4 }, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
     URL, location: { href: "https://app.test/gastalo/" + (demo ? "?demo=1" : "") },
     DOMParser: class { parseFromString() { return { querySelector: () => ({ getAttribute: () => "./app.js?v=1" }) }; } },
     indexedDB: { open(name) { opens.push(name); const request = { result: db }; setImmediate(() => request.onsuccess()); return request; } },
@@ -132,6 +134,51 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
   };
 }
 const methods = a => a.calls.map(c => c.method);
+
+test("demo UI is English while the ordinary app keeps its Spanish copy", async () => {
+  const seed = A.demoState(A.localClock(Date.now(), "America/La_Paz").date);
+  for (const demo of [false, true]) {
+    const a = await app(seed, seed, config, demo);
+    const text = (spanish, english) => demo ? english : spanish;
+    assert.equal(a.context.document.documentElement.lang, demo ? "en" : "es");
+    assert.ok(a.node("#header-totals").innerHTML.includes(text("Gastos planeados", "Planned spending")));
+    for (const [view, spanish, english] of [
+      ["history", "Historial", "History"],
+      ["budgets", "Límites de categoría", "Category limits"],
+      ["reports", "Gráficos", "Charts"],
+      ["settings", "Importar/Exportar", "Import/Export"],
+    ]) {
+      await a.click({ view });
+      const html = a.node("#main").innerHTML;
+      assert.ok(html.includes(text(spanish, english)), view);
+      assert.ok(!html.includes(`<h1>${text(english, spanish)}</h1>`), view);
+    }
+    for (const [key, spanish, english] of [
+      ["sources", "fuente", "source"], ["accounts", "cuenta", "account"],
+      ["categories", "categoría", "category"], ["tags", "etiqueta", "tag"],
+    ]) {
+      await a.click({ action: "add", key });
+      assert.equal(a.node("#dialog-title").textContent, text("Crear " + spanish, "Create " + english));
+      assert.ok(a.node("#dialog-body").innerHTML.includes(text("Nombre", "Name")));
+      assert.ok(a.node("#dialog-body").innerHTML.includes(text("Cancelar", "Cancel")));
+      if (key !== "tags") {
+        assert.ok(a.node("#dialog-body").innerHTML.includes(`aria-label="${text("Billetera", "Wallet")}"`));
+      }
+    }
+    if (demo) {
+      await a.click({ action: "remove-entity", key: "accounts", id: "demo-wallet" });
+      assert.equal(a.node("#dialog-title").textContent, "Archive or delete Wallet");
+      assert.doesNotMatch(a.node("#dialog-body").innerHTML, /movimientos|Archivar|Eliminar|Cancelar/);
+      await a.click({ action: "reset-demo" });
+      assert.equal(a.node("#dialog-title").textContent, "Reset demo?");
+      assert.doesNotMatch(a.node("#dialog-body").innerHTML, /Se borrarán|Cancelar|datos de ejemplo/);
+    }
+    // Merely translating and browsing must not alter either database or sync settings.
+    assert.deepEqual(a.records.get("main").data, seed);
+    assert.deepEqual(a.records.get("sync_config"), config);
+    assert.deepEqual(methods(a), []);
+  }
+});
 
 for (const version of [null, 1]) test(`demo seed version ${version ?? "missing"} upgrades to English without sync`, async () => {
   const expected = A.demoState(A.localClock(Date.now(), "America/La_Paz").date);

@@ -81,6 +81,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await go("Inicio");
     await setHomeMonth(page, "2025-01");
     await go("Límites de categoría");
+    // Limits and Home intentionally keep separate selected months.
+    await page.locator("#month").fill("2025-01");
     async function setLimit(value) {
       await page.getByRole("button", { name: "Editar límite de Comida", exact: true }).click();
       await page.locator('#dialog [name="limit"]').fill(value);
@@ -94,7 +96,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await setLimit("300");
     await page.locator("#month").fill("2028-04");
     assert.match(await page.locator(".budget-card").innerText(), /300,00/);
-    await go("Inicio");
+    await setHomeMonth(page, "2028-04");
     assert.match(await page.locator(".home-totals .stat").last().innerText(), /300,00/);
     assert.equal(await page.locator(".entity-planned").innerText(), "300,00");
     await go("Importar/Exportar");
