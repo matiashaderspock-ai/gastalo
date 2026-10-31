@@ -1245,6 +1245,8 @@
     // Fixed for this document's lifetime, before any database/draft/config reads.
     const demoMode = new URL(location.href).searchParams.get("demo") === "1";
     const databaseName = demoMode ? "gastalo-demo" : "gastalo";
+    // Bump when the demo seed changes; metadata stays in gastalo-demo only.
+    const DEMO_SEED_VERSION = 2;
     const gestureHelpKey = databaseName + "-gesture-help";
     const movementDraftKey = databaseName + "-movement-draft";
     if (demoMode) {
@@ -1511,11 +1513,17 @@
         let loaded;
         r.onsuccess = () => {
           loaded = r.result;
-          // Read and seed atomically: two first-open tabs cannot overwrite each other.
-          if (demoMode && !loaded) {
-            loaded = { data: demoState(today()), revision: 1 };
-            store.put(loaded, "main");
-          }
+          if (!demoMode) return;
+          const version = store.get("demo_seed_version");
+          version.onsuccess = () => {
+            // Read, clear and seed atomically so concurrent demo loads seed only once.
+            if (!loaded || (version.result ?? 0) < DEMO_SEED_VERSION) {
+              loaded = { data: demoState(today()), revision: (loaded?.revision || 0) + 1 };
+              store.clear();
+              store.put(loaded, "main");
+              store.put(DEMO_SEED_VERSION, "demo_seed_version");
+            }
+          };
         };
         tx.oncomplete = () => resolve(loaded);
         tx.onerror = tx.onabort = () => reject(tx.error);
@@ -1547,7 +1555,10 @@
               conflict = true;
               tx.abort();
             } else {
-              if (reset && demoMode) store.clear();
+              if (reset && demoMode) {
+                store.clear();
+                store.put(DEMO_SEED_VERSION, "demo_seed_version");
+              }
               store.put({ data: next, revision: revision + 1 }, "main");
               if (reset && !demoMode) {
                 if (eraseSync) store.delete("sync_config");
