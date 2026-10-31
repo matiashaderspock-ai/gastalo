@@ -1546,6 +1546,7 @@
       }).format(new Date());
     let month = today().slice(0, 7);
     let budgetMonth = month;
+    let observedMonth = month;
     let archivedBudgetsOpen = false;
     const openManageGroups = new Set(), openSettingsGroups = new Set();
     const defaultFilters = () => ({
@@ -1729,6 +1730,19 @@
     window.visualViewport?.addEventListener("resize", fitDialogToViewport);
     window.visualViewport?.addEventListener("scroll", fitDialogToViewport);
     $("#dialog").addEventListener("focusin", fitDialogToViewport);
+    let modalReturnFocus;
+    $("#dialog").addEventListener("close", () => {
+      if ($("#dialog").open) return;
+      const previous = modalReturnFocus;
+      modalReturnFocus = null;
+      const candidates = [...document.querySelectorAll("[data-action], [data-entity]")];
+      const replacement = previous?.data && Object.keys(previous.data).length
+        ? candidates.find(element => Object.entries(previous.data).every(([key, value]) => element.dataset[key] === value)) : null;
+      const target = previous?.element?.isConnected ? previous.element : replacement;
+      if (target && !target.disabled && target.getClientRects().length) target.focus({ preventScroll: true });
+      else $("#main").focus({ preventScroll: true });
+      refreshCurrentMonth();
+    });
     function modal(
       title,
       html,
@@ -1740,6 +1754,10 @@
       } = {},
     ) {
       const dialog = $("#dialog");
+      if (!dialog.open) {
+        const element = document.activeElement;
+        modalReturnFocus = { element, data: { ...element?.dataset } };
+      }
       if (demoMode && title === "¿Restablecer la demo?") {
         title = "Reset demo?";
         html = `<p>Your demo changes will be discarded and fresh sample data loaded. Your personal data will stay unchanged.</p>${actions("Reset demo")}`;
@@ -2719,6 +2737,7 @@
       return true;
     }
     function render() {
+      syncCurrentMonth();
       abortBackAnimation();
       const strips = [...document.querySelectorAll(".entity-strip")], scrollY = window.scrollY;
       if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
@@ -2762,6 +2781,26 @@
         window.scrollTo(0, scrollY);
       }
     }
+    // A resumed PWA follows the calendar only while its period is still the
+    // previous current month. Explicitly selected historical periods stay put.
+    function syncCurrentMonth() {
+      const current = today().slice(0, 7);
+      if (current === observedMonth) return false;
+      let changed = false;
+      if (month === observedMonth) { month = current; changed = true; }
+      if (budgetMonth === observedMonth) { budgetMonth = current; changed = true; }
+      observedMonth = current;
+      return changed;
+    }
+    function refreshCurrentMonth() {
+      if (document.visibilityState !== "visible" || $("#dialog").open || busy || editingEntities || pointer || settling || backSwipe || backSwipeAnimation) return;
+      // Do not discard unsubmitted filters, sync settings or an open form.
+      if (!["home", "budgets", "detail"].includes(view)) return;
+      if (syncCurrentMonth()) render();
+    }
+    window.addEventListener("pageshow", refreshCurrentMonth);
+    document.addEventListener("visibilitychange", refreshCurrentMonth);
+    setInterval(refreshCurrentMonth, 30000);
     async function previewImport(next, source) {
       pendingImport = next;
       const dates = next.transactions.map((t) => t.occurred_on).sort();
@@ -2800,6 +2839,7 @@
     }
     async function handleAction(button) {
       if (backSwipeAnimation) return;
+      syncCurrentMonth();
       const action = button.dataset.action,
         id = button.dataset.id;
       if (action === "reset-demo") return resetDemo();
@@ -3677,6 +3717,7 @@
       try {
         if (e.target.matches(".date-control input")) updateDateControl(e.target);
         if (e.target.id === "month" && monthOK(e.target.value)) {
+          syncCurrentMonth();
           if (view === "budgets") budgetMonth = e.target.value;
           else month = e.target.value;
           detailScope = "month";

@@ -93,6 +93,7 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
       return result;
     } } }, TextEncoder, TextDecoder, Uint8Array, btoa, atob, AbortController,
     setTimeout(fn, delay) { timers.set(++nextTimer, { fn, delay }); return nextTimer; },
+    setInterval() { return 0; },
     clearTimeout(id) { timers.delete(id); },
     FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values?.[key] ?? null; } },
     fetch: async (url, options) => {
