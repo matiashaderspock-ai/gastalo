@@ -19,7 +19,7 @@ The established compact layout is retained because the repository already contai
 - The existing required CI browser suite now also checks focus after a budget save, Bolivia's October/November boundary with an open form, retaining that form's October save period, independent historical limits, and 320/390/768/1280 px overflow checks across Home, History, Limits, Charts and Import/Export.
 - Existing CI browser coverage remains enabled for movements, drafts, imports, demo isolation, back navigation, charts, offline operation and update transitions.
 - Local automated Chromium launch failed because this executor denies its required socket operation. Automated browser outcomes must be taken from PR CI. Live production interactions were inspected using the available interactive cloud browser.
-- GitHub push was blocked by automatic approval review pending explicit publication approval. No PR, CI browser run, merge or deployment has occurred. Browser checks added here are prepared, not reported as executed.
+- Publication was subsequently authorized. Draft PR #50 runs the required CI browser suite and records its outcomes. The final delivery message distinguishes passing checks from any pending or failed checks. This task leaves the PR in draft without merging or deploying.
 - No user financial dataset, synchronization token or private backup repository was accessed during review. Synthetic fixtures and isolated demo contexts are used by the checks.
 
 ## Remaining risks and follow-up
