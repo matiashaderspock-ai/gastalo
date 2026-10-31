@@ -1244,12 +1244,105 @@
     const $ = (selector) => document.querySelector(selector);
     // Fixed for this document's lifetime, before any database/draft/config reads.
     const demoMode = new URL(location.href).searchParams.get("demo") === "1";
+    const ui = (spanish, english) => demoMode ? english : spanish;
+    // Domain/import errors are translated only for display; saved data is untouched.
+    const errorTranslations = {
+      "Importe inválido. Usa hasta dos decimales, sin separador de miles.": "Invalid amount. Use up to two decimal places, without thousands separators.",
+      "Importe demasiado grande.": "Amount too large.",
+      "Total fuera del rango seguro.": "Total is outside the safe range.",
+      "Hora inválida. Usa el formato de 24 horas.": "Invalid time. Use the 24-hour format.",
+      "Falta la zona horaria del movimiento.": "Transaction time zone is missing.",
+      "Zona horaria del movimiento inválida.": "Invalid transaction time zone.",
+      "Versión de respaldo no compatible.": "Unsupported backup version.",
+      "Perfil inválido: v1 usa BOB.": "Invalid profile: v1 uses BOB.",
+      "Zona horaria inválida.": "Invalid time zone.",
+      "Entidad inválida.": "Invalid entity.",
+      "v1 solo admite BOB.": "v1 only supports BOB.",
+      "Icono de entidad inválido.": "Invalid entity icon.",
+      "Saldo inicial inválido.": "Invalid opening balance.",
+      "Meta de ingreso inválida.": "Invalid income target.",
+      "Presupuesto inválido o duplicado.": "Invalid or duplicate budget.",
+      "Dirección de movimiento inválida.": "Invalid transaction direction.",
+      "Importe, moneda o fecha inválida.": "Invalid amount, currency or date.",
+      "Movimiento inválido.": "Invalid transaction.",
+      "Hora del movimiento inválida.": "Invalid transaction time.",
+      "La zona horaria requiere una hora del movimiento.": "A time zone requires a transaction time.",
+      "Etiquetas inválidas.": "Invalid tags.",
+      "Fila de revisión inválida.": "Invalid review row.",
+      "Metadatos de importación inválidos.": "Invalid import metadata.",
+      "Comillas CSV inválidas.": "Invalid CSV quotes.",
+      "Texto después del cierre de comillas.": "Text after the closing quote.",
+      "El CSV termina dentro de una celda entre comillas.": "The CSV ends inside a quoted cell.",
+      "El mes de los límites del CSV es inválido.": "Invalid CSV budget month.",
+      "Se esperan transacciones y las cuatro secciones: fuentes, cuentas, categorías y etiquetas.": "Expected transactions and all four sections: sources, accounts, categories and tags.",
+      "Meta negativa.": "Negative target.",
+      "Presupuesto negativo.": "Negative budget.",
+      "Cantidad de columnas inválida.": "Invalid column count.",
+      "Tipo externo desconocido.": "Unknown external type.",
+      "Recurrencia no compatible.": "Unsupported recurrence.",
+      "Fecha inválida; se espera M/D/YYYY.": "Invalid date; expected M/D/YYYY.",
+      "Fecha inexistente.": "Date does not exist.",
+      "Moneda no compatible.": "Unsupported currency.",
+      "El importe debe ser positivo.": "The amount must be positive.",
+      "Importe convertido BOB inconsistente.": "Inconsistent converted BOB amount.",
+      "Tipo y dirección incompatibles.": "Incompatible type and direction.",
+      "Etiqueta ambigua.": "Ambiguous tag.",
+      "Espera a que termine el guardado.": "Wait for saving to finish.",
+      "Otra pestaña cambió tus datos. Recarga antes de guardar.": "Another tab changed your data. Reload before saving.",
+      "No se pudo guardar. Revisa el espacio disponible.": "Could not save. Check available storage.",
+      "The limit cannot be negative.": "The limit cannot be negative.",
+      "Invalid entity type.": "Invalid entity type.",
+      "The file exceeds 32 MB.": "The file exceeds 32 MB.",
+      "The start date must be before the end date.": "The start date must be before the end date.",
+      "Choose a valid direction.": "Choose a valid direction.",
+      "The amount must be greater than zero.": "The amount must be greater than zero.",
+      "Enter a name.": "Enter a name.",
+      "Confirm deletion of the history.": "Confirm deletion of the history.",
+      "The target cannot be negative.": "The target cannot be negative.",
+      "The entity is not archived.": "The entity is not archived.",
+      "That name already exists.": "That name already exists.",
+      "This file is not a valid JSON backup. Your data was not changed.": "This file is not a valid JSON backup. Your data was not changed.",
+      "Close other tabs to open the database.": "Close other tabs to open the database."
+    };
+    const errorText = (error) => demoMode
+      ? errorTranslations[error.message] || "Could not complete this action. Check your data and try again."
+      : error.message;
     const databaseName = demoMode ? "gastalo-demo" : "gastalo";
     // Bump when the demo seed changes; metadata stays in gastalo-demo only.
     const DEMO_SEED_VERSION = 2;
     const gestureHelpKey = databaseName + "-gesture-help";
     const movementDraftKey = databaseName + "-movement-draft";
     if (demoMode) {
+      document.documentElement.lang = "en";
+      const shellText = {
+        "Ir al contenido": "Skip to content",
+        "Abrir menú": "Open menu",
+        "Menú": "Menu",
+        "Navegación principal": "Main navigation",
+        "+ Movimiento": "+ Transaction",
+        "Inicio": "Home",
+        "Historial": "History",
+        "Límites de categoría": "Category limits",
+        "Gráficos": "Charts",
+        "Importar/Exportar": "Import/Export",
+        "Abriendo tu espacio…": "Opening your space…",
+        "Actualizar app": "Update app",
+        "Sin conexión": "Offline",
+        "Deshacer": "Undo",
+        "Cerrar formulario": "Close form"
+      };
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode, text = node.textContent.trim();
+        if (shellText[text]) node.textContent = node.textContent.replace(text, shellText[text]);
+      }
+      document.querySelectorAll("[aria-label], [title]").forEach(element => {
+        for (const attribute of ["aria-label", "title"]) {
+          const text = element.getAttribute(attribute);
+          if (shellText[text]) element.setAttribute(attribute, shellText[text]);
+        }
+      });
+      $('meta[name="description"]').content = "Your money, at your pace. Personal expenses, accounts and budgets in bolivianos.";
       const banner = $("#demo-banner");
       banner.hidden = false;
       document.title = "gástalo · DEMO";
@@ -1280,17 +1373,20 @@
       "," +
       String(Math.abs(n) % 100).padStart(2, "0");
     const amountClass = (n) => n > 0 ? "amount-positive" : n < 0 ? "amount-negative" : "amount-neutral";
-    const amountDescription = (n, label = "Importe") =>
-      `${label}: ${n > 0 ? "positivo" : n < 0 ? "negativo" : "cero"}, ${money(Math.abs(n))}`;
+    const amountDescription = (n, label = ui("Importe", "Amount")) =>
+      `${label}: ${n > 0 ? ui("positivo", "positive") : n < 0 ? ui("negativo", "negative") : ui("cero", "zero")}, ${money(Math.abs(n))}`;
     const decimal = (n) =>
       (n < 0 ? "-" : "") +
       Math.trunc(Math.abs(n) / 100) +
       "." +
       String(Math.abs(n) % 100).padStart(2, "0");
-    const monthLabel = formatMonth;
+    const monthLabel = value => demoMode && monthOK(value)
+      ? new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" })
+        .format(new Date(value + "-01T12:00:00Z"))
+      : formatMonth(value);
     function dateControl({ name = "", id = "", value = "", type = "date", required = false, describedBy = "" }) {
-      const display = type === "date" ? formatDate(value) : type === "month" ? formatMonth(value) : value.slice(0, 5);
-      const placeholder = type === "date" ? "DD/MM/AA" : type === "month" ? "MM/AA" : "HH:MM";
+      const display = type === "date" ? formatDate(value) : type === "month" ? monthLabel(value) : value.slice(0, 5);
+      const placeholder = type === "date" ? ui("DD/MM/AA", "DD/MM/YY") : type === "month" ? ui("MM/AA", "MM/YY") : "HH:MM";
       const icon = type === "time"
         ? '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'
         : '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18"/>';
@@ -1298,9 +1394,9 @@
     }
     function updateDateControl(input) {
       const display = input.type === "date" ? formatDate(input.value)
-        : input.type === "month" ? formatMonth(input.value) : input.value.slice(0, 5);
+        : input.type === "month" ? monthLabel(input.value) : input.value.slice(0, 5);
       const text = input.parentElement.querySelector(".date-value");
-      text.textContent = display || (input.type === "date" ? "DD/MM/AA" : input.type === "month" ? "MM/AA" : "HH:MM");
+      text.textContent = display || (input.type === "date" ? ui("DD/MM/AA", "DD/MM/YY") : input.type === "month" ? ui("MM/AA", "MM/YY") : "HH:MM");
       text.classList.toggle("muted", !display);
     }
     let state = emptyState(),
@@ -1484,11 +1580,11 @@
       renderCache.entities ??= new Map(allEntities().map(e => [e.id, e]));
       return renderCache.entities.get(id);
     };
-    const name = (id) => entity(id)?.name || "Sin entidad";
+    const name = (id) => entity(id)?.name || ui("Sin entidad", "No entity");
     const labels = {
-      income: "Ingreso",
-      expense: "Gasto",
-      transfer: "Transferencia",
+      income: ui("Ingreso", "Income"),
+      expense: ui("Gasto", "Expense"),
+      transfer: ui("Transferencia", "Transfer"),
     };
     const active = (key) => state[key].filter((e) => !e.archived_at);
     let notificationTimer;
@@ -1500,7 +1596,7 @@
       clearTimeout(notificationTimer);
       $("#toast").hidden = false;
       $("#toast").innerHTML =
-        `<span>${esc(message)}</span>${canUndo ? '<button data-action="undo">Deshacer</button>' : ""}<button data-action="dismiss" aria-label="Cerrar aviso">×</button>`;
+        `<span>${esc(ui(message, message === "Demo restablecida · Datos de ejemplo" ? "Demo reset · Sample data" : message))}</span>${canUndo ? `<button data-action="undo">${ui("Deshacer", "Undo")}</button>` : ""}<button data-action="dismiss" aria-label="${ui("Cerrar aviso", "Dismiss notification")}">×</button>`;
       notificationTimer = setTimeout(
         dismissNotification,
         canUndo ? 8000 : 3000,
@@ -1644,6 +1740,10 @@
       } = {},
     ) {
       const dialog = $("#dialog");
+      if (demoMode && title === "¿Restablecer la demo?") {
+        title = "Reset demo?";
+        html = `<p>Your demo changes will be discarded and fresh sample data loaded. Your personal data will stay unchanged.</p>${actions("Reset demo")}`;
+      }
       dialog.classList.toggle("compact-dialog", compact);
       dialog.classList.toggle("titleless-dialog", hideTitle);
       $("#dialog-title").textContent = title;
@@ -1658,7 +1758,7 @@
           await onSubmit(new FormData(e.currentTarget));
           dialog.close();
         } catch (error) {
-          $("#modal-error").textContent = error.message;
+          $("#modal-error").textContent = errorText(error);
         } finally {
           if (button) button.disabled = false;
         }
@@ -1669,8 +1769,8 @@
       if (!dialog.open) dialog.showModal();
       initialField?.focus();
     }
-    const actions = (save = "Guardar") =>
-      `<div class="dialog-actions"><button type="button" data-action="close">Cancelar</button><button class="primary" type="submit">${save}</button></div>`;
+    const actions = (save = ui("Guardar", "Save")) =>
+      `<div class="dialog-actions"><button type="button" data-action="close">${ui("Cancelar", "Cancel")}</button><button class="primary" type="submit">${save}</button></div>`;
     function resetApp() {
       if (demoMode) return resetDemo();
       modal(
@@ -1714,24 +1814,24 @@
       let selectedTags = [...(t?.tag_ids || [])], submitted = false, recovered = false;
       const draft = movementDraft?.transactionId === (t?.id || null) ? movementDraft : null;
       modal(
-        t ? "Editar movimiento" : "Nuevo movimiento",
+        t ? ui("Editar movimiento", "Edit transaction") : ui("Nuevo movimiento", "New transaction"),
         `
-        <section class="movement-tags" aria-label="Etiquetas del movimiento"><div id="movement-tag-chips" class="tag-choices"></div><button type="button" id="tag-picker-toggle" aria-label="Elegir o crear etiquetas" aria-expanded="false" aria-controls="tag-picker">+</button></section>
-        <section id="tag-picker" class="movement-tag-picker" aria-label="Elegir etiquetas" hidden><div class="tag-search"><label>Buscar o crear etiqueta<input id="tag-search" type="search" maxlength="80" autocomplete="off" placeholder="Buscar o crear etiqueta"></label><button type="button" id="tag-create" aria-label="Crear etiqueta" hidden>+</button></div><div id="tag-picker-list"></div><p id="tag-search-empty" class="muted" hidden>Sin coincidencias.</p><button type="button" id="tag-picker-done">Listo</button></section>
-        <div class="movement-fields">${draft ? '<aside class="draft-notice" aria-label="Borrador pendiente"><span>Tienes un borrador sin registrar.</span><button type="button" id="recover-draft">Recuperar</button><button type="button" id="discard-draft">Descartar</button></aside>' : ""}<div class="form-grid"><label>Origen<select name="from" required>${options(
+        <section class="movement-tags" aria-label="${ui("Etiquetas del movimiento", "Transaction tags")}"><div id="movement-tag-chips" class="tag-choices"></div><button type="button" id="tag-picker-toggle" aria-label="${ui("Elegir o crear etiquetas", "Choose or create tags")}" aria-expanded="false" aria-controls="tag-picker">+</button></section>
+        <section id="tag-picker" class="movement-tag-picker" aria-label="${ui("Elegir etiquetas", "Choose tags")}" hidden><div class="tag-search"><label>${ui("Buscar o crear etiqueta", "Find or create a tag")}<input id="tag-search" type="search" maxlength="80" autocomplete="off" placeholder="${ui("Buscar o crear etiqueta", "Find or create a tag")}"></label><button type="button" id="tag-create" aria-label="${ui("Crear etiqueta", "Create tag")}" hidden>+</button></div><div id="tag-picker-list"></div><p id="tag-search-empty" class="muted" hidden>${ui("Sin coincidencias.", "No matches.")}</p><button type="button" id="tag-picker-done">${ui("Listo", "Done")}</button></section>
+        <div class="movement-fields">${draft ? `<aside class="draft-notice" aria-label="${ui("Borrador pendiente", "Pending draft")}"><span>${ui("Tienes un borrador sin registrar.", "You have an unsaved draft.")}</span><button type="button" id="recover-draft">${ui("Recuperar", "Recover")}</button><button type="button" id="discard-draft">${ui("Descartar", "Discard")}</button></aside>` : ""}<div class="form-grid"><label>${ui("Origen", "From")}<select name="from" required>${options(
           [...state.sources, ...state.accounts].filter(
             (e) => !e.archived_at || e.id === (t?.from_id || from),
           ),
           t?.from_id || from,
-          "Elige origen",
+          ui("Elige origen", "Choose source"),
         )}</select></label>
-        <label>Destino<select name="to" required></select></label></div>
-        <label>Importe · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
-        <details class="movement-extras" ${t?.note ? "open" : ""}><summary>Nota</summary>
-        <label>Nota<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label>
-        <div id="movement-date-fields" class="form-grid" ${t || reviewId ? "" : "hidden"}><label>Fecha${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label><label>Hora${dateControl({ name: "time", type: "time", value: initialTime, describedBy: "movement-timezone" })}</label></div>
-        ${t || reviewId ? "" : `<div id="movement-clock-info"><p class="movement-timestamp muted"><time datetime="${clock.date}T${initialTime}">${formatDate(clock.date)} · ${initialTime.slice(0, 5)}</time></p><button type="button" id="change-movement-clock">Cambiar fecha y hora</button></div>`}
-        <p id="movement-timezone" class="movement-timezone muted">Hora local · ${esc(eventTimezone)}${t && !t.occurred_time ? " · Hora anterior no registrada" : ""}</p></details>${actions(t ? "Guardar cambios" : "Registrar")}</div>`,
+        <label>${ui("Destino", "To")}<select name="to" required></select></label></div>
+        <label>${ui("Importe", "Amount")} · BOB<input name="amount" inputmode="decimal" required placeholder="0,00" value="${t ? decimal(t.amount_cents) : ""}" autocomplete="off"></label>
+        <details class="movement-extras" ${t?.note ? "open" : ""}><summary>${ui("Nota", "Note")}</summary>
+        <label>${ui("Nota", "Note")}<textarea name="note" rows="2" maxlength="4000">${esc(t?.note || "")}</textarea></label>
+        <div id="movement-date-fields" class="form-grid" ${t || reviewId ? "" : "hidden"}><label>${ui("Fecha", "Date")}${dateControl({ name: "date", required: true, value: t?.occurred_on || clock.date })}</label><label>${ui("Hora", "Time")}${dateControl({ name: "time", type: "time", value: initialTime, describedBy: "movement-timezone" })}</label></div>
+        ${t || reviewId ? "" : `<div id="movement-clock-info"><p class="movement-timestamp muted"><time datetime="${clock.date}T${initialTime}">${formatDate(clock.date)} · ${initialTime.slice(0, 5)}</time></p><button type="button" id="change-movement-clock">${ui("Cambiar fecha y hora", "Change date and time")}</button></div>`}
+        <p id="movement-timezone" class="movement-timezone muted">${ui("Hora local", "Local time")} · ${esc(eventTimezone)}${t && !t.occurred_time ? ui(" · Hora anterior no registrada", " · Previous time not recorded") : ""}</p></details>${actions(t ? ui("Guardar cambios", "Save changes") : ui("Registrar", "Record"))}</div>`,
         async (data) => {
           captureMovementDraft();
           // Existing records and metadata are immutable. Copy only collections
@@ -1742,8 +1842,8 @@
             toId = data.get("to"),
             kind = direction(next, fromId, toId),
             amount = cents(data.get("amount"));
-          assert(kind, "Elige una dirección válida.");
-          assert(amount > 0, "El importe debe ser mayor que cero.");
+          assert(kind, ui("Elige una dirección válida.", "Choose a valid direction."));
+          assert(amount > 0, ui("El importe debe ser mayor que cero.", "The amount must be greater than zero."));
           const tagIds = selectedTags;
           next.tags.push(...pendingTags.filter((tag) => tagIds.includes(tag.id)));
           const now = new Date().toISOString();
@@ -1779,7 +1879,7 @@
           }
           await commit(
             next,
-            t ? "Cambios guardados" : "Movimiento registrado",
+            t ? ui("Cambios guardados", "Changes saved") : ui("Movimiento registrado", "Transaction recorded"),
             !!t,
           );
           submitted = true;
@@ -1802,7 +1902,7 @@
               direction(state, fromSelect.value, e.id),
           ),
           value,
-          "Elige destino",
+          ui("Elige destino", "Choose destination"),
         );
       };
       update(t?.to_id || to);
@@ -1817,13 +1917,13 @@
       const renderTags = () => {
         const tags = availableTags(), query = fold(search.value);
         const chips = $("#movement-tag-chips"), scrollLeft = chips.scrollLeft;
-        chips.innerHTML = movementTagSuggestions({ ...state, tags }, selectedTags).map(tagChoice).join("") || '<span class="muted">Sin etiquetas</span>';
+        chips.innerHTML = movementTagSuggestions({ ...state, tags }, selectedTags).map(tagChoice).join("") || `<span class="muted">${ui("Sin etiquetas", "No tags")}</span>`;
         chips.scrollLeft = scrollLeft;
         const matches = tags.filter((tag) => fold(tag.name).includes(query)).sort((a, b) => a.name.localeCompare(b.name, "es"));
         $("#tag-picker-list").innerHTML = matches.map(tagChoice).join("");
         $("#tag-search-empty").hidden = matches.length > 0;
         $("#tag-create").hidden = !query || state.tags.concat(pendingTags).some((tag) => fold(tag.name) === query);
-        $("#tag-create").title = `Crear «${search.value.trim()}»`;
+        $("#tag-create").title = `${ui("Crear «", "Create “")}${search.value.trim()}${ui("»", "”")}`;
       };
       const chooseTag = (e) => {
         if (!e.target.matches("[data-movement-tag]")) return;
@@ -1844,7 +1944,7 @@
         if (!picker.hidden) return closePicker();
         picker.hidden = false;
         dialog.classList.add("choosing-tags");
-        $("#dialog-title").textContent = "Etiquetas";
+        $("#dialog-title").textContent = ui("Etiquetas", "Tags");
         toggle.setAttribute("aria-expanded", "true");
         search.focus({ preventScroll: true });
       };
@@ -1929,31 +2029,31 @@
     function editEntity(key, id = null) {
       const e = id ? state[key].find((e) => e.id === id) : null;
       const title = {
-        sources: "fuente",
-        accounts: "cuenta",
-        categories: "categoría",
-        tags: "etiqueta",
+        sources: ui("fuente", "source"),
+        accounts: ui("cuenta", "account"),
+        categories: ui("categoría", "category"),
+        tags: ui("etiqueta", "tag"),
       }[key];
       modal(
-        (e ? "Editar " : "Crear ") + title,
+        (e ? ui("Editar ", "Edit ") : ui("Crear ", "Create ")) + title,
         `
         ${key !== "tags" ? iconChooser(key, e) : ""}
-        <label>Nombre<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
-        ${key === "accounts" ? `<label>Saldo inicial · BOB<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>Fecha del saldo inicial${dateControl({ name: "openingDate", required: true, value: e?.opening_date || today() })}</label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>Excluir del saldo total</label>` : ""}
-        ${key === "sources" ? `<label>Ingreso mensual previsto · BOB (opcional)<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
-        ${key === "categories" ? `<label>Límite mensual · desde ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && currentBudget(e.id).limit !== null ? decimal(currentBudget(e.id).limit) : ""}" placeholder="Sin límite"></label>` : ""}
-        ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>Archivar (conserva historial)</label>` : ""}${actions()}`,
+        <label>${ui("Nombre", "Name")}<input name="name" required maxlength="80" value="${esc(e?.name || "")}"></label>
+        ${key === "accounts" ? `<label>${ui("Saldo inicial · BOB", "Opening balance · BOB")}<input name="opening" inputmode="decimal" required value="${e ? decimal(e.opening_balance_cents) : "0.00"}"></label><label>${ui("Fecha del saldo inicial", "Opening balance date")}${dateControl({ name: "openingDate", required: true, value: e?.opening_date || today() })}</label><label class="check"><input type="checkbox" name="exclude" ${e?.exclude_from_total ? "checked" : ""}>${ui("Excluir del saldo total", "Exclude from total balance")}</label>` : ""}
+        ${key === "sources" ? `<label>${ui("Ingreso mensual previsto · BOB (opcional)", "Expected monthly income · BOB (optional)")}<input name="expected" inputmode="decimal" value="${e?.expected_cents == null ? "" : decimal(e.expected_cents)}"></label>` : ""}
+        ${key === "categories" ? `<label>${ui("Límite mensual · desde", "Monthly limit · from")} ${esc(monthLabel(month))}<input name="limit" inputmode="decimal" value="${e && currentBudget(e.id).limit !== null ? decimal(currentBudget(e.id).limit) : ""}" placeholder="${ui("Sin límite", "No limit")}"></label>` : ""}
+        ${e ? `<label class="check"><input type="checkbox" name="archived" ${e.archived_at ? "checked" : ""}>${ui("Archivar (conserva historial)", "Archive (keep history)")}</label>` : ""}${actions()}`,
         async (data) => {
           const next = copy(state),
             n = data.get("name").trim();
-          assert(n, "Escribe un nombre.");
+          assert(n, ui("Escribe un nombre.", "Enter a name."));
           assert(
             !next[key].some(
               (item) =>
                 item.id !== id &&
                 item.name.toLocaleLowerCase("es") === n.toLocaleLowerCase("es"),
             ),
-            "Ya existe ese nombre.",
+            ui("Ya existe ese nombre.", "That name already exists."),
           );
           const item = {
             ...(e || {}),
@@ -1978,7 +2078,7 @@
               : null;
             assert(
               item.expected_cents === null || item.expected_cents >= 0,
-              "La meta no puede ser negativa.",
+              ui("La meta no puede ser negativa.", "The target cannot be negative."),
             );
           }
           if (e)
@@ -1989,7 +2089,7 @@
             const limit = rawLimit ? cents(rawLimit) : null;
             assert(
               limit === null || limit >= 0,
-              "El límite no puede ser negativo.",
+              ui("El límite no puede ser negativo.", "The limit cannot be negative."),
             );
             const record = next.budgets.find(
               (b) => b.category_id === item.id && b.month === month,
@@ -2003,7 +2103,7 @@
                 limit_cents: limit,
               });
           }
-          await commit(next, "Guardado");
+          await commit(next, ui("Guardado", "Saved"));
         },
         { compact: true, focusSelector: '[name="name"]' },
       );
@@ -2011,13 +2111,13 @@
     function editBudget(id) {
       const period = budgetMonth, b = currentBudget(id, period);
       modal(
-        "Presupuesto · " + name(id),
-        `<p>${esc(monthLabel(period))}. Desde este mes, el límite se mantiene en los meses siguientes hasta que lo cambies.</p><label>Límite · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="Vacío = sin límite"></label><p class="muted">Cero es un límite válido. El restante no pasa al siguiente mes.</p>${actions()}`,
+        ui("Presupuesto · ", "Budget · ") + name(id),
+        `<p>${esc(monthLabel(period))}. ${ui("Desde este mes, el límite se mantiene en los meses siguientes hasta que lo cambies.", "From this month, the limit carries forward until you change it.")}</p><label>${ui("Límite", "Limit")} · BOB<input name="limit" inputmode="decimal" value="${b.limit === null ? "" : decimal(b.limit)}" placeholder="${ui("Vacío = sin límite", "Empty = no limit")}"></label><p class="muted">${ui("Cero es un límite válido. El restante no pasa al siguiente mes.", "Zero is a valid limit. The remaining amount does not carry forward.")}</p>${actions()}`,
         async (data) => {
           const next = copy(state),
             n =
               data.get("limit").trim() === "" ? null : cents(data.get("limit"));
-          assert(n === null || n >= 0, "El límite no puede ser negativo.");
+          assert(n === null || n >= 0, ui("El límite no puede ser negativo.", "The limit cannot be negative."));
           let record = next.budgets.find(
             (b) => b.category_id === id && b.month === period,
           );
@@ -2029,7 +2129,7 @@
               month: period,
               limit_cents: n,
             });
-          await commit(next, "Presupuesto guardado");
+          await commit(next, ui("Presupuesto guardado", "Budget saved"));
         },
         { compact: true, focusSelector: '[name="limit"]' },
       );
@@ -2038,14 +2138,14 @@
       : "Bs " + new Intl.NumberFormat("es-BO", { notation: "compact", maximumFractionDigits: 2 }).format(n / 100);
     function stat(label, amount, cls = "") {
       const large = Math.abs(amount) >= 100000000;
-      return `<div class="stat ${cls}"><span>${label}</span><strong title="${money(amount)}" aria-label="${money(amount)}"><small>Bs</small>${compactMoney(amount).slice(3)}</strong>${large ? `<details class="exact-amount"><summary>Ver completo</summary><span>${money(amount)}</span></details>` : ""}</div>`;
+      return `<div class="stat ${cls}"><span>${label}</span><strong title="${money(amount)}" aria-label="${money(amount)}"><small>Bs</small>${compactMoney(amount).slice(3)}</strong>${large ? `<details class="exact-amount"><summary>${ui("Ver completo", "Show full amount")}</summary><span>${money(amount)}</span></details>` : ""}</div>`;
     }
     function monthNav(compact = false, showArrows = true, period = month) {
       const picker = compact
-        ? `<label class="month-picker"><span aria-hidden="true">${formatMonth(period)}</span><input type="month" id="month" aria-label="Mes consultado" value="${period}" required></label>`
-        : `<label><span class="sr-only">Mes consultado</span>${dateControl({ type: "month", id: "month", value: period, required: true })}</label>`;
+        ? `<label class="month-picker"><span aria-hidden="true">${monthLabel(period)}</span><input type="month" id="month" aria-label="${ui("Mes consultado", "Selected month")}" value="${period}" required></label>`
+        : `<label><span class="sr-only">${ui("Mes consultado", "Selected month")}</span>${dateControl({ type: "month", id: "month", value: period, required: true })}</label>`;
       const arrow = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
-      return `<div class="month-nav ${compact ? "compact-month" : ""} ${showArrows ? "" : "month-only"}">${showArrows ? `<button data-action="prev" aria-label="Mes anterior">${arrow("m14 6-6 6 6 6")}</button>` : ""}${picker}${showArrows ? `<button data-action="next" aria-label="Mes siguiente">${arrow("m10 6 6 6-6 6")}</button>` : ""}</div>`;
+      return `<div class="month-nav ${compact ? "compact-month" : ""} ${showArrows ? "" : "month-only"}">${showArrows ? `<button data-action="prev" aria-label="${ui("Mes anterior", "Previous month")}">${arrow("m14 6-6 6 6 6")}</button>` : ""}${picker}${showArrows ? `<button data-action="next" aria-label="${ui("Mes siguiente", "Next month")}">${arrow("m10 6 6 6-6 6")}</button>` : ""}</div>`;
     }
     function iconSvg(iconKey) {
       return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ENTITY_ICONS[iconKey].path}</svg>`;
@@ -2053,16 +2153,85 @@
     function rowIcon(key, item = {}) {
       // Fixed local artwork for seeded demo accounts only; keep the normal icon picker.
       if (demoMode && key === "accounts") {
-        const logo = item.id === "demo-chase" && item.icon === "bank" ? "chase.svg"
-          : item.id === "demo-robinhood" && item.icon === "investments" ? "robinhood.png" : null;
+        const logo = item?.id === "demo-chase" && item.icon === "bank" ? "chase.svg"
+          : item?.id === "demo-robinhood" && item.icon === "investments" ? "robinhood.png" : null;
         if (logo) return `<svg viewBox="0 0 24 24" aria-hidden="true"><image href="./icons/demo/${logo}" width="24" height="24"/></svg>`;
       }
       return iconSvg(entityIconKey(item, key));
     }
+    const demoIconLabels = {
+      "income": "Income",
+      "wallet": "Wallet",
+      "tag": "Tag",
+      "bank": "Bank",
+      "card": "Card",
+      "home": "Home",
+      "food": "Food",
+      "coffee": "Coffee",
+      "car": "Car",
+      "bus": "Transport",
+      "health": "Health",
+      "gym": "Gym",
+      "education": "Education",
+      "travel": "Travel",
+      "gift": "Gift",
+      "work": "Work",
+      "shopping": "Shopping",
+      "phone": "Phone",
+      "spark": "Technology",
+      "pet": "Pet",
+      "bills": "Utilities",
+      "bike": "Bicycle",
+      "music": "Music",
+      "shield": "Insurance",
+      "groceries": "Groceries",
+      "fuel": "Fuel",
+      "parking": "Parking",
+      "taxi": "Taxi",
+      "electricity": "Electricity",
+      "water": "Water",
+      "gas": "Gas",
+      "internet": "Internet",
+      "clothing": "Clothing",
+      "beauty": "Personal care",
+      "pharmacy": "Pharmacy",
+      "dental": "Dentist",
+      "baby": "Baby",
+      "family": "Family",
+      "cinema": "Cinema",
+      "games": "Video games",
+      "drinks": "Drinks and outings",
+      "books": "Books",
+      "repair": "Repairs",
+      "furniture": "Furniture",
+      "laundry": "Laundry",
+      "charity": "Donations",
+      "taxes": "Taxes",
+      "subscriptions": "Subscriptions",
+      "investments": "Investments",
+      "loan": "Credit and debt",
+      "unexpected": "Unexpected expenses",
+      "chatgpt": "ChatGPT",
+      "apple": "Apple",
+      "revolut": "Revolut",
+      "binance": "Binance",
+      "grok": "Grok",
+      "robot": "Robot",
+      "skull": "Skull",
+      "etoro": "eToro",
+      "playstation": "PlayStation",
+      "hbo": "HBO",
+      "banco_union": "Banco Unión",
+      "banco_bisa": "Banco BISA",
+      "banco_ganadero": "Banco Ganadero",
+      "banco_mercantil": "Banco Mercantil Santa Cruz",
+      "yango": "Yango · spiral"
+    };
+    const iconLabel = id => demoMode ? demoIconLabels[id] : ENTITY_ICONS[id].label;
     function iconChooser(key, item) {
       const selectedIcon = entityIconKey(item, key);
       const pages = ENTITY_ICON_PAGES.map(page => page.map(id => [id, ENTITY_ICONS[id]]));
-      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>Icono</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${rowIcon(key, item)}</span><span>Cambiar icono</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="Elegir icono: ${pages.length} páginas">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="Página ${index + 1} de ${pages.length}">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${icon.label}" title="${icon.label}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>Desliza para ver más</span><div role="group" aria-label="Páginas de iconos">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="Página de iconos ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
+      return `<fieldset class="icon-field row-${TYPES.indexOf(key)}"><legend>${ui("Icono", "Icon")}</legend><input type="hidden" name="icon" value="${selectedIcon}"><button type="button" class="icon-preview" data-action="toggle-icons" aria-expanded="false" aria-controls="icon-picker"><span class="entity-mark">${rowIcon(key, item)}</span><span>${ui("Cambiar icono", "Change icon")}</span></button><div id="icon-picker" class="icon-picker" hidden><div class="icon-pages" tabindex="0" role="group" aria-label="${ui("Elegir icono:", "Choose icon:")} ${pages.length}${ui(" páginas", " pages")}">${pages.map((page, index) => `<div class="icon-page" role="group" aria-label="${ui("Página", "Page")} ${index + 1}${ui(" de ", " of ")}${pages.length}">${page.map(([id, icon]) => `<button type="button" data-action="select-icon" data-icon="${id}" aria-label="${iconLabel(id)}" title="${iconLabel(id)}" aria-pressed="${id === selectedIcon}">${iconSvg(id)}</button>`).join("")}</div>`).join("")}</div><div class="icon-pagination"><span>${ui("Desliza para ver más", "Swipe to see more")}</span><div role="group" aria-label="${ui("Páginas de iconos", "Icon pages")}">${pages.map((_, index) => `<button type="button" data-action="icon-page" data-page="${index}" aria-label="${ui("Página de iconos", "Icon page")} ${index + 1}" aria-current="${index === 0 ? "true" : "false"}">${index + 1}</button>`).join("")}</div></div></div></fieldset>`;
     }
     function showIconPage(index) {
       const pages = $(".icon-pages");
@@ -2086,7 +2255,7 @@
       );
       if ($("#entity-edit-bar")) $("#entity-edit-bar").hidden = !editing;
       document.querySelectorAll("[data-entity]").forEach((card) => {
-        card.setAttribute("aria-label", `${editing ? "Reordenar" : "Ver historial de"} ${name(card.dataset.entity)}`);
+        card.setAttribute("aria-label", `${editing ? ui("Reordenar", "Reorder") : ui("Ver historial de", "View history for")} ${name(card.dataset.entity)}`);
         if (editing) card.setAttribute("aria-keyshortcuts", "Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown");
         else card.removeAttribute("aria-keyshortcuts");
       });
@@ -2096,18 +2265,18 @@
         (t) => t.from_id === id || t.to_id === id,
       ).length;
       modal(
-        "Archivar o eliminar " + name(id),
-        `<fieldset class="remove-options"><legend>¿Qué quieres hacer?</legend><label class="check"><input type="radio" name="removal" value="archive" checked>Archivar (conservar historial)</label><p class="muted">Conserva movimientos, saldos y límites. Puedes restaurarla en Importar/Exportar o, si es una categoría, en Límites de categoría.</p><label class="check"><input type="radio" name="removal" value="erase">Eliminar completamente</label></fieldset><div id="erase-warning" hidden><p>Se eliminará la entidad, sus ${count} movimientos de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.</p><label class="check"><input type="checkbox" name="confirmErase" disabled>Confirmo que quiero eliminar la entidad y su historial.</label></div>${actions("Archivar")}`,
+        ui("Archivar o eliminar ", "Archive or delete ") + name(id),
+        `<fieldset class="remove-options"><legend>${ui("¿Qué quieres hacer?", "What would you like to do?")}</legend><label class="check"><input type="radio" name="removal" value="archive" checked>${ui("Archivar (conservar historial)", "Archive (keep history)")}</label><p class="muted">${ui("Conserva movimientos, saldos y límites. Puedes restaurarla en Importar/Exportar o, si es una categoría, en Límites de categoría.", "Keeps transactions, balances and limits. Restore it in Import/Export or, for a category, in Category limits.")}</p><label class="check"><input type="radio" name="removal" value="erase">${ui("Eliminar completamente", "Delete permanently")}</label></fieldset><div id="erase-warning" hidden><p>${ui("Se eliminará la entidad, sus", "This will delete the entity, its")} ${count}${ui(" movimientos", " transactions")}${ui(" de todos los meses y sus presupuestos. Esto puede cambiar los saldos de las cuentas relacionadas.", " across all months and its budgets. This may change related account balances.")}</p><label class="check"><input type="checkbox" name="confirmErase" disabled>${ui("Confirmo que quiero eliminar la entidad y su historial.", "I confirm that I want to delete the entity and its history.")}</label></div>${actions(ui("Archivar", "Archive"))}`,
         async (data) => {
           if (data.get("removal") === "erase") {
-            assert(data.get("confirmErase"), "Confirma la eliminación del historial.");
-            await commit(eraseEntity(state, key, id), "Entidad e historial eliminados", true);
+            assert(data.get("confirmErase"), ui("Confirma la eliminación del historial.", "Confirm deletion of the history."));
+            await commit(eraseEntity(state, key, id), ui("Entidad e historial eliminados", "Entity and history deleted"), true);
             filters.entities = filters.entities.filter((entityId) => entityId !== id);
           } else {
             const next = copy(state);
             next[key].find((e) => e.id === id).archived_at =
               new Date().toISOString();
-            await commit(next, "Entidad archivada", true);
+            await commit(next, ui("Entidad archivada", "Entity archived"), true);
           }
         },
         { compact: true, focusSelector: 'button[data-action="close"]' },
@@ -2120,17 +2289,17 @@
           confirmation.disabled = !erase;
           confirmation.required = erase;
           $('#modal-form button[type="submit"]').textContent =
-            erase ? "Eliminar completamente" : "Archivar";
+            erase ? ui("Eliminar completamente", "Delete permanently") : ui("Archivar", "Archive");
         };
       });
     }
     async function restoreEntity(key, id) {
-      assert([...TYPES, "tags"].includes(key), "Tipo de entidad inválido.");
+      assert([...TYPES, "tags"].includes(key), ui("Tipo de entidad inválido.", "Invalid entity type."));
       const next = copy(state);
       const item = next[key].find((e) => e.id === id);
-      assert(item?.archived_at, "La entidad no está archivada.");
+      assert(item?.archived_at, ui("La entidad no está archivada.", "The entity is not archived."));
       item.archived_at = null;
-      await commit(next, "Entidad restaurada en Inicio", true);
+      await commit(next, ui("Entidad restaurada en Inicio", "Entity restored to Home"), true);
     }
     function homeTotals() {
       const r = cachedReport(),
@@ -2141,19 +2310,19 @@
           .map((a) => bs[a.id]),
       );
       const remaining = currentBudgetTotals().remaining;
-      return `<section class="home-totals stats" aria-label="Totales de ${esc(monthLabel(month))}">${stat("Balance actual", balance)}${stat("Gastos efectuados", r.expense)}${stat("Gastos planeados", remaining)}</section>`;
+      return `<section class="home-totals stats" aria-label="${ui("Totales de", "Totals for")} ${esc(monthLabel(month))}">${stat(ui("Balance actual", "Current balance"), balance)}${stat(ui("Gastos efectuados", "Actual spending"), r.expense)}${stat(ui("Gastos planeados", "Planned spending"), remaining)}</section>`;
     }
     let gestureHelpDismissed = false;
     try { gestureHelpDismissed = localStorage.getItem(gestureHelpKey) === "dismissed"; } catch {}
-    const gestureGuide = () => '<p>Arrastra el círculo de una cuenta hacia una categoría para registrar un gasto, o hacia otra cuenta para transferir. Desde una fuente hacia una cuenta registras un ingreso. Mantén pulsado un círculo para ordenar entidades. También puedes usar + Movimiento en el menú.</p>';
+    const gestureGuide = () => `<p>${ui("Arrastra el círculo de una cuenta hacia una categoría para registrar un gasto, o hacia otra cuenta para transferir. Desde una fuente hacia una cuenta registras un ingreso. Mantén pulsado un círculo para ordenar entidades. También puedes usar + Movimiento en el menú.", "Drag an account circle to a category to record an expense, or to another account to transfer. Drag from a source to an account to record income. Hold a circle to reorder entities. You can also use + Transaction in the menu.")}</p>`;
     function home() {
       const bs = currentBalances();
-      return `<h1 class="sr-only">Un mes más claro.</h1>${!gestureHelpDismissed && state.transactions.length === 0 && state.accounts.length ? `<aside class="gesture-help">${gestureGuide()}<button data-action="dismiss-gesture-help">Entendido</button></aside>` : ""}
-        <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>Arrastra los círculos para ordenar</span><button data-action="finish-editing">Listo</button></div>
+      return `<h1 class="sr-only">${ui("Un mes más claro.", "A clearer month.")}</h1>${!gestureHelpDismissed && state.transactions.length === 0 && state.accounts.length ? `<aside class="gesture-help">${gestureGuide()}<button data-action="dismiss-gesture-help">${ui("Entendido", "Got it")}</button></aside>` : ""}
+        <div id="entity-edit-bar" ${editingEntities ? "" : "hidden"}><span>${ui("Arrastra los círculos para ordenar", "Drag circles to reorder")}</span><button data-action="finish-editing">${ui("Listo", "Done")}</button></div>
         ${TYPES.map((key, idx) => {
           const carousel = key !== "categories";
-          const createLabel = `Crear ${key === "sources" ? "fuente" : key === "accounts" ? "cuenta" : "categoría"}`;
-          return `<section class="entity-section row-${idx}" aria-label="${{ sources: "Fuentes de ingreso", accounts: "Cuentas", categories: "Categorías de gasto" }[key]}"><div class="entity-grid">${carousel ? '<div class="entity-strip" tabindex="0" role="group" aria-label="Entidades: desliza horizontalmente para ver más" aria-description="Arrastra desde el círculo. Desliza sobre nombres, importes o espacios para ver más entidades.">' : ""}${active(
+          const createLabel = `${ui("Crear", "Create")} ${key === "sources" ? ui("fuente", "source") : key === "accounts" ? ui("cuenta", "account") : ui("categoría", "category")}`;
+          return `<section class="entity-section row-${idx}" aria-label="${{ sources: ui("Fuentes de ingreso", "Income sources"), accounts: ui("Cuentas", "Accounts"), categories: ui("Categorías de gasto", "Expense categories") }[key]}"><div class="entity-grid">${carousel ? `<div class="entity-strip" tabindex="0" role="group" aria-label="${ui("Entidades: desliza horizontalmente para ver más", "Entities: swipe horizontally to see more")}" aria-description="${ui("Arrastra desde el círculo. Desliza sobre nombres, importes o espacios para ver más entidades.", "Drag from the circle. Swipe over names, amounts or spaces to see more entities.")}">` : ""}${active(
             key,
           )
             .map((e) => {
@@ -2176,15 +2345,15 @@
                 key === "categories" ? currentBudget(e.id) : null;
               const progress = b ? budgetVisual(b.limit, b.spent) : null;
               const plannedLabel = b && b.limit !== null
-                ? `Gastos planeados: ${money(b.limit)}` : "";
+                ? `${ui("Gastos planeados", "Planned spending")}: ${money(b.limit)}` : "";
               const progressLabel = progress
                 ? b.limit === null
-                  ? "Sin presupuesto este mes"
+                  ? ui("Sin presupuesto este mes", "No budget this month")
                   : progress.tone === "red"
-                    ? "Presupuesto excedido"
-                    : `${progress.fill}% del presupuesto utilizado`
+                    ? ui("Presupuesto excedido", "Over budget")
+                    : `${progress.fill}${ui("% del presupuesto utilizado", "% of budget used")}`
                 : "";
-              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="Ver historial de ${esc(e.name)}"${progress ? ` aria-description="${plannedLabel ? plannedLabel + ". " : ""}${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${compactMoney(value)}</strong>${plannedLabel ? `<small class="entity-planned" title="${plannedLabel}">${money(b.limit).slice(3)}</small>` : ""}${e.exclude_from_total ? '<span class="sr-only">Excluida del balance</span>' : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Eliminar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Editar ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
+              return `<div class="entity-wrap"><button class="entity-card" data-entity="${esc(e.id)}" data-key="${key}" aria-label="${ui("Ver historial de", "View history for")} ${esc(e.name)}"${progress ? ` aria-description="${plannedLabel ? plannedLabel + ". " : ""}${progressLabel}"` : ""}><span class="entity-name" title="${esc(e.name)}">${esc(e.name)}</span><span class="entity-mark${progress ? ` budget-mark budget-${progress.tone}` : ""}"${progress ? ` style="--budget-fill:${progress.fill}%" title="${progressLabel}"` : ""}>${rowIcon(key, e)}</span><strong${progress ? ` class="budget-amount budget-${progress.tone}"` : ""} title="${money(value)}">${compactMoney(value)}</strong>${plannedLabel ? `<small class="entity-planned" title="${plannedLabel}">${money(b.limit).slice(3)}</small>` : ""}${e.exclude_from_total ? `<span class="sr-only">${ui("Excluida del balance", "Excluded from balance")}</span>` : ""}</button><div class="entity-tools"><button class="entity-remove" data-action="remove-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Eliminar", "Delete")} ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="m7 7 10 10M17 7 7 17"/></svg></button><button class="entity-pencil" data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Editar", "Edit")} ${esc(e.name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="m4 16 12-12 4 4L8 20H4v-4Zm10-10 4 4"/></svg></button></div></div>`;
             })
             .join(
               "",
@@ -2194,21 +2363,21 @@
         )}`;
     }
     function filterPanel() {
-      const selected = [filters.start || filters.end ? `${formatDate(filters.start) || "Sin inicio"}–${formatDate(filters.end) || "Sin final"}` : "Todas las fechas",
-        filters.entities.length ? filters.entities.slice(0, 2).map(name).join(", ") + (filters.entities.length > 2 ? ` +${filters.entities.length - 2}` : "") : "Todas las entidades",
-        filters.tags.length ? `${filters.tagMode === "all" ? "Todas" : "Cualquiera"}: ` + filters.tags.slice(0, 2).map(id => state.tags.find(t => t.id === id)?.name || "Etiqueta").join(", ") + (filters.tags.length > 2 ? ` +${filters.tags.length - 2}` : "") : "",
-        filters.kind ? labels[filters.kind] : "", filters.text ? `Nota: ${filters.text.slice(0, 40)}${filters.text.length > 40 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
-      return `<details id="shared-filters" class="panel filters" ${filtersOpen ? "open" : ""}><summary><span>Filtros</span><small>${esc(selected)}</small></summary><p class="muted filter-sharing">Compartidos con Gráficos e Historial.</p><div class="form-grid">
-        <label>Desde${dateControl({ id: "f-start", value: filters.start })}</label><label>Hasta${dateControl({ id: "f-end", value: filters.end })}</label>
-        <label>Cuentas, fuentes o categorías<select multiple size="1" id="f-entities">${allEntities()
+      const selected = [filters.start || filters.end ? `${formatDate(filters.start) || ui("Sin inicio", "No start date")}–${formatDate(filters.end) || ui("Sin final", "No end date")}` : ui("Todas las fechas", "All dates"),
+        filters.entities.length ? filters.entities.slice(0, 2).map(name).join(", ") + (filters.entities.length > 2 ? ` +${filters.entities.length - 2}` : "") : ui("Todas las entidades", "All entities"),
+        filters.tags.length ? `${filters.tagMode === "all" ? ui("Todas", "All") : ui("Cualquiera", "Any")}: ` + filters.tags.slice(0, 2).map(id => state.tags.find(t => t.id === id)?.name || ui("Etiqueta", "Tag")).join(", ") + (filters.tags.length > 2 ? ` +${filters.tags.length - 2}` : "") : "",
+        filters.kind ? labels[filters.kind] : "", filters.text ? `${ui("Nota", "Note")}: ${filters.text.slice(0, 40)}${filters.text.length > 40 ? "…" : ""}` : ""].filter(Boolean).join(" · ");
+      return `<details id="shared-filters" class="panel filters" ${filtersOpen ? "open" : ""}><summary><span>${ui("Filtros", "Filters")}</span><small>${esc(selected)}</small></summary><p class="muted filter-sharing">${ui("Compartidos con Gráficos e Historial.", "Shared with Charts and History.")}</p><div class="form-grid">
+        <label>${ui("Desde", "From")}${dateControl({ id: "f-start", value: filters.start })}</label><label>${ui("Hasta", "To")}${dateControl({ id: "f-end", value: filters.end })}</label>
+        <label>${ui("Cuentas, fuentes o categorías", "Accounts, sources or categories")}<select multiple size="1" id="f-entities">${allEntities()
           .map(
             (e) =>
               `<option value="${esc(e.id)}" ${filters.entities.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`,
           )
           .join("")}</select></label>
-        <label>Etiquetas<select multiple size="1" id="f-tags">${state.tags.map((e) => `<option value="${esc(e.id)}" ${filters.tags.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></label>
-        <label>Coincidencia de etiquetas<select id="f-tagMode"><option value="any" ${filters.tagMode === "any" ? "selected" : ""}>Cualquiera</option><option value="all" ${filters.tagMode === "all" ? "selected" : ""}>Todas</option></select></label>
-        <label>Tipo<select id="f-kind"><option value="">Todos</option>${Object.entries(
+        <label>${ui("Etiquetas", "Tags")}<select multiple size="1" id="f-tags">${state.tags.map((e) => `<option value="${esc(e.id)}" ${filters.tags.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></label>
+        <label>${ui("Coincidencia de etiquetas", "Tag matching")}<select id="f-tagMode"><option value="any" ${filters.tagMode === "any" ? "selected" : ""}>${ui("Cualquiera", "Any")}</option><option value="all" ${filters.tagMode === "all" ? "selected" : ""}>${ui("Todas", "All")}</option></select></label>
+        <label>${ui("Tipo", "Type")}<select id="f-kind"><option value="">${ui("Todos", "All")}</option>${Object.entries(
           labels,
         )
           .map(
@@ -2216,7 +2385,7 @@
               `<option value="${k}" ${filters.kind === k ? "selected" : ""}>${v}</option>`,
           )
           .join("")}</select></label>
-        <label class="wide">Buscar en nota<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="Ej. almuerzo"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">Aplicar filtros</button><button data-action="clear-filters">Ver todo</button></div></details>`;
+        <label class="wide">${ui("Buscar en nota", "Search notes")}<input id="f-text" type="search" value="${esc(filters.text)}" placeholder="${ui("Ej. almuerzo", "E.g. lunch")}"></label></div><div class="inline-actions"><button data-action="apply-filters" class="primary">${ui("Aplicar filtros", "Apply filters")}</button><button data-action="clear-filters">${ui("Ver todo", "Show all")}</button></div></details>`;
     }
     function groupByDay(transactions) {
       const groups = new Map();
@@ -2229,16 +2398,16 @@
     function transactionRow(t, contextId = null) {
       const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
       const metadata = `${time ? time + " · " : ""}${labels[t.kind]}`;
-      const counterpart = contextId ? `${t.from_id === contextId ? "A" : "Desde"} ${name(t.from_id === contextId ? t.to_id : t.from_id)}`
+      const counterpart = contextId ? `${t.from_id === contextId ? ui("A", "To") : ui("Desde", "From")} ${name(t.from_id === contextId ? t.to_id : t.from_id)}`
         : `${name(t.from_id)} → ${name(t.to_id)}`;
       const value = contextId ? entityMovementAmount(t, contextId)
         : t.kind === "expense" ? -t.amount_cents : t.kind === "income" ? t.amount_cents : null;
       const amount = money(t.amount_cents);
       const amountAttributes = value === null ? 'class="amount-neutral"'
         : `class="${amountClass(value)}" aria-label="${amountDescription(value)}"`;
-      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(counterpart)}</strong><span>${metadata}</span>${t.note ? `<details class="transaction-note"><summary><span class="note-preview">${esc(t.note)}</span><span class="note-close">Ocultar nota</span></summary><p>${esc(t.note)}</p></details>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong ${amountAttributes}>${amount}</strong><details class="transaction-actions"><summary aria-label="Acciones del movimiento">⋯</summary><div><button data-action="edit-transaction" data-id="${esc(t.id)}">Editar</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button></div></details></div></article>`;
+      const row = `<article class="transaction"><div class="transaction-symbol ${t.kind}">${{ income: "↙", expense: "↗", transfer: "⇄" }[t.kind]}</div><div class="transaction-info"><strong>${esc(counterpart)}</strong><span>${metadata}</span>${t.note ? `<details class="transaction-note"><summary><span class="note-preview">${esc(t.note)}</span><span class="note-close">${ui("Ocultar nota", "Hide note")}</span></summary><p>${esc(t.note)}</p></details>` : ""}<div class="tags">${t.tag_ids.map((id) => `<span>${esc(state.tags.find((e) => e.id === id)?.name)}</span>`).join("")}</div></div><div class="transaction-end"><strong ${amountAttributes}>${amount}</strong><details class="transaction-actions"><summary aria-label="${ui("Acciones del movimiento", "Transaction actions")}">⋯</summary><div><button data-action="edit-transaction" data-id="${esc(t.id)}">${ui("Editar", "Edit")}</button><button data-action="delete-transaction" data-id="${esc(t.id)}" aria-label="${ui("Borrar movimiento", "Delete transaction")} ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">${ui("Borrar", "Delete")}</button></div></details></div></article>`;
       return contextId
-        ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="Borrar movimiento ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">Borrar</button>${row}</div>`
+        ? `<div class="transaction-swipe" data-swipe-transaction="${esc(t.id)}"><button class="transaction-swipe-delete" data-action="swipe-delete-transaction" data-id="${esc(t.id)}" tabindex="-1" aria-hidden="true" aria-label="${ui("Borrar movimiento", "Delete transaction")} ${formatDate(t.occurred_on)} ${money(t.amount_cents)}">${ui("Borrar", "Delete")}</button>${row}</div>`
         : row;
     }
     function entityChart(id, type) {
@@ -2251,16 +2420,16 @@
       const points = series.map((p, i) => `${x(i)},${y(p.value)}`).join(" L ");
       const caption =
         type === "accounts"
-          ? "Saldo al cierre de cada mes"
+          ? ui("Saldo al cierre de cada mes", "Balance at the end of each month")
           : type === "sources"
-            ? "Ingresos por mes"
-            : "Gastos por mes";
+            ? ui("Ingresos por mes", "Income by month")
+            : ui("Gastos por mes", "Expenses by month");
       const ticks = [...new Set([high, Math.round((high + low) / 2), low])];
       const axisNumber = new Intl.NumberFormat("es-BO", {
         notation: "compact",
         maximumFractionDigits: 1,
       });
-      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>12 meses · BOB</span></div><div class="chart-interactive"><output class="chart-tooltip" aria-hidden="true" hidden></output><svg class="chart-plot" viewBox="0 0 610 190" tabindex="0" role="slider" aria-label="Mes e importe · ${caption}" aria-describedby="chart-help" aria-valuemin="0" aria-valuemax="11" aria-valuenow="11" aria-valuetext="${formatMonth(series[11].month)} · ${money(series[11].value)}"><title>${caption} · ${esc(name(id))}</title>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/><g class="chart-selection" hidden><line y1="20" y2="150"/><circle r="5"/></g>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${formatMonth(series[i].month)}</text>`).join("")}</svg></div><p id="chart-help" class="sr-only">Toca o desliza sobre el gráfico para consultar cada mes. Con teclado, usa las flechas izquierda y derecha, Inicio y Fin.</p><div class="chart-data sr-only"><table><caption>${caption} · ${esc(name(id))}</caption><thead><tr><th>Mes</th><th>${type === "accounts" ? "Saldo" : "Importe"} · BOB</th></tr></thead><tbody>${series.map((p, i) => `<tr data-chart-month="${p.month}" data-value="${p.value}" data-x="${x(i)}" data-y="${y(p.value)}"><td>${formatMonth(p.month)}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></div></section>`;
+      return `<section class="entity-chart" aria-labelledby="chart-heading"><div class="chart-heading"><h2 id="chart-heading">${caption}</h2><span>${ui("12 meses · BOB", "12 months · BOB")}</span></div><div class="chart-interactive"><output class="chart-tooltip" aria-hidden="true" hidden></output><svg class="chart-plot" viewBox="0 0 610 190" tabindex="0" role="slider" aria-label="${ui("Mes e importe", "Month and amount")} · ${caption}" aria-describedby="chart-help" aria-valuemin="0" aria-valuemax="11" aria-valuenow="11" aria-valuetext="${monthLabel(series[11].month)} · ${money(series[11].value)}"><title>${caption} · ${esc(name(id))}</title>${ticks.map((v) => `<line x1="90" x2="585" y1="${y(v)}" y2="${y(v)}" class="chart-grid"/><text x="80" y="${y(v) + 4}" text-anchor="end">${axisNumber.format(v / 100)}</text>`).join("")}<path class="chart-area" d="M ${x(0)},${y(0)} L ${points} L ${x(11)},${y(0)} Z"/><path class="chart-line" d="M ${points}"/><circle cx="${x(11)}" cy="${y(series[11].value)}" r="4" class="chart-dot"/><g class="chart-selection" hidden><line y1="20" y2="150"/><circle r="5"/></g>${[0, 3, 6, 9, 11].map((i) => `<text x="${x(i)}" y="178" text-anchor="middle">${monthLabel(series[i].month)}</text>`).join("")}</svg></div><p id="chart-help" class="sr-only">${ui("Toca o desliza sobre el gráfico para consultar cada mes. Con teclado, usa las flechas izquierda y derecha, Inicio y Fin.", "Tap or swipe the chart to explore each month. With a keyboard, use the left and right arrows, Home and End.")}</p><div class="chart-data sr-only"><table><caption>${caption} · ${esc(name(id))}</caption><thead><tr><th>${ui("Mes", "Month")}</th><th>${type === "accounts" ? ui("Saldo", "Balance") : ui("Importe", "Amount")} · BOB</th></tr></thead><tbody>${series.map((p, i) => `<tr data-chart-month="${p.month}" data-value="${p.value}" data-x="${x(i)}" data-y="${y(p.value)}"><td>${monthLabel(p.month)}</td><td>${money(p.value)}</td></tr>`).join("")}</tbody></table></div></section>`;
     }
     function bindEntityChart() {
       const chart = $(".entity-chart"), plot = chart?.querySelector(".chart-plot");
@@ -2272,7 +2441,7 @@
       const show = (index) => {
         selected = Math.max(0, Math.min(rows.length - 1, index));
         const point = rows[selected].dataset;
-        tooltip.textContent = `${formatMonth(point.chartMonth)} · ${money(Number(point.value))}`;
+        tooltip.textContent = `${monthLabel(point.chartMonth)} · ${money(Number(point.value))}`;
         tooltip.style.left = `${Number(point.x) / 610 * 100}%`;
         tooltip.hidden = false;
         selection.removeAttribute("hidden");
@@ -2326,14 +2495,14 @@
       const type = TYPES.find((key) => state[key].some((e) => e.id === detailId));
       const item = entity(detailId);
       if (!type || !item) return "";
-      return `<div class="detail-toolbar"><button data-action="back-home" aria-label="Volver a Inicio"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button><div><span class="detail-kind">${{ sources: "Fuente de ingreso", accounts: "Cuenta", categories: "Categoría de gasto" }[type]}</span><h1 title="${esc(item.name)}">${esc(item.name)}</h1></div><button data-action="edit-entity" data-key="${type}" data-id="${esc(detailId)}">Editar</button></div>`;
+      return `<div class="detail-toolbar"><button data-action="back-home" aria-label="${ui("Volver a Inicio", "Back to Home")}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button><div><span class="detail-kind">${{ sources: ui("Fuente de ingreso", "Income source"), accounts: ui("Cuenta", "Account"), categories: ui("Categoría de gasto", "Expense category") }[type]}</span><h1 title="${esc(item.name)}">${esc(item.name)}</h1></div><button data-action="edit-entity" data-key="${type}" data-id="${esc(detailId)}">${ui("Editar", "Edit")}</button></div>`;
     }
     function detail() {
       const type = TYPES.find((key) =>
         state[key].some((e) => e.id === detailId),
       );
       if (!type)
-        return '<p class="empty">Esta entidad ya no está disponible.</p><button data-view="home">Volver a Inicio</button>';
+        return `<p class="empty">${ui("Esta entidad ya no está disponible.", "This entity is no longer available.")}</p><button data-view="home">${ui("Volver a Inicio", "Back to Home")}</button>`;
       const all = filterTransactions(state, { entities: [detailId] }).sort(
         compareTransactionDates,
       );
@@ -2359,19 +2528,19 @@
       }
       const summary =
         type === "accounts"
-          ? stat("Saldo actual", currentBalances()[detailId]) +
-            stat("Entradas del mes", incoming) +
-            stat("Salidas del mes", outgoing)
+          ? stat(ui("Saldo actual", "Current balance"), currentBalances()[detailId]) +
+            stat(ui("Entradas del mes", "Monthly inflows"), incoming) +
+            stat(ui("Salidas del mes", "Monthly outflows"), outgoing)
           : type === "sources"
-            ? stat("Ingresos del mes", incoming)
-            : stat("Gastos del mes", outgoing) +
+            ? stat(ui("Ingresos del mes", "Monthly income"), incoming)
+            : stat(ui("Gastos del mes", "Monthly expenses"), outgoing) +
               (currentBudget(detailId).limit !== null
                 ? stat(
-                    "Presupuesto del mes",
+                    ui("Presupuesto del mes", "Monthly budget"),
                     currentBudget(detailId).limit,
                   )
                 : "");
-      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">+ Movimiento</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">Historial</h2><span>${ts.length} movimientos</span></div><div class="history-scope" role="group" aria-label="Período del historial"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">Este mes</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">Todo el historial</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3><strong class="history-day-total ${amountClass(dayTotals.get(date))}" aria-label="${amountDescription(dayTotals.get(date), "Total neto del día")}">${money(Math.abs(dayTotals.get(date)))}</strong></div><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || '<p class="empty">No hay movimientos en este período.</p>'}${ts.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section></div>`;
+      return `<div class="entity-detail row-${TYPES.indexOf(type)}"><div class="detail-period"><button data-action="entity-movement">${ui("+ Movimiento", "+ Transaction")}</button>${monthNav(true)}</div><div class="detail-totals stats">${summary}</div>${entityChart(detailId, type)}<section class="entity-history" aria-labelledby="entity-history-heading"><div class="chart-heading"><h2 id="entity-history-heading">${ui("Historial", "History")}</h2><span>${ts.length}${ui(" movimientos", " transactions")}</span></div><div class="history-scope" role="group" aria-label="${ui("Período del historial", "History period")}"><button data-action="detail-scope" data-scope="month" aria-pressed="${detailScope === "month"}">${ui("Este mes", "This month")}</button><button data-action="detail-scope" data-scope="all" aria-pressed="${detailScope === "all"}">${ui("Todo el historial", "All history")}</button></div>${[...groups].map(([date, transactions]) => `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3><strong class="history-day-total ${amountClass(dayTotals.get(date))}" aria-label="${amountDescription(dayTotals.get(date), ui("Total neto del día", "Daily net total"))}">${money(Math.abs(dayTotals.get(date)))}</strong></div><div class="transaction-list">${transactions.map((t) => transactionRow(t, detailId)).join("")}</div></section>`).join("") || `<p class="empty">${ui("No hay movimientos en este período.", "No transactions in this period.")}</p>`}${ts.length > historyLimit ? `<button data-action="more">${ui("Mostrar 100 más", "Show 100 more")}</button>` : ""}</section></div>`;
     }
     function history() {
       const ts = filterTransactions(state, filters).sort(
@@ -2383,15 +2552,15 @@
         expense = sum(
           ts.filter((t) => t.kind === "expense").map((t) => t.amount_cents),
         );
-      return `<div class="page-heading"><h1>Historial</h1></div>${filterPanel()}<div class="stats">${stat("Ingresos filtrados", income, "positive")}${stat("Gastos filtrados", expense)}${stat("Neto filtrado", sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length} movimientos</h2><button data-action="movement">+ Nuevo</button></div><div class="transaction-list">${
+      return `<div class="page-heading"><h1>${ui("Historial", "History")}</h1></div>${filterPanel()}<div class="stats">${stat(ui("Ingresos filtrados", "Filtered income"), income, "positive")}${stat(ui("Gastos filtrados", "Filtered expenses"), expense)}${stat(ui("Neto filtrado", "Filtered net"), sum([income, -expense]))}</div><section class="panel"><div class="section-heading"><h2>${ts.length}${ui(" movimientos", " transactions")}</h2><button data-action="movement">${ui("+ Nuevo", "+ New")}</button></div><div class="transaction-list">${
         [...groupByDay(ts.slice(0, historyLimit))].map(([date, rows]) =>
             `<section class="history-day"><div class="history-day-heading"><h3><time datetime="${date}">${formatDate(date)}</time></h3></div>${rows.map(t => transactionRow(t)).join("")}</section>`).join("") ||
-        '<p class="empty">No hay movimientos con estos filtros.</p>'
-      }</div>${ts.length > historyLimit ? '<button data-action="more" class="load-more">Mostrar 100 más</button>' : ""}</section>`;
+        `<p class="empty">${ui("No hay movimientos con estos filtros.", "No transactions match these filters.")}</p>`
+      }</div>${ts.length > historyLimit ? `<button data-action="more" class="load-more">${ui("Mostrar 100 más", "Show 100 more")}</button>` : ""}</section>`;
     }
     function budgetCard(c, archived = false) {
       const b = currentBudget(c.id, budgetMonth), visual = budgetVisual(b.limit, b.spent);
-      return `<article class="panel budget-card budget-${visual.tone}"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="Editar límite de ${esc(c.name)}">Editar</button></div><div class="budget-spent">${money(b.spent)}<span>gastado</span></div>${b.limit === null ? "" : `<progress max="${Math.max(b.limit, b.spent, 1)}" value="${b.spent}" aria-label="Gastado ${money(b.spent)} de un límite de ${money(b.limit)}"></progress>`}<dl><div><dt>Límite</dt><dd>${b.limit === null ? "Sin límite" : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? "Exceso" : "Restante"}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl>${archived ? `<button class="budget-restore" data-action="restore-entity" data-key="categories" data-id="${esc(c.id)}" aria-label="Restaurar ${esc(c.name)} en Inicio">Restaurar en Inicio</button>` : ""}</article>`;
+      return `<article class="panel budget-card budget-${visual.tone}"><div class="budget-heading"><h2>${esc(c.name)}</h2><button data-action="budget" data-id="${esc(c.id)}" aria-label="${ui("Editar límite de", "Edit limit for")} ${esc(c.name)}">${ui("Editar", "Edit")}</button></div><div class="budget-spent">${money(b.spent)}<span>${ui("gastado", "spent")}</span></div>${b.limit === null ? "" : `<progress max="${Math.max(b.limit, b.spent, 1)}" value="${b.spent}" aria-label="${ui("Gastado", "Spent")} ${money(b.spent)}${ui(" de un límite de ", " of a limit of ")}${money(b.limit)}"></progress>`}<dl><div><dt>${ui("Límite", "Limit")}</dt><dd>${b.limit === null ? ui("Sin límite", "No limit") : money(b.limit)}</dd></div><div><dt>${b.remaining !== null && b.remaining < 0 ? ui("Exceso", "Over budget") : ui("Restante", "Remaining")}</dt><dd>${b.remaining === null ? "—" : money(Math.abs(b.remaining))}</dd></div></dl>${archived ? `<button class="budget-restore" data-action="restore-entity" data-key="categories" data-id="${esc(c.id)}" aria-label="${ui("Restaurar", "Restore")} ${esc(c.name)}${ui(" en Inicio", " to Home")}">${ui("Restaurar en Inicio", "Restore to Home")}</button>` : ""}</article>`;
     }
     function budgets() {
       const currentCategories = state.categories.filter((c) => !c.archived_at);
@@ -2399,7 +2568,7 @@
       const longNames = state.categories.some(c => c.name.length > 18 || Math.abs(currentBudget(c.id, budgetMonth).spent) >= 100000000);
       const archivedLimit = sum(archivedCategories.map(c => currentBudget(c.id, budgetMonth).limit || 0));
       const activeLimit = sum(currentCategories.map(c => currentBudget(c.id, budgetMonth).limit || 0));
-      return `<div class="page-heading"><div class="page-title"><h1>Límites de categoría</h1>${monthNav(true, true, budgetMonth)}</div><p>Define un límite una vez. Se mantiene cada mes hasta que lo cambies.</p></div><section class="stats budget-totals" aria-label="Resumen de límites mensuales">${stat("Total de límites mensuales", currentBudgetTotals(budgetMonth).limit)}</section><p class="limit-contributions">Activas: ${money(activeLimit)} · Archivadas: ${money(archivedLimit)}. Ambos importes están incluidos en el total.</p><section class="budget-grid ${longNames ? "budget-long-names" : ""}">${currentCategories.map((c) => budgetCard(c)).join("") || '<p class="empty">Crea una categoría en Inicio para asignarle un presupuesto.</p>'}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>Categorías archivadas (${archivedCategories.length})</summary><div class="budget-grid ${longNames ? "budget-long-names" : ""}">${archivedCategories.map((c) => budgetCard(c, true)).join("") || '<p class="empty">No hay categorías archivadas.</p>'}</div></details><p class="footnote">Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.</p>`;
+      return `<div class="page-heading"><div class="page-title"><h1>${ui("Límites de categoría", "Category limits")}</h1>${monthNav(true, true, budgetMonth)}</div><p>${ui("Define un límite una vez. Se mantiene cada mes hasta que lo cambies.", "Set a limit once. It carries forward each month until you change it.")}</p></div><section class="stats budget-totals" aria-label="${ui("Resumen de límites mensuales", "Monthly limits summary")}">${stat(ui("Total de límites mensuales", "Total monthly limits"), currentBudgetTotals(budgetMonth).limit)}</section><p class="limit-contributions">${ui("Activas:", "Active:")} ${money(activeLimit)} · ${ui("Archivadas:", "Archived:")} ${money(archivedLimit)}. ${ui("Ambos importes están incluidos en el total.", "Both amounts are included in the total.")}</p><section class="budget-grid ${longNames ? "budget-long-names" : ""}">${currentCategories.map((c) => budgetCard(c)).join("") || `<p class="empty">${ui("Crea una categoría en Inicio para asignarle un presupuesto.", "Create a category in Home to set a budget.")}</p>`}</section><details id="archived-categories" class="archived-categories" ${archivedBudgetsOpen ? "open" : ""}><summary>${ui("Categorías archivadas", "Archived categories")} (${archivedCategories.length})</summary><div class="budget-grid ${longNames ? "budget-long-names" : ""}">${archivedCategories.map((c) => budgetCard(c, true)).join("") || `<p class="empty">${ui("No hay categorías archivadas.", "No archived categories.")}</p>`}</div></details><p class="footnote">${ui("Los límites se mantienen de mes a mes. Al cambiarlos, se aplican desde el mes consultado; los meses anteriores conservan su valor. El gasto empieza de cero cada mes.", "Limits carry forward each month. Changes apply from the selected month; earlier months keep their limits. Spending starts at zero each month.")}</p>`;
     }
     function expensePie(categories) {
       const total = sum(categories.map((c) => c.spent));
@@ -2426,7 +2595,7 @@
       const other = slices.filter((c) => !c.major);
       const otherPercent = sum(other.map((c) => c.spent)) / total * 100;
       const labels = slices.filter((c) => c.major).map((c) => ({ ...c, angle: (c.start + c.end) / 2 }));
-      if (other.length) labels.push({ name: "Otros", percent: otherPercent,
+      if (other.length) labels.push({ name: ui("Otros", "Other"), percent: otherPercent,
         angle: (other[0].start + other.at(-1).end) / 2 });
       for (const side of [-1, 1]) {
         const group = labels.filter((label) => (Math.cos(label.angle) < 0 ? -1 : 1) === side)
@@ -2452,14 +2621,14 @@
         const x = label.side < 0 ? 4 : 356, edge = label.side < 0 ? 94 : 266;
         return `<g class="pie-label"><path d="M${p.x} ${p.y} L${elbow.x} ${elbow.y} L${edge} ${label.y}"/><text x="${x}" y="${label.y - (second ? 16 : 5)}" text-anchor="${label.side < 0 ? "start" : "end"}"><tspan x="${x}">${esc(first)}</tspan>${second ? `<tspan x="${x}" dy="13">${esc(second)}</tspan>` : ""}<tspan class="pie-percent" x="${x}" dy="15">${percent(label.percent)}</tspan></text></g>`;
       };
-      return `<figure class="expense-pie"><svg viewBox="0 0 360 270" role="img" aria-labelledby="expense-pie-title expense-pie-description"><title id="expense-pie-title">Gastos por categoría</title><desc id="expense-pie-description">${slices.map((c) => `${esc(c.name)}: ${percent(c.percent)}`).join("; ")}. Detalle en la tabla siguiente.</desc>${slices.map(shape).join("")}${labels.map(labelText).join("")}</svg>${other.length ? `<figcaption class="pie-others"><h3>Otros <span>· ${percent(otherPercent)}</span></h3><ul>${other.map((c) => `<li><span class="pie-color" style="--slice-color:${c.color}" aria-hidden="true"></span><span>${esc(c.name)}</span><strong>${percent(c.percent)}</strong></li>`).join("")}</ul></figcaption>` : ""}</figure>`;
+      return `<figure class="expense-pie"><svg viewBox="0 0 360 270" role="img" aria-labelledby="expense-pie-title expense-pie-description"><title id="expense-pie-title">${ui("Gastos por categoría", "Expenses by category")}</title><desc id="expense-pie-description">${slices.map((c) => `${esc(c.name)}: ${percent(c.percent)}`).join("; ")}. ${ui("Detalle en la tabla siguiente.", "Details in the following table.")}</desc>${slices.map(shape).join("")}${labels.map(labelText).join("")}</svg>${other.length ? `<figcaption class="pie-others"><h3>${ui("Otros", "Other")} <span>· ${percent(otherPercent)}</span></h3><ul>${other.map((c) => `<li><span class="pie-color" style="--slice-color:${c.color}" aria-hidden="true"></span><span>${esc(c.name)}</span><strong>${percent(c.percent)}</strong></li>`).join("")}</ul></figcaption>` : ""}</figure>`;
     }
     function reports() {
       const r = report(state, month, filters),
         series = evolution(state, month, filters),
         max = Math.max(1, ...series.flatMap((m) => [m.income, m.expense]));
-      return `<div class="page-heading"><div class="page-title"><h1>Gráficos</h1>${monthNav(true)}</div></div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.</p><div class="stats">${stat("Ingresos", r.income, "positive")}${stat("Gastos", r.expense)}${stat("Neto", r.net)}</div>
-      <section class="panel"><h2>¿Dónde se fue?</h2><p class="muted">Gastos por categoría</p>${expensePie(r.categories)}<details class="report-breakdown"><summary>Ver detalle por categoría</summary><div role="img" aria-label="Distribución de gastos; datos en la tabla siguiente" class="distribution">${
+      return `<div class="page-heading"><div class="page-title"><h1>${ui("Gráficos", "Charts")}</h1>${monthNav(true)}</div></div>${filterPanel()}<p class="footnote">BOB · ${esc(monthLabel(month))} · ${ui("Se aplican todos los filtros de arriba, también a la evolución. «Ver todo» quita el rango de fechas.", "All filters above also apply to trends. “Show all” clears the date range.")}</p><div class="stats">${stat(ui("Ingresos", "Income"), r.income, "positive")}${stat(ui("Gastos", "Expenses"), r.expense)}${stat(ui("Neto", "Net"), r.net)}</div>
+      <section class="panel"><h2>${ui("¿Dónde se fue?", "Where did it go?")}</h2><p class="muted">${ui("Gastos por categoría", "Expenses by category")}</p>${expensePie(r.categories)}<details class="report-breakdown"><summary>${ui("Ver detalle por categoría", "Show category breakdown")}</summary><div role="img" aria-label="${ui("Distribución de gastos; datos en la tabla siguiente", "Expense distribution; data in the following table")}" class="distribution">${
         r.categories
           .filter((c) => c.spent)
           .map(
@@ -2467,13 +2636,13 @@
               `<div><span>${esc(c.name)}</span><div class="bar-track"><i style="width:${r.expense ? (c.spent / r.expense) * 100 : 0}%"></i></div><strong>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</strong></div>`,
           )
           .join("") ||
-        '<p class="empty">Todavía no hay gastos en este período.</p>'
-      }</div><details class="report-table"><summary>Ver tabla por categoría</summary><div class="table-scroll"><table><thead><tr><th>Categoría</th><th>Gasto · BOB</th><th>Participación</th></tr></thead><tbody>${r.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${money(c.spent)}</td><td>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</td></tr>`).join("")}</tbody></table></div></details></details></section>
-      <section class="panel"><h2>Doce meses de perspectiva</h2><p class="legend"><span class="income-key">Ingresos</span><span class="expense-key">Gastos</span></p><div class="timeline" role="img" aria-label="Evolución mensual de ingresos y gastos; datos en la tabla siguiente">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}<small>/${m.month.slice(2, 4)}</small></span></div>`).join("")}</div><details class="report-table"><summary>Ver tabla mensual</summary><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Neto</th></tr></thead><tbody>${series.map((m) => `<tr><td>${formatMonth(m.month)}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></details></section><p class="footnote">Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.</p>`;
+        `<p class="empty">${ui("Todavía no hay gastos en este período.", "No expenses in this period yet.")}</p>`
+      }</div><details class="report-table"><summary>${ui("Ver tabla por categoría", "Show category table")}</summary><div class="table-scroll"><table><thead><tr><th>${ui("Categoría", "Category")}</th><th>${ui("Gasto · BOB", "Expense · BOB")}</th><th>${ui("Participación", "Share")}</th></tr></thead><tbody>${r.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${money(c.spent)}</td><td>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</td></tr>`).join("")}</tbody></table></div></details></details></section>
+      <section class="panel"><h2>${ui("Doce meses de perspectiva", "Twelve months of perspective")}</h2><p class="legend"><span class="income-key">${ui("Ingresos", "Income")}</span><span class="expense-key">${ui("Gastos", "Expenses")}</span></p><div class="timeline" role="img" aria-label="${ui("Evolución mensual de ingresos y gastos; datos en la tabla siguiente", "Monthly income and expense trends; data in the following table")}">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}<small>/${m.month.slice(2, 4)}</small></span></div>`).join("")}</div><details class="report-table"><summary>${ui("Ver tabla mensual", "Show monthly table")}</summary><div class="table-scroll"><table><thead><tr><th>${ui("Mes", "Month")}</th><th>${ui("Ingresos", "Income")}</th><th>${ui("Gastos", "Expenses")}</th><th>${ui("Neto", "Net")}</th></tr></thead><tbody>${series.map((m) => `<tr><td>${monthLabel(m.month)}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></details></section><p class="footnote">${ui("Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.", "Each transaction counts once, even with multiple tags. Transfers excluded.")}</p>`;
     }
     function settings() {
-      return `<div class="page-heading"><h1>Importar/Exportar</h1><p>Respalda, restaura y organiza tus datos.</p></div>
-      <section class="panel"><h2>Respaldo completo</h2><p>Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.</p><button class="primary" data-action="export">Descargar respaldo JSON</button><label class="file-label">Restaurar respaldo JSON<input type="file" id="json-file" accept=".json,application/json"></label></section>
+      return `<div class="page-heading"><h1>${ui("Importar/Exportar", "Import/Export")}</h1><p>${ui("Respalda, restaura y organiza tus datos.", "Back up, restore and organize your data.")}</p></div>
+      <section class="panel"><h2>${ui("Respaldo completo", "Full backup")}</h2><p>${ui("Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.", "Download a JSON file with transactions, opening balances, monthly limits, tags and pending reviews.")}</p><button class="primary" data-action="export">${ui("Descargar respaldo JSON", "Download JSON backup")}</button><label class="file-label">${ui("Restaurar respaldo JSON", "Restore JSON backup")}<input type="file" id="json-file" accept=".json,application/json"></label></section>
       ${demoMode ? "" : `<details class="panel settings-group" id="backup-settings" ${openSettingsGroups.has("backup-settings") ? "open" : ""}><summary>Respaldo automático en GitHub</summary><p>Respaldo automático en tu repositorio privado de GitHub. Solo se envían datos; no se restaura desde GitHub.</p>
       <form id="sync-form"><label>Repo<input id="sync-repo" value="${esc(syncConfig.repo)}" required autocapitalize="none" spellcheck="false"></label>
       <label>Branch<input id="sync-branch" value="${esc(syncConfig.branch)}" required autocapitalize="none" spellcheck="false"></label>
@@ -2482,20 +2651,20 @@
       <p class="muted">Usa un token con permiso de escritura de Contents en el repositorio elegido. «Sincronizar ahora» guarda la configuración en este dispositivo.</p>
       <button class="primary" type="submit">Sincronizar ahora</button> <button type="button" data-action="sync-disable">Desactivar</button></form>
       <p id="sync-status" role="status" aria-live="polite">${esc(syncStatus())}</p></details>`}
-      <section class="panel"><h2>Importar historial completo</h2><p>Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.</p><label class="file-label">Elegir CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>Importar también límites de categoría (opcional)</summary><p>El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.</p><label>Aplicar límites desde (opcional)${dateControl({ id: "import-budget-month", type: "month", describedBy: "import-budget-help" })}</label><p id="import-budget-help" class="muted">Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.</p></details><p class="muted">CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.</p></section>
-      <section class="panel"><h2>Revisión de importación · ${state.review.length}</h2><p>Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.</p>${
+      <section class="panel"><h2>${ui("Importar historial completo", "Import full history")}</h2><p>${ui("Importa todos los años y meses incluidos en tu CSV, con las fechas originales de cada movimiento. No necesitas elegir un mes.", "Import every year and month in your CSV with the original transaction dates. No need to select a month.")}</p><label class="file-label">${ui("Elegir CSV", "Choose CSV")}<input id="csv-file" type="file" accept=".csv,text/csv"></label><details class="import-options"><summary>${ui("Importar también límites de categoría (opcional)", "Also import category limits (optional)")}</summary><p>${ui("El CSV contiene un límite por categoría, sin indicar desde cuándo se aplica. Solo si quieres usar esos límites, elige el mes de inicio. Esto no filtra el historial.", "The CSV contains a limit for each category without a start date. Select a starting month only if you want to use these limits. This does not filter history.")}</p><label>${ui("Aplicar límites desde (opcional)", "Apply limits from (optional)")}${dateControl({ id: "import-budget-month", type: "month", describedBy: "import-budget-help" })}</label><p id="import-budget-help" class="muted">${ui("Vacío: se importa todo el historial sin crear límites. Puedes definirlos después en Límites de categoría.", "Empty: imports all history without creating limits. You can set them later in Category limits.")}</p></details><p class="muted">${ui("CSV CoinKeeper con transacciones y las cuatro secciones. Solo BOB. Verás el período y los datos antes de reemplazar tu información. Los acumulados «Received to date» se conservan como referencia.", "CoinKeeper CSV with transactions and all four sections. BOB only. Review the period and data before replacing your information. “Received to date” totals are kept for reference.")}</p></section>
+      <section class="panel"><h2>${ui("Revisión de importación", "Import review")} · ${state.review.length}</h2><p>${ui("Estas filas no son movimientos y no entran en reportes. El saldo inicial se reconcilia con los movimientos aceptados. Revisa el saldo inicial si agregas una fila manualmente.", "These rows are not transactions and are excluded from reports. Opening balances are reconciled with accepted transactions. Check the opening balance if you add a row manually.")}</p>${
         state.review
           .slice(0, historyLimit)
           .map(
             (r) =>
-              `<article class="review-row"><strong>Registro ${r.record}: ${esc(r.reason)}</strong><p>${esc(r.raw.join(" · "))}</p><button data-action="resolve-review" data-id="${esc(r.id)}">Crear movimiento corregido</button></article>`,
+              `<article class="review-row"><strong>${ui("Registro", "Record")} ${r.record}: ${esc(demoMode ? errorText({ message: r.reason }) : r.reason)}</strong><p>${esc(r.raw.join(" · "))}</p><button data-action="resolve-review" data-id="${esc(r.id)}">${ui("Crear movimiento corregido", "Create corrected transaction")}</button></article>`,
           )
-          .join("") || '<p class="muted">Sin filas pendientes.</p>'
-      }${state.review.length > historyLimit ? '<button data-action="more">Mostrar 100 más</button>' : ""}</section>
-      <details class="panel settings-group" id="calendar-settings" ${openSettingsGroups.has("calendar-settings") ? "open" : ""}><summary>Calendario y zona horaria</summary><label>Zona horaria<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">Guardar zona horaria</button><p class="muted">Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.</p></details>
-      <section class="panel"><h2>Organizar entidades</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: "Fuentes", accounts: "Cuentas", categories: "Categorías", tags: "Etiquetas" }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">+ Crear</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? " · archivado" : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="Restaurar ${esc(e.name)}${key === "tags" ? "" : " en Inicio"}">${key === "tags" ? "Restaurar" : "Restaurar en Inicio"}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">Editar</button></div></div>`).join("")}</details>`).join("")}</section>
-      <section class="panel"><details class="gesture-help"><summary>Ayuda de gestos</summary>${gestureGuide()}</details>${demoMode ? '<p>Demo en este navegador · Datos de ejemplo · Sincronización desactivada.</p>' : '<h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p>'}<p id="storage-state" class="muted"></p><button data-action="persist">Solicitar almacenamiento persistente</button></section>
-      ${demoMode ? '<section class="panel reset-panel"><h2>Datos de ejemplo</h2><p>Descarta tus cambios en la demo y vuelve a cargar los ejemplos.</p><button data-action="reset-demo">Reset demo</button></section>' : '<section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>'}`;
+          .join("") || `<p class="muted">${ui("Sin filas pendientes.", "No pending rows.")}</p>`
+      }${state.review.length > historyLimit ? `<button data-action="more">${ui("Mostrar 100 más", "Show 100 more")}</button>` : ""}</section>
+      <details class="panel settings-group" id="calendar-settings" ${openSettingsGroups.has("calendar-settings") ? "open" : ""}><summary>${ui("Calendario y zona horaria", "Calendar and time zone")}</summary><label>${ui("Zona horaria", "Time zone")}<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">${ui("Guardar zona horaria", "Save time zone")}</button><p class="muted">${ui("Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.", "Base currency: BOB. Accounting dates stay the same when you change time zones.")}</p></details>
+      <section class="panel"><h2>${ui("Organizar entidades", "Manage entities")}</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: ui("Fuentes", "Sources"), accounts: ui("Cuentas", "Accounts"), categories: ui("Categorías", "Categories"), tags: ui("Etiquetas", "Tags") }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">${ui("+ Crear", "+ Create")}</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? ui(" · archivado", " · archived") : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Restaurar", "Restore")} ${esc(e.name)}${key === "tags" ? "" : ui(" en Inicio", " to Home")}">${key === "tags" ? ui("Restaurar", "Restore") : ui("Restaurar en Inicio", "Restore to Home")}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">${ui("Editar", "Edit")}</button></div></div>`).join("")}</details>`).join("")}</section>
+      <section class="panel"><details class="gesture-help"><summary>${ui("Ayuda de gestos", "Gesture help")}</summary>${gestureGuide()}</details>${demoMode ? `<p>${ui("Demo en este navegador · Datos de ejemplo · Sincronización desactivada.", "Demo in this browser · Sample data · Sync disabled.")}</p>` : '<h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p>'}<p id="storage-state" class="muted"></p><button data-action="persist">${ui("Solicitar almacenamiento persistente", "Request persistent storage")}</button></section>
+      ${demoMode ? `<section class="panel reset-panel"><h2>${ui("Datos de ejemplo", "Sample data")}</h2><p>${ui("Descarta tus cambios en la demo y vuelve a cargar los ejemplos.", "Discard your demo changes and reload the sample data.")}</p><button data-action="reset-demo">Reset demo</button></section>` : '<section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>'}`;
     }
     const navigationStack = [];
     function rememberNavigation() {
@@ -2598,14 +2767,14 @@
       const dates = next.transactions.map((t) => t.occurred_on).sort();
       const displayDate = formatDate;
       const period = dates.length
-        ? `<div><dt>Desde</dt><dd>${displayDate(dates[0])}</dd></div><div><dt>Hasta</dt><dd>${displayDate(dates.at(-1))}</dd></div>`
-        : `<div><dt>Período</dt><dd>Sin movimientos</dd></div>`;
-      const limits = next.budgets.length ? String(next.budgets.length) : "Sin límites";
+        ? `<div><dt>${ui("Desde", "From")}</dt><dd>${displayDate(dates[0])}</dd></div><div><dt>${ui("Hasta", "To")}</dt><dd>${displayDate(dates.at(-1))}</dd></div>`
+        : `<div><dt>${ui("Período", "Period")}</dt><dd>${ui("Sin movimientos", "No transactions")}</dd></div>`;
+      const limits = next.budgets.length ? String(next.budgets.length) : ui("Sin límites", "No limits");
       modal(
-        "Revisar importación",
-        `<p>${esc(source)}</p><dl class="import-summary">${period}<div><dt>Movimientos aceptados</dt><dd>${next.transactions.length}</dd></div><div><dt>Filas pendientes</dt><dd>${next.review.length}</dd></div><div><dt>Cuentas</dt><dd>${next.accounts.length}</dd></div><div><dt>Categorías</dt><dd>${next.categories.length}</dd></div><div><dt>Límites de categoría</dt><dd>${limits}</dd></div></dl><p>Se reemplazarán los datos actuales (${state.transactions.length} movimientos). Puedes descargar un respaldo antes de continuar.</p><button type="button" data-action="export">Descargar respaldo actual</button><label class="check"><input name="confirm" type="checkbox" required>Entiendo que se reemplazarán los datos de este dispositivo.</label>${actions("Importar y reemplazar")}`,
+        ui("Revisar importación", "Review import"),
+        `<p>${esc(source)}</p><dl class="import-summary">${period}<div><dt>${ui("Movimientos aceptados", "Accepted transactions")}</dt><dd>${next.transactions.length}</dd></div><div><dt>${ui("Filas pendientes", "Pending rows")}</dt><dd>${next.review.length}</dd></div><div><dt>${ui("Cuentas", "Accounts")}</dt><dd>${next.accounts.length}</dd></div><div><dt>${ui("Categorías", "Categories")}</dt><dd>${next.categories.length}</dd></div><div><dt>${ui("Límites de categoría", "Category limits")}</dt><dd>${limits}</dd></div></dl><p>${ui("Se reemplazarán los datos actuales (", "This will replace your current data (")}${state.transactions.length}${ui(" movimientos", " transactions")}${ui("). Puedes descargar un respaldo antes de continuar.", "). You can download a backup before continuing.")}</p><button type="button" data-action="export">${ui("Descargar respaldo actual", "Download current backup")}</button><label class="check"><input name="confirm" type="checkbox" required>${ui("Entiendo que se reemplazarán los datos de este dispositivo.", "I understand that this device’s data will be replaced.")}</label>${actions(ui("Importar y reemplazar", "Import and replace"))}`,
         async () => {
-          await commit(pendingImport, "Importación guardada");
+          await commit(pendingImport, ui("Importación guardada", "Import saved"));
           keepMovementDraft(null);
           pendingImport = null;
         },
@@ -2627,7 +2796,7 @@
       if (!t || t.status === "deleted") return;
       t.status = "deleted";
       t.deleted_at = t.updated_at = new Date().toISOString();
-      await commit(next, "Movimiento borrado", true);
+      await commit(next, ui("Movimiento borrado", "Transaction deleted"), true);
     }
     async function handleAction(button) {
       if (backSwipeAnimation) return;
@@ -2686,7 +2855,7 @@
       if (action === "close") return $("#dialog").close();
       if (action === "dismiss") return dismissNotification();
       if (action === "undo") {
-        if (undo) await commit(copy(undo), "Cambio deshecho");
+        if (undo) await commit(copy(undo), ui("Cambio deshecho", "Change undone"));
         return;
       }
       if (action === "back-home") {
@@ -2746,7 +2915,7 @@
         );
         assert(
           !next.start || !next.end || next.start <= next.end,
-          "La fecha inicial debe ser anterior a la final.",
+          ui("La fecha inicial debe ser anterior a la final.", "The start date must be before the end date."),
         );
         for (const key of ["entities", "tags"])
           next[key] = [...$("#f-" + key).selectedOptions].map((o) => o.value);
@@ -2760,13 +2929,13 @@
       if (action === "timezone") {
         const next = copy(state);
         next.profile.timezone = $("#timezone").value.trim();
-        return commit(next, "Zona horaria guardada");
+        return commit(next, ui("Zona horaria guardada", "Time zone saved"));
       }
       if (action === "persist") {
         const granted = await navigator.storage?.persist?.();
         $("#storage-state").textContent = granted
-          ? "Almacenamiento persistente concedido."
-          : "El navegador decide la disponibilidad. Mantén un respaldo JSON.";
+          ? ui("Almacenamiento persistente concedido.", "Persistent storage granted.")
+          : ui("El navegador decide la disponibilidad. Mantén un respaldo JSON.", "Storage availability is managed by your browser. Keep a JSON backup.");
       }
     }
     document.addEventListener("submit", (e) => {
@@ -2810,7 +2979,7 @@
         }
       }
       const button = e.target.closest("[data-action], [data-view]");
-      if (button) handleAction(button).catch((error) => notify(error.message));
+      if (button) handleAction(button).catch((error) => notify(errorText(error)));
       const card = e.target.closest("[data-entity]");
       if (card && !suppressClick && !editingEntities)
         openEntity(card.dataset.entity);
@@ -2943,7 +3112,7 @@
         vibrate();
         deleteTransaction(p.row.dataset.swipeTransaction).catch((error) => {
           closeTransactionRow();
-          notify(error.message);
+          notify(errorText(error));
         });
       } else {
         showTransactionSwipe(p.row, outcome === "revealed" ? -84 : 0);
@@ -3239,11 +3408,11 @@
       settling = true;
       try {
         if (ids.some((id, index) => id !== active(key)[index]?.id))
-          await commit(reorderEntities(state, key, ids), "Orden guardado", true);
+          await commit(reorderEntities(state, key, ids), ui("Orden guardado", "Order saved"), true);
         else render();
       } catch (error) {
         render();
-        notify(error.message);
+        notify(errorText(error));
       } finally {
         document.querySelectorAll(".entity-strip").forEach((strip, index) => { strip.scrollLeft = scrolls[index]; });
         window.scrollTo(0, scrollY);
@@ -3517,15 +3686,15 @@
         if (e.target.id === "csv-file" || e.target.id === "json-file") {
           const file = e.target.files[0];
           if (!file) return;
-          assert(file.size <= 32 * 1024 * 1024, "El archivo supera 32 MB.");
+          assert(file.size <= 32 * 1024 * 1024, ui("El archivo supera 32 MB.", "The file exceeds 32 MB."));
           const text = await file.text();
           if (e.target.id === "json-file") {
             let restored;
             try { restored = restore(text); }
             catch (error) {
               throw new Error(error instanceof SyntaxError
-                ? "Este archivo no es un respaldo JSON válido. Tus datos no se cambiaron."
-                : `No se puede restaurar este respaldo: ${error.message} Tus datos no se cambiaron.`);
+                ? ui("Este archivo no es un respaldo JSON válido. Tus datos no se cambiaron.", "This file is not a valid JSON backup. Your data was not changed.")
+                : `${ui("No se puede restaurar este respaldo:", "Cannot restore this backup:")} ${errorText(error)} ${ui("Tus datos no se cambiaron.", "Your data was not changed.")}`);
             }
             await previewImport(restored, file.name);
           } else {
@@ -3544,7 +3713,7 @@
           e.target.value = "";
         }
       } catch (error) {
-        notify(error.message);
+        notify(errorText(error));
         e.target.value = "";
       }
     });
@@ -3563,12 +3732,12 @@
         r.onerror = () => reject(r.error);
         r.onblocked = () =>
           reject(
-            new Error("Cierra otras pestañas para abrir la base de datos."),
+            new Error(ui("Cierra otras pestañas para abrir la base de datos.", "Close other tabs to open the database.")),
           );
       });
       db.onversionchange = () => {
         db.close();
-        notify("Recarga para actualizar la base de datos.");
+        notify(ui("Recarga para actualizar la base de datos.", "Reload to update the database."));
       };
       await load();
       render();
@@ -3591,7 +3760,7 @@
       })();
     } catch (error) {
       $("#main").innerHTML =
-        `<section class="panel"><h1>No se pudo abrir el historial</h1><p>${esc(error.message)}</p><p>Recarga la página. No borres los datos de Safari si necesitas recuperar tu historial.</p></section>`;
+        `<section class="panel"><h1>${ui("No se pudo abrir el historial", "Could not open history")}</h1><p>${esc(errorText(error))}</p><p>${ui("Recarga la página. No borres los datos de Safari si necesitas recuperar tu historial.", "Reload the page. Keep Safari’s stored data if you need to recover your history.")}</p></section>`;
     }
     // A standalone iPhone app can resume without navigating or running boot again.
     const appScript = new URL(document.querySelector('script[src*="app.js?v="]').src),
@@ -3614,7 +3783,7 @@
         return;
       }
       if (!navigator.onLine) {
-        if (manual) notify("Conéctate a internet para actualizar la app.");
+        if (manual) notify(ui("Conéctate a internet para actualizar la app.", "Connect to the internet to update the app."));
         return;
       }
       checkingAppVersion = true;
@@ -3626,18 +3795,18 @@
         if (!response.ok) throw new Error("HTTP " + response.status);
         const html = new DOMParser().parseFromString(await response.text(), "text/html"),
           src = html.querySelector('script[src*="app.js?v="]')?.getAttribute("src");
-        if (!src) throw new Error("Versión no disponible");
+        if (!src) throw new Error(ui("Versión no disponible", "Version unavailable"));
         const latest = new URL(src, url), version = latest.searchParams.get("v");
         if (latest.origin !== appScript.origin || latest.pathname !== appScript.pathname || !/^\d+$/.test(version))
-          throw new Error("Versión no disponible");
+          throw new Error(ui("Versión no disponible", "Version unavailable"));
         if (Number(version) > appVersion) {
           availableAppVersion = version;
           if ($("#dialog").open || view === "settings")
-            notify("Actualización lista. Se aplicará al cerrar el formulario o volver a Inicio.");
+            notify(ui("Actualización lista. Se aplicará al cerrar el formulario o volver a Inicio.", "Update ready. It will apply when you close the form or return to Home."));
           applyAppUpdate();
-        } else if (manual) notify(`La app está actualizada (v${appVersion}).`);
+        } else if (manual) notify(`${ui("La app está actualizada (v", "The app is up to date (v")}${appVersion}).`);
       } catch {
-        if (manual) notify("No se pudo comprobar la actualización. Intenta de nuevo con conexión.");
+        if (manual) notify(ui("No se pudo comprobar la actualización. Intenta de nuevo con conexión.", "Could not check for an update. Try again with an internet connection."));
       } finally {
         clearTimeout(timeout);
         checkingAppVersion = false;
@@ -3667,7 +3836,7 @@
         })
         .catch(() =>
           notify(
-            "No se pudo preparar el modo sin conexión. Vuelve a abrir con conexión.",
+            ui("No se pudo preparar el modo sin conexión. Vuelve a abrir con conexión.", "Could not prepare offline mode. Reopen with an internet connection."),
           ),
         );
   }

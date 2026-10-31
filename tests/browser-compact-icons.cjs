@@ -43,6 +43,9 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       const header = await page.locator(".app-header").boundingBox();
       assert.ok(title.y >= header.y + header.height, "Navigation leaves the title below the sticky header");
     }
+    // Limits has its own month selector; visiting Charts no longer changes it.
+    await go("Límites de categoría");
+    await page.locator("#month").fill("2026-01");
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await go("Inicio");
@@ -91,7 +94,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     assert.match(await page.locator(".budget-totals").innerText(), /320,00/);
-    await go("Inicio");
+    await setHomeMonth(page, "2026-02");
     assert.match(await page.locator(".home-totals .stat").last().innerText(), /300,00/, "An exceeded category does not consume another category's remaining limit");
     await setHomeMonth(page, "2026-01");
     assert.match(await page.locator(".home-totals .stat").last().innerText(), /474,50/);

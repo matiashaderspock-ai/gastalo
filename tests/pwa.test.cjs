@@ -28,4 +28,7 @@ test("las versiones de JS/CSS de index.html coinciden con FILES y CACHE del serv
   assert.ok(sw.includes(`gastalo-v${js}`));
   assert.ok(sw.includes(`./app.js?v=${js}`));
   assert.ok(sw.includes(`./styles.css?v=${css}`));
+  const demoVersions = [...read("README.md").matchAll(/app-version=(\d+)/g)];
+  assert.ok(demoVersions.length > 0, "README includes the versioned public demo link");
+  for (const [, version] of demoVersions) assert.equal(version, js, "Demo link opens the current app shell");
 });
