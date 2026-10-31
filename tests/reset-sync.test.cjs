@@ -22,8 +22,9 @@ const settle = async () => {
 };
 
 // Run the unmodified app with a small DOM/IndexedDB boundary fake; no dependencies or network.
-async function app(local, remote, savedConfig = config, demo = false) {
+async function app(local, remote, savedConfig = config, demo = false, demoVersion = 2) {
   const records = new Map([["main", { revision: 1, data: local }], ["sync_config", structuredClone(savedConfig)]]);
+  if (demo && demoVersion !== null) records.set("demo_seed_version", demoVersion);
   const transactions = [], reads = [], opens = [], calls = [], timers = new Map(), nodes = new Map(), listeners = new Map();
   let nextTimer = 0, remoteState = remote, remoteSha = "remote-1", pending = Promise.resolve();
   function node(selector) {
@@ -131,6 +132,22 @@ async function app(local, remote, savedConfig = config, demo = false) {
   };
 }
 const methods = a => a.calls.map(c => c.method);
+
+for (const version of [null, 1]) test(`demo seed version ${version ?? "missing"} upgrades to English without sync`, async () => {
+  const expected = A.demoState(A.localClock(Date.now(), "America/La_Paz").date);
+  const legacy = structuredClone(expected);
+  legacy.accounts[2].name = "Banco Ganadero";
+  legacy.categories[0].name = "Comida";
+  const a = await app(legacy, state(4), config, true, version);
+  assert.deepEqual(a.opens, ["gastalo-demo"]);
+  assert.deepEqual(a.records.get("main"), { revision: 2, data: expected });
+  assert.equal(a.records.get("demo_seed_version"), 2);
+  assert.deepEqual([...a.records.keys()].sort(), ["demo_seed_version", "main"]);
+  assert.deepEqual(a.transactions[0], [["clear"], ["put", "main"], ["put", "demo_seed_version"]],
+    "Clear, seed and version are committed together");
+  assert.equal(a.reads.includes("sync_config"), false);
+  assert.deepEqual(methods(a), []);
+});
 
 test("demo never reads/writes sync_config or calls network sync, even with a stored token", async () => {
   const a = await app(state(4), state(4), config, true);

@@ -22,7 +22,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     const page = await context.newPage(), errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.clock.install({ time: new Date("2026-02-15T16:00:00Z") });
-    await page.goto(new URL("?demo=1&app-version=51", base).href);
+    await page.goto(new URL("?demo=1&app-version=52", base).href);
     await page.locator(".home-totals").waitFor();
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo-demo"]);
     async function assertDemoNotice(selector = "#demo-banner") {
@@ -86,7 +86,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
         const request = indexedDB.open(name);
         request.onsuccess = () => {
           const db = request.result, tx = db.transaction("state"), result = {};
-          for (const key of ["main", "sync_config", "extra-demo-key"])
+          for (const key of ["main", "demo_seed_version", "sync_config", "extra-demo-key"])
             tx.objectStore("state").get(key).onsuccess = e => { result[key] = e.target.result; };
           tx.oncomplete = () => { db.close(); resolve(result); };
           tx.onerror = () => reject(tx.error);
@@ -99,7 +99,10 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
         request.onupgradeneeded = () => request.result.createObjectStore("state");
         request.onsuccess = () => {
           const db = request.result, tx = db.transaction("state", "readwrite");
-          for (const [key, value] of Object.entries(values)) tx.objectStore("state").put(value, key);
+          for (const [key, value] of Object.entries(values)) {
+            if (value === undefined) tx.objectStore("state").delete(key);
+            else tx.objectStore("state").put(value, key);
+          }
           tx.oncomplete = () => { db.close(); resolve(); };
           tx.onerror = () => reject(tx.error);
         };
@@ -107,6 +110,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     }
     const seed = (await records("gastalo-demo")).main;
     assert.deepEqual(seed.data, A.demoState("2026-02-15"));
+    assert.equal((await records("gastalo-demo")).demo_seed_version, 2);
     assert.equal((await records("gastalo-demo")).sync_config, undefined);
     const personalData = A.emptyState();
     // Same IDs in a personal database must still render the ordinary icon keys.
@@ -196,19 +200,45 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
       t.from_id = oldIds[t.from_id] || t.from_id;
       t.to_id = oldIds[t.to_id] || t.to_id;
     });
-    await write("gastalo-demo", { main: legacy });
+    for (const version of [undefined, 1]) {
+      await write("gastalo-demo", {
+        main: legacy, demo_seed_version: version,
+        sync_config: token, "extra-demo-key": "discard on upgrade",
+      });
+      await page.reload();
+      await page.locator(".home-totals").waitFor();
+      assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo-demo"]);
+      const upgraded = await records("gastalo-demo");
+      assert.deepEqual(upgraded.main.data, seed.data, `Version ${version} upgrades automatically to the English seed`);
+      assert.equal(upgraded.main.revision, legacy.revision + 1, "Invalidate writes from tabs holding the old seed");
+      assert.equal(upgraded.demo_seed_version, 2);
+      assert.equal(upgraded.sync_config, undefined);
+      assert.equal(upgraded["extra-demo-key"], undefined);
+      await assertDemoLogos();
+      await page.reload();
+      await page.locator(".home-totals").waitFor();
+      assert.deepEqual(await records("gastalo-demo"), upgraded, "Upgrade happens only once");
+      assert.deepEqual(await records("gastalo"), {
+        ...personal, demo_seed_version: undefined, "extra-demo-key": undefined,
+      }, "Upgrading the demo leaves the personal database untouched");
+      assert.deepEqual(syncCalls, [], "Demo upgrades never sync");
+    }
+    // A newer seed must not be downgraded by an older app shell.
+    await write("gastalo-demo", { main: legacy, demo_seed_version: 3 });
     await page.reload();
     await page.locator(".home-totals").waitFor();
-    assert.equal(await page.locator('[data-entity="demo-ganadero"] .entity-name').innerText(), "Banco Ganadero");
+    assert.deepEqual((await records("gastalo-demo")).main, legacy);
+    assert.equal((await records("gastalo-demo")).demo_seed_version, 3);
     await page.locator('#demo-banner [data-action="reset-demo"]').click();
     await page.locator('#dialog button[type="submit"]').click();
     await page.locator("#dialog").waitFor({ state: "hidden" });
     const reset = await records("gastalo-demo");
     assert.deepEqual(reset.main.data, seed.data, "Reset upgrades an old demo to the complete English seed");
+    assert.equal(reset.demo_seed_version, 2, "Manual demo reset retains the current seed version");
     await assertDemoLogos();
     assert.equal(reset.sync_config, undefined);
     assert.equal(reset["extra-demo-key"], undefined);
-    assert.deepEqual(await records("gastalo"), { ...personal, "extra-demo-key": undefined });
+    assert.deepEqual(await records("gastalo"), { ...personal, demo_seed_version: undefined, "extra-demo-key": undefined });
     assert.deepEqual(await page.evaluate(() => [sessionStorage.getItem("gastalo-movement-draft"), localStorage.getItem("gastalo-gesture-help")]), [privateDraft, "dismissed"]);
     await page.evaluate(() => navigator.serviceWorker.ready);
     await page.waitForFunction(() => !!navigator.serviceWorker.controller);
@@ -225,6 +255,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     assert.equal(new URL(page.url()).searchParams.get("demo"), "1");
     await assertDemoNotice();
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo-demo"]);
+    assert.deepEqual(await records("gastalo-demo"), reset, "Reload after manual reset does not reseed");
     await context.setOffline(false);
     await page.clock.runFor(65000);
     assert.deepEqual(syncCalls, [], "No sync on boot/save/resume/timer/reset/offline recovery");
@@ -242,7 +273,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     await page.waitForFunction(() => document.querySelector("#sync-status").textContent.includes("Token inválido"));
     assert.deepEqual(syncCalls, ["GET"]);
     assert.deepEqual((await records("gastalo")).main, personal.main);
-    console.log("PASS demo: persistent English notice on all views/forms, DEMO title, seeded balances/spending/budgets, isolated DB/drafts, persistence/reset, offline, zero sync calls; ordinary URL unchanged");
+    console.log("PASS demo: persistent English notice, seeded balances/spending/budgets, automatic English seed upgrades, version persistence/reset, isolated DB/drafts, offline, zero sync calls; ordinary URL unchanged");
     await context.close();
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
