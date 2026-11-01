@@ -50,11 +50,11 @@ const A = require('../app.js');
       await page.setViewportSize({ width, height: 844 });
       const layout = await page.evaluate(() => {
         const rect = s => document.querySelector(s).getBoundingClientRect();
-        const tags = rect('.movement-tags'), body = rect('#dialog-body'), close = rect('.dialog-heading button');
-        return { width: tags.width, bodyWidth: body.width, top: tags.top, closeBottom: close.bottom, closeWidth: close.width, overflow: document.documentElement.scrollWidth > innerWidth };
+        const tags = rect('.movement-tags'), body = rect('#dialog-body'), close = rect('.dialog-actions [data-action="close"]');
+        return { width: tags.width, bodyWidth: body.width, top: tags.top, closeHeight: close.height, closeWidth: close.width, overflow: document.documentElement.scrollWidth > innerWidth };
       });
       assert.ok(Math.abs(layout.width - layout.bodyWidth) < 1);
-      assert.ok(layout.top >= layout.closeBottom);
+      assert.ok(layout.closeHeight >= 44);
       assert.ok(layout.closeWidth >= 44);
       assert.equal(layout.overflow, false);
     }
@@ -84,13 +84,12 @@ const A = require('../app.js');
     await openRowActions(edit); await edit.click();
     assert.equal(await page.locator('#movement-tag-chips input[value="demo-sample"]:checked').count(), 1);
     await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
-    for (const close of ['x', 'cancel', 'escape']) {
+    for (const close of ['cancel', 'escape']) {
       await openMovementFromMenu(page);
       await page.locator('#tag-picker-toggle').click();
       await page.keyboard.press('Escape');
       assert.equal(await page.locator('#tag-picker').isVisible(), false);
-      if (close === 'x') await page.locator('.dialog-heading [data-action="close"]').click();
-      else if (close === 'cancel') await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+      if (close === 'cancel') await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
       else await page.keyboard.press('Escape');
       await page.locator('#dialog').waitFor({ state: 'hidden' });
       await page.waitForFunction(() => !document.activeElement.closest('#dialog'));
