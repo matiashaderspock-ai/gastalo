@@ -34,14 +34,15 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
   let nextTimer = 0, remoteState = remote, remoteSha = "remote-1", pending = Promise.resolve();
   function node(selector) {
     if (!nodes.has(selector)) nodes.set(selector, {
+      events: new Map(),
       innerHTML: "", textContent: "", value: "", open: false, disabled: false,
       classList: { toggle() {}, add() {}, remove() {} },
       focus() {}, remove() {}, prepend() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
       getBoundingClientRect() { return { top: 0, left: 0, width: 390 }; },
       querySelectorAll() { return []; },
       cloneNode() { return { style: {}, outerHTML: "", querySelector(selector) { return selector === "button" ? node("#demo-banner button") : null; }, querySelectorAll() { return []; } }; },
-      showModal() { this.open = true; }, close() { this.open = false; },
-      addEventListener() {},
+      showModal() { this.open = true; }, close() { this.open = false; for (const listener of this.events.get("close") || []) listener(); },
+      addEventListener(type, listener) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(listener); },
     });
     return nodes.get(selector);
   }
@@ -169,6 +170,28 @@ test("an open October budget form keeps its save period after the calendar rolls
   const saved = a.records.get("main").data;
   assert.ok(saved.budgets.some(b => b.category_id === id && b.month === '2026-10' && b.limit_cents === 32100));
   assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+});
+
+for (const dismissal of ["cancel", "native", "action-then-native"]) test(`closing an October budget via ${dismissal} refreshes the page and next editor`, async () => {
+  const a = await app(fixture, fixture, { ...config, token: "" }, false, 2, '2026-11-01T03:59:00Z');
+  await a.click({ view: "budgets" });
+  const id = fixture.categories[0].id;
+  await a.click({ action: "budget", id });
+  await a.resumeAt('2026-11-01T04:01:00Z');
+  assert.match(a.node("#main").innerHTML, /value="2026-10"/);
+  if (dismissal === "action-then-native") {
+    // A modal action can synchronize the clock without rendering the page.
+    await a.click({ action: "dismiss" });
+    assert.match(a.node("#main").innerHTML, /value="2026-10"/);
+  }
+  if (dismissal === "cancel") await a.click({ action: "close" });
+  else a.node("#dialog").close();
+  assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+  await a.resumeAt('2026-11-01T04:02:00Z');
+  assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+  await a.click({ action: "budget", id });
+  assert.match(a.node("#dialog-body").innerHTML, /11\/26/);
+  assert.deepEqual(a.records.get("main").data, fixture);
 });
 
 test("demo UI is English while the ordinary app keeps its Spanish copy", async () => {

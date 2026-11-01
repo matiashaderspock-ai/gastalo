@@ -1547,6 +1547,7 @@
     let month = today().slice(0, 7);
     let budgetMonth = month;
     let observedMonth = month;
+    let monthRefreshPending = false;
     let archivedBudgetsOpen = false;
     const openManageGroups = new Set(), openSettingsGroups = new Set();
     const defaultFilters = () => ({
@@ -1735,13 +1736,13 @@
       if ($("#dialog").open) return;
       const previous = modalReturnFocus;
       modalReturnFocus = null;
+      refreshCurrentMonth();
       const candidates = [...document.querySelectorAll("[data-action], [data-entity]")];
       const replacement = previous?.data && Object.keys(previous.data).length
         ? candidates.find(element => Object.entries(previous.data).every(([key, value]) => element.dataset[key] === value)) : null;
       const target = previous?.element?.isConnected ? previous.element : replacement;
       if (target && !target.disabled && target.getClientRects().length) target.focus({ preventScroll: true });
       else $("#main").focus({ preventScroll: true });
-      refreshCurrentMonth();
     });
     function modal(
       title,
@@ -2738,6 +2739,7 @@
     }
     function render() {
       syncCurrentMonth();
+      monthRefreshPending = false;
       abortBackAnimation();
       const strips = [...document.querySelectorAll(".entity-strip")], scrollY = window.scrollY;
       if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
@@ -2790,13 +2792,16 @@
       if (month === observedMonth) { month = current; changed = true; }
       if (budgetMonth === observedMonth) { budgetMonth = current; changed = true; }
       observedMonth = current;
+      // Actions inside a modal may synchronize before the page can render.
+      monthRefreshPending ||= changed;
       return changed;
     }
     function refreshCurrentMonth() {
       if (document.visibilityState !== "visible" || $("#dialog").open || busy || editingEntities || pointer || settling || backSwipe || backSwipeAnimation) return;
       // Do not discard unsubmitted filters, sync settings or an open form.
       if (!["home", "budgets", "detail"].includes(view)) return;
-      if (syncCurrentMonth()) render();
+      syncCurrentMonth();
+      if (monthRefreshPending) render();
     }
     window.addEventListener("pageshow", refreshCurrentMonth);
     document.addEventListener("visibilitychange", refreshCurrentMonth);

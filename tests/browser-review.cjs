@@ -203,6 +203,46 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
       await rollover.locator('#app-menu > summary').click();
       await rollover.locator(`[data-view="${view}"]`).click();
     };
+    for (const dismissal of ['cancel', 'escape', 'native', 'modal-action']) {
+      await rollover.clock.setFixedTime(new Date('2026-11-01T03:59:00Z'));
+      await rollover.reload();
+      await rollover.locator('.home-totals').waitFor();
+      await goRollover('budgets');
+      const edit = rollover.locator('[data-action="budget"]').first();
+      await edit.click();
+      await rollover.locator('[name="limit"]').fill('987');
+      await rollover.clock.setFixedTime(new Date('2026-11-01T04:01:00Z'));
+      await rollover.evaluate(() => {
+        window.dispatchEvent(new Event('pageshow'));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      assert.equal(await rollover.locator('#month').inputValue(), '2026-10');
+      if (dismissal === 'modal-action') {
+        // Exercise the shared dispatcher while leaving the budget draft open.
+        await rollover.evaluate(() => {
+          const button = document.createElement('button');
+          button.dataset.action = 'dismiss';
+          document.querySelector('#dialog-body').append(button);
+          button.click();
+          button.remove();
+        });
+      }
+      if (dismissal === 'cancel') await rollover.getByRole('button', { name: 'Cancel', exact: true }).click();
+      else if (dismissal === 'escape') await rollover.keyboard.press('Escape');
+      else await rollover.locator('#dialog').evaluate(dialog => dialog.close());
+      await rollover.locator('#dialog').waitFor({ state: 'hidden' });
+      await rollover.waitForFunction(() => document.querySelector('#month').value === '2026-11');
+      assert.ok(await edit.evaluate(e => e.isConnected && e === document.activeElement), `${dismissal} restores focus after refreshing`);
+      await rollover.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+      assert.equal(await rollover.locator('#month').inputValue(), '2026-11');
+      await edit.click();
+      assert.match(await rollover.locator('#dialog').innerText(), /November 2026/);
+      assert.notEqual(await rollover.locator('[name="limit"]').inputValue(), '987');
+      await rollover.getByRole('button', { name: 'Cancel', exact: true }).click();
+    }
+    await rollover.clock.setFixedTime(new Date('2026-11-01T03:59:00Z'));
+    await rollover.reload();
+    await rollover.locator('.home-totals').waitFor();
     await goRollover('budgets');
     assert.equal(await rollover.locator('#month').inputValue(), '2026-10');
     const limitButton = rollover.locator('[data-action="budget"]').first();
