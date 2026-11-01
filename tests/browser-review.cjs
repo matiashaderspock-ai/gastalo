@@ -63,6 +63,10 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.locator('[name="limit"]').fill('777');
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await page.locator('#dialog').waitFor({ state: 'hidden' });
+    // close() hides immediately; its close event restores focus in a later task.
+    await page.waitForFunction(id => document.activeElement?.dataset.action === 'budget' && document.activeElement?.dataset.id === id, category.id);
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.action), 'budget', 'Saving restores focus to the re-rendered budget button');
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.id), category.id);
     assert.equal(A.budgetLimit(await readState(), category.id, '2026-03'), 77700);
     assert.equal(A.budgetLimit(await readState(), category.id, '2026-02'), null);
     await go('Inicio');
@@ -189,6 +193,93 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.locator('#json-file').setInputFiles({ name: 'incorrecto.json', mimeType: 'application/json', buffer: Buffer.from('{ broken') });
     await page.getByText('Este archivo no es un respaldo JSON válido. Tus datos no se cambiaron.', { exact: true }).waitFor();
     assert.deepEqual(await readState(), before, 'A malformed file leaves all financial state untouched');
+    // Resume a standalone app at the Bolivia month boundary without reloading.
+    const rolloverContext = await browser.newContext({ ...devices['iPhone 13'], locale: 'es-BO', reducedMotion: 'reduce' });
+    await rolloverContext.route('https://api.github.com/**', route => route.abort());
+    const rollover = await rolloverContext.newPage();
+    rollover.on('pageerror', e => errors.push(e.message));
+    await rollover.clock.setFixedTime(new Date('2026-11-01T03:59:00Z'));
+    await rollover.goto(new URL('?demo=1', base).href);
+    await rollover.locator('.home-totals').waitFor();
+    const goRollover = async view => {
+      await rollover.locator('#app-menu > summary').click();
+      await rollover.locator(`[data-view="${view}"]`).click();
+    };
+    for (const dismissal of ['cancel', 'escape', 'native', 'modal-action']) {
+      await rollover.clock.setFixedTime(new Date('2026-11-01T03:59:00Z'));
+      await rollover.reload();
+      await rollover.locator('.home-totals').waitFor();
+      await goRollover('budgets');
+      const edit = rollover.locator('[data-action="budget"]').first();
+      await edit.click();
+      await rollover.locator('[name="limit"]').fill('987');
+      await rollover.clock.setFixedTime(new Date('2026-11-01T04:01:00Z'));
+      await rollover.evaluate(() => {
+        window.dispatchEvent(new Event('pageshow'));
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      assert.equal(await rollover.locator('#month').inputValue(), '2026-10');
+      if (dismissal === 'modal-action') {
+        // Exercise the shared dispatcher while leaving the budget draft open.
+        await rollover.evaluate(() => {
+          const button = document.createElement('button');
+          button.dataset.action = 'dismiss';
+          document.querySelector('#dialog-body').append(button);
+          button.click();
+          button.remove();
+        });
+      }
+      if (dismissal === 'cancel') await rollover.getByRole('button', { name: 'Cancel', exact: true }).click();
+      else if (dismissal === 'escape') await rollover.keyboard.press('Escape');
+      else await rollover.locator('#dialog').evaluate(dialog => dialog.close());
+      await rollover.locator('#dialog').waitFor({ state: 'hidden' });
+      await rollover.waitForFunction(() => document.querySelector('#month').value === '2026-11');
+      assert.ok(await edit.evaluate(e => e.isConnected && e === document.activeElement), `${dismissal} restores focus after refreshing`);
+      await rollover.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+      assert.equal(await rollover.locator('#month').inputValue(), '2026-11');
+      await edit.click();
+      assert.match(await rollover.locator('#dialog').innerText(), /November 2026/);
+      assert.notEqual(await rollover.locator('[name="limit"]').inputValue(), '987');
+      await rollover.getByRole('button', { name: 'Cancel', exact: true }).click();
+    }
+    await rollover.clock.setFixedTime(new Date('2026-11-01T03:59:00Z'));
+    await rollover.reload();
+    await rollover.locator('.home-totals').waitFor();
+    await goRollover('budgets');
+    assert.equal(await rollover.locator('#month').inputValue(), '2026-10');
+    const limitButton = rollover.locator('[data-action="budget"]').first();
+    await limitButton.click();
+    await rollover.locator('[name="limit"]').fill('321');
+    await rollover.clock.setFixedTime(new Date('2026-11-01T04:01:00Z'));
+    await rollover.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+    assert.equal(await rollover.locator('[name="limit"]').inputValue(), '321', 'A month change does not replace an open form');
+    await rollover.getByRole('button', { name: 'Save', exact: true }).click();
+    await rollover.locator('#dialog').waitFor({ state: 'hidden' });
+    assert.equal(await rollover.locator('#month').inputValue(), '2026-11');
+    await rollover.waitForFunction(() => document.activeElement === document.querySelector('[data-action=budget]'));
+    assert.ok(await limitButton.evaluate(e => e === document.activeElement));
+    const stored = await rollover.evaluate(() => new Promise(resolve => {
+      const q = indexedDB.open('gastalo-demo'); q.onsuccess = () => {
+        const db = q.result, tx = db.transaction('state');
+        tx.objectStore('state').get('main').onsuccess = e => resolve(e.target.result.data);
+        tx.oncomplete = () => db.close();
+      };
+    }));
+    assert.ok(stored.budgets.some(b => b.category_id === 'demo-food' && b.month === '2026-10' && b.limit_cents === 32100), 'An open October form saves to October after midnight');
+    await rollover.locator('#month').fill('2026-06');
+    await rollover.clock.setFixedTime(new Date('2026-12-01T04:01:00Z'));
+    await rollover.evaluate(() => window.dispatchEvent(new Event('pageshow')));
+    assert.equal(await rollover.locator('#month').inputValue(), '2026-06', 'Explicit historical limits do not jump on resume');
+    await goRollover('home');
+    assert.match(await rollover.locator('.home-totals').getAttribute('aria-label'), /December 2026/);
+    for (const width of [320, 390, 768, 1280]) {
+      await rollover.setViewportSize({ width, height: 844 });
+      for (const view of ['home', 'history', 'budgets', 'reports', 'settings']) {
+        await goRollover(view);
+        assert.ok(await rollover.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${view} fits ${width}px`);
+      }
+    }
+    await rolloverContext.close();
     assert.deepEqual(errors, []);
     console.log('PASS: compact history, optional filters/actions/tables, 44px controls, unchanged planned totals, budget states, valid destinations, optional dates, draft recovery/reload and safe import errors.');
   } catch (error) {

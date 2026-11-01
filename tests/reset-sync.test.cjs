@@ -22,21 +22,27 @@ const settle = async () => {
 };
 
 // Run the unmodified app with a small DOM/IndexedDB boundary fake; no dependencies or network.
-async function app(local, remote, savedConfig = config, demo = false, demoVersion = 2) {
+async function app(local, remote, savedConfig = config, demo = false, demoVersion = 2, initialTime = Date.now()) {
+  let clock = initialTime;
+  class Clock extends Date {
+    constructor(...args) { super(...(args.length ? args : [clock])); }
+    static now() { return new Date(clock).getTime(); }
+  }
   const records = new Map([["main", { revision: 1, data: local }], ["sync_config", structuredClone(savedConfig)]]);
   if (demo && demoVersion !== null) records.set("demo_seed_version", demoVersion);
   const transactions = [], reads = [], opens = [], calls = [], timers = new Map(), nodes = new Map(), listeners = new Map();
   let nextTimer = 0, remoteState = remote, remoteSha = "remote-1", pending = Promise.resolve();
   function node(selector) {
     if (!nodes.has(selector)) nodes.set(selector, {
+      events: new Map(),
       innerHTML: "", textContent: "", value: "", open: false, disabled: false,
       classList: { toggle() {}, add() {}, remove() {} },
       focus() {}, remove() {}, prepend() {}, setAttribute() {}, contains() { return false; }, querySelector() { return null; },
       getBoundingClientRect() { return { top: 0, left: 0, width: 390 }; },
       querySelectorAll() { return []; },
       cloneNode() { return { style: {}, outerHTML: "", querySelector(selector) { return selector === "button" ? node("#demo-banner button") : null; }, querySelectorAll() { return []; } }; },
-      showModal() { this.open = true; }, close() { this.open = false; },
-      addEventListener() {},
+      showModal() { this.open = true; }, close() { this.open = false; for (const listener of this.events.get("close") || []) listener(); },
+      addEventListener(type, listener) { if (!this.events.has(type)) this.events.set(type, []); this.events.get(type).push(listener); },
     });
     return nodes.get(selector);
   }
@@ -82,17 +88,18 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
     addEventListener(type, listener) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(listener); },
   };
   const context = vm.createContext({
-    document, NodeFilter: { SHOW_TEXT: 4 }, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
+    document, Date: Clock, NodeFilter: { SHOW_TEXT: 4 }, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
     URL, location: { href: "https://app.test/gastalo/" + (demo ? "?demo=1" : "") },
     DOMParser: class { parseFromString() { return { querySelector: () => ({ getAttribute: () => "./app.js?v=1" }) }; } },
     indexedDB: { open(name) { opens.push(name); const request = { result: db }; setImmediate(() => request.onsuccess()); return request; } },
-    crypto: { subtle: { digest(...args) {
+    crypto: { randomUUID: () => globalThis.crypto.randomUUID(), subtle: { digest(...args) {
       const result = globalThis.crypto.subtle.digest(...args);
       digests.add(result);
       result.finally(() => digests.delete(result));
       return result;
     } } }, TextEncoder, TextDecoder, Uint8Array, btoa, atob, AbortController,
     setTimeout(fn, delay) { timers.set(++nextTimer, { fn, delay }); return nextTimer; },
+    setInterval() { return 0; },
     clearTimeout(id) { timers.delete(id); },
     FormData: class { constructor(form) { this.values = form.values; } get(key) { return this.values?.[key] ?? null; } },
     fetch: async (url, options) => {
@@ -127,6 +134,8 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
       await emit("submit", { target: { id: "sync-form" }, preventDefault() {} });
     },
     async auto() { context.navigator.onLine = true; await emit("visibilitychange"); },
+    async resumeAt(time) { clock = time; await emit("visibilitychange"); },
+    async selectMonth(value) { await emit("change", { target: { id: "month", value, matches: () => false } }); },
     async advance() {
       for (const [id, timer] of [...timers]) if (timer.delay <= 30000) { timers.delete(id); timer.fn(); await settle(); }
     },
@@ -134,6 +143,56 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
   };
 }
 const methods = a => a.calls.map(c => c.method);
+
+test("resuming after Bolivia midnight updates independent current periods and preserves historical limits", async () => {
+  const a = await app(fixture, fixture, { ...config, token: "" }, false, 2, '2026-11-01T03:59:00Z');
+  await a.click({ view: "budgets" });
+  assert.match(a.node("#main").innerHTML, /value="2026-10"/);
+  await a.resumeAt('2026-11-01T04:01:00Z');
+  assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+  await a.selectMonth('2026-06');
+  await a.resumeAt('2026-12-01T04:01:00Z');
+  assert.match(a.node("#main").innerHTML, /value="2026-06"/);
+  await a.click({ view: "home" });
+  assert.match(a.node("#header-totals").innerHTML, /Totales de 12\/26/);
+});
+
+test("an open October budget form keeps its save period after the calendar rolls to November", async () => {
+  const a = await app(fixture, fixture, { ...config, token: "" }, false, 2, '2026-11-01T03:59:00Z');
+  await a.click({ view: "budgets" });
+  const id = fixture.categories[0].id;
+  await a.click({ action: "budget", id });
+  await a.resumeAt('2026-11-01T04:01:00Z');
+  assert.equal(a.node("#dialog").open, true);
+  assert.match(a.node("#main").innerHTML, /value="2026-10"/);
+  await a.submit({ limit: "321" });
+  assert.equal(a.node("#modal-error").textContent, "");
+  const saved = a.records.get("main").data;
+  assert.ok(saved.budgets.some(b => b.category_id === id && b.month === '2026-10' && b.limit_cents === 32100));
+  assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+});
+
+for (const dismissal of ["cancel", "native", "action-then-native"]) test(`closing an October budget via ${dismissal} refreshes the page and next editor`, async () => {
+  const a = await app(fixture, fixture, { ...config, token: "" }, false, 2, '2026-11-01T03:59:00Z');
+  await a.click({ view: "budgets" });
+  const id = fixture.categories[0].id;
+  await a.click({ action: "budget", id });
+  await a.resumeAt('2026-11-01T04:01:00Z');
+  assert.match(a.node("#main").innerHTML, /value="2026-10"/);
+  if (dismissal === "action-then-native") {
+    // A modal action can synchronize the clock without rendering the page.
+    await a.click({ action: "dismiss" });
+    assert.match(a.node("#main").innerHTML, /value="2026-10"/);
+  }
+  if (dismissal === "cancel") await a.click({ action: "close" });
+  else a.node("#dialog").close();
+  assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+  await a.resumeAt('2026-11-01T04:02:00Z');
+  assert.match(a.node("#main").innerHTML, /value="2026-11"/);
+  await a.click({ action: "budget", id });
+  assert.match(a.node("#dialog-body").innerHTML, /11\/26/);
+  assert.deepEqual(a.records.get("main").data, fixture);
+});
 
 test("demo UI is English while the ordinary app keeps its Spanish copy", async () => {
   const seed = A.demoState(A.localClock(Date.now(), "America/La_Paz").date);

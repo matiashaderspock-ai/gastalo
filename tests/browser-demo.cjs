@@ -21,7 +21,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     const page = await context.newPage(), errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.clock.install({ time: new Date("2026-02-15T16:00:00Z") });
-    await page.goto(new URL("?demo=1&app-version=53", base).href);
+    await page.goto(new URL("?demo=1&app-version=54", base).href);
     await page.locator(".home-totals").waitFor();
     assert.equal(await page.locator("html").getAttribute("lang"), "en", "English even in an es-BO browser");
     assert.deepEqual(await page.locator("nav button").allTextContents().then(values => values.map(v => v.trim())),
