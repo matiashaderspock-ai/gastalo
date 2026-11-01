@@ -1735,6 +1735,59 @@
     window.visualViewport?.addEventListener("resize", fitDialogToViewport);
     window.visualViewport?.addEventListener("scroll", fitDialogToViewport);
     $("#dialog").addEventListener("focusin", fitDialogToViewport);
+    // Only a completed backdrop tap dismisses a new movement. A press that
+    // starts inside, crosses the card, drags or is cancelled must not close it.
+    const movementDialog = $("#dialog");
+    let backdropPress = null, backdropClick = false, backdropTouch = false;
+    const outsideMovementDialog = (event) => {
+      const bounds = movementDialog.getBoundingClientRect();
+      return event.clientX < bounds.left || event.clientX > bounds.right ||
+        event.clientY < bounds.top || event.clientY > bounds.bottom;
+    };
+    const clearBackdropPress = () => { backdropPress = null; backdropClick = false; };
+    movementDialog.addEventListener("touchstart", (event) => {
+      backdropTouch = movementDialog.classList.contains("titleless-dialog") &&
+        event.target === movementDialog && event.touches.length === 1 &&
+        outsideMovementDialog(event.touches[0]);
+    }, { passive: true });
+    movementDialog.addEventListener("touchmove", (event) => {
+      // Do not let an outside drag become native browser back-navigation.
+      if (backdropTouch && event.cancelable) event.preventDefault();
+    }, { passive: false });
+    const clearBackdropTouch = () => { backdropTouch = false; };
+    movementDialog.addEventListener("touchend", clearBackdropTouch, { passive: true });
+    movementDialog.addEventListener("touchcancel", clearBackdropTouch, { passive: true });
+    movementDialog.addEventListener("close", clearBackdropTouch);
+    document.addEventListener("pointerdown", (event) => {
+      clearBackdropPress();
+      if (!movementDialog.open || !movementDialog.classList.contains("titleless-dialog") ||
+          !event.isPrimary || event.button !== 0 || event.target !== movementDialog ||
+          !outsideMovementDialog(event)) return;
+      backdropPress = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    }, true);
+    document.addEventListener("pointermove", (event) => {
+      if (backdropPress?.id !== event.pointerId) return;
+      if (!outsideMovementDialog(event) ||
+          Math.hypot(event.clientX - backdropPress.x, event.clientY - backdropPress.y) > 8)
+        clearBackdropPress();
+    }, true);
+    document.addEventListener("pointerup", (event) => {
+      backdropClick = backdropPress?.id === event.pointerId && outsideMovementDialog(event) &&
+        Math.hypot(event.clientX - backdropPress.x, event.clientY - backdropPress.y) <= 8;
+      backdropPress = null;
+    }, true);
+    document.addEventListener("pointercancel", clearBackdropPress, true);
+    window.addEventListener("blur", clearBackdropPress);
+    movementDialog.addEventListener("close", clearBackdropPress);
+    movementDialog.addEventListener("click", (event) => {
+      const dismiss = backdropClick && event.detail > 0 && event.target === movementDialog &&
+        outsideMovementDialog(event);
+      clearBackdropPress();
+      if (!dismiss) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      goBack();
+    });
     let modalReturnFocus;
     $("#dialog").addEventListener("close", () => {
       if ($("#dialog").open) return;
@@ -3354,7 +3407,7 @@
       clearTimeout(backSwipeClickTimer);
       const target = event.target, dialog = $("#dialog");
       if (event.touches.length !== 1 || busy || pointer || settling ||
-          (dialog.open && !dialog.contains(target)) || window.getSelection()?.toString()) return;
+          (dialog.open && (target === dialog || !dialog.contains(target))) || window.getSelection()?.toString()) return;
       if (target.closest('input, select, textarea, [contenteditable], .date-control, .chart-interactive, .entity-strip, [data-entity], [data-swipe-transaction], .icon-pages, .tag-choices, .movement-tags, #tag-picker-list')) return;
       for (let node = target; node && node !== document.body; node = node.parentElement) {
         if (node.scrollWidth > node.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(node).overflowX)) return;

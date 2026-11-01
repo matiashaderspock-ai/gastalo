@@ -1927,9 +1927,14 @@ dialog::backdrop {
   padding: 2px;
 }
 .titleless-dialog:not(.choosing-tags) .dialog-heading {
-  position: static;
-  justify-content: flex-end;
-  margin: 0 0 6px;
+  height: 0;
+  margin: 0;
+}
+.titleless-dialog:not(.choosing-tags) .dialog-heading button {
+  display: none;
+}
+.compact-dialog.titleless-dialog .dialog-actions button {
+  min-height: 44px;
 }
 .titleless-dialog:not(.choosing-tags) .movement-tags {
   margin-right: 0;

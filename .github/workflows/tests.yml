@@ -39,6 +39,8 @@ jobs:
         run: |
           export CHROMIUM_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
           python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/gastalo-browser-server.log 2>&1 &
+          node tests/browser-movement-dismissal.cjs
+          node tests/browser-form-controls.cjs
           node tests/browser-archive-tags.cjs
           node tests/browser-movement-tags.cjs
           node tests/browser-header-layout.cjs
