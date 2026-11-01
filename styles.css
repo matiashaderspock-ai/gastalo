@@ -460,6 +460,7 @@ main:focus {
   flex: 1;
 }
 .home-totals {
+  align-items: start;
   margin: 0;
   padding: 0;
   background: var(--paper);
@@ -2635,7 +2636,7 @@ dialog.back-swipe-clipping {
 .entity-card strong.budget-gray { color: #526257; }
 .entity-card strong.budget-orange { color: #975009; }
 .entity-card strong.budget-red { color: #a33131; }
-.home-totals .stat span { font-size: 11px; line-height: 1.25; }
+.home-totals .stat > span { font-size: 11px; line-height: 1.25; white-space: nowrap; }
 .home-totals .stat strong { white-space: nowrap; }
 .compact-page .page-heading { padding: 8px 0; }
 .compact-page .page-heading > p { font-size: 13px; }
@@ -2695,7 +2696,8 @@ dialog.back-swipe-clipping {
 .exact-amount span { display: block; overflow-wrap: anywhere; font-size: 13px; }
 @media (max-width: 360px) {
   .home-totals { gap: 6px; }
-  .home-totals .stat span { font-size: 11px; }
+  .app-header:has(.home-totals) { padding-inline: 8px; gap: 4px; }
+  .home-totals .stat > span { font-size: 10px; }
   .home-totals .stat strong { font-size: 12px; }
   .compact-page .budget-grid { grid-template-columns: 1fr; }
 }
@@ -2712,3 +2714,12 @@ dialog.back-swipe-clipping {
 .titleless-dialog:not(.choosing-tags) .movement-tags { margin-right: 50px; }
 
 .compact-page .budget-spent span { font-size: 12px; }
+
+/* One heading in the shared top row; long titles can wrap without clipping. */
+#header-totals { min-width: 0; }
+#header-totals > h1 {
+  font-size: clamp(20px, 4vw, 30px);
+  line-height: 1.2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}

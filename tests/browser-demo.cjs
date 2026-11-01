@@ -350,7 +350,7 @@ const token = { repo: "example/synthetic", branch: "main", path: "backup.json", 
     assert.equal(await page.locator(".entity-mark image").count(), 0, "Personal accounts never use demo logo overrides");
     assert.doesNotMatch(await page.title(), /DEMO/);
     await go("Importar/Exportar");
-    assert.equal(await page.locator("#main h1").innerText(), "Importar/Exportar");
+    assert.equal(await page.locator("#header-totals > h1").innerText(), "Importar/Exportar");
     assert.match(await page.locator("#main").innerText(), /Sin filas pendientes\./);
     assert.equal(await page.locator("#sync-form").count(), 1);
     assert.deepEqual(await page.evaluate(() => window.openedDatabases), ["gastalo"]);

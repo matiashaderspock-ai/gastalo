@@ -204,7 +204,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.ok(Math.abs(await page.evaluate(() => scrollY) - budgetScroll) < 2, 'Previous page scroll is restored');
     await swipe(page.locator('.page-heading'));
     await page.getByRole('heading', { name: 'Historial', exact: true }).waitFor();
-    await swipe(page.locator('.page-heading'));
+    await swipe(page.locator('.stats'));
     await page.getByRole('heading', { name: 'Un mes más claro.' }).waitFor();
     // Nested selectors return to their form first and preserve staged input.
     await entity(category).tap();

@@ -208,8 +208,8 @@ test("demo UI is English while the ordinary app keeps its Spanish copy", async (
       ["settings", "Importar/Exportar", "Import/Export"],
     ]) {
       await a.click({ view });
-      const html = a.node("#main").innerHTML;
-      assert.ok(html.includes(text(spanish, english)), view);
+      const html = a.node("#header-totals").innerHTML;
+      assert.equal(html, `<h1>${text(spanish, english)}</h1>`, view);
       assert.ok(!html.includes(`<h1>${text(english, spanish)}</h1>`), view);
     }
     for (const [key, spanish, english] of [

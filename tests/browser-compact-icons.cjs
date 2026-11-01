@@ -39,9 +39,10 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     async function go(name) {
       await page.locator("#app-menu > summary").click();
       await page.getByRole("button", { name, exact: true }).click();
-      const title = await page.locator("#main h1").boundingBox();
+      if (name === "Inicio") return;
+      const title = await page.locator("#header-totals > h1").boundingBox();
       const header = await page.locator(".app-header").boundingBox();
-      assert.ok(title.y >= header.y + header.height, "Navigation leaves the title below the sticky header");
+      assert.ok(title.y >= header.y && title.y + title.height <= header.y + header.height, "Navigation puts the title inside the sticky header");
     }
     // Limits has its own month selector; visiting Charts no longer changes it.
     await go("Límites de categoría");
