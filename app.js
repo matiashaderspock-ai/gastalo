@@ -456,6 +456,9 @@
     }
     return validateState(s);
   }
+  function archiveActiveTags(state, timestamp = new Date().toISOString()) {
+    return { ...state, tags: state.tags.map(tag => tag.archived_at ? tag : { ...tag, archived_at: timestamp }) };
+  }
   function movementTagSuggestions(state, selected = [], limit = 6) {
     const counts = new Map();
     for (const t of state.transactions) if (t.status === "posted")
@@ -1206,6 +1209,7 @@
     emptyState,
     demoState,
     movementTagSuggestions,
+    archiveActiveTags,
     direction,
     canDrop,
     gestureIntent,
@@ -1790,6 +1794,17 @@
     }
     const actions = (save = ui("Guardar", "Save")) =>
       `<div class="dialog-actions"><button type="button" data-action="close">${ui("Cancelar", "Cancel")}</button><button class="primary" type="submit">${save}</button></div>`;
+    function archiveTags() {
+      modal(
+        ui("¿Archivar todas las etiquetas?", "Archive all tags?"),
+        `<p>${ui("Se quitarán todas las etiquetas de la lista para nuevos movimientos. Los movimientos y sus etiquetas históricas se conservarán y seguirán disponibles en los filtros del historial. Puedes crear etiquetas nuevas, incluso con nombres anteriores.", "All tags will be removed from the list for new transactions. Transactions and their historical tags will remain available, including in history filters. You can create new tags, including previously used names.")}</p><label class="check"><input name="confirm-archive-tags" type="checkbox" required>${ui("Quiero empezar una lista nueva de etiquetas.", "I want to start a new tag list.")}</label>${actions(ui("Archivar todas", "Archive all"))}`,
+        async (data) => {
+          assert(data.get("confirm-archive-tags") === "on", ui("Confirma que quieres archivar las etiquetas.", "Confirm that you want to archive the tags."));
+          await commit(archiveActiveTags(state), ui("Etiquetas archivadas; historial conservado", "Tags archived; history preserved"), true);
+        },
+        { compact: true, focusSelector: '[data-action="close"]' },
+      );
+    }
     function resetApp() {
       if (demoMode) return resetDemo();
       modal(
@@ -1926,8 +1941,7 @@
       };
       update(t?.to_id || to);
       fromSelect.onchange = () => update(toSelect.value || to);
-      const availableTags = () => [...state.tags, ...pendingTags].filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id) || selectedTags.includes(tag.id) ||
-        (search.value.trim() && fold(tag.name).includes(fold(search.value))));
+      const availableTags = () => [...state.tags, ...pendingTags].filter((tag) => !tag.archived_at || t?.tag_ids.includes(tag.id) || selectedTags.includes(tag.id));
       const fold = (name) => name.trim().toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const tagChoice = (tag) => `<label><input type="checkbox" data-movement-tag value="${esc(tag.id)}" ${selectedTags.includes(tag.id) ? "checked" : ""}>${esc(tag.name)}</label>`;
       const search = $("#tag-search"), picker = $("#tag-picker"), toggle = $("#tag-picker-toggle"),
@@ -1941,7 +1955,7 @@
         const matches = tags.filter((tag) => fold(tag.name).includes(query)).sort((a, b) => a.name.localeCompare(b.name, "es"));
         $("#tag-picker-list").innerHTML = matches.map(tagChoice).join("");
         $("#tag-search-empty").hidden = matches.length > 0;
-        $("#tag-create").hidden = !query || state.tags.concat(pendingTags).some((tag) => fold(tag.name) === query);
+        $("#tag-create").hidden = !query || state.tags.concat(pendingTags).some((tag) => !tag.archived_at && fold(tag.name) === query);
         $("#tag-create").title = `${ui("Crear «", "Create “")}${search.value.trim()}${ui("»", "”")}`;
       };
       const chooseTag = (e) => {
@@ -1978,7 +1992,7 @@
       dialog.addEventListener("cancel", dismissPicker);
       $("#tag-create").onclick = () => {
         const name = search.value.trim();
-        if (!name || state.tags.concat(pendingTags).some((tag) => fold(tag.name) === fold(name))) return;
+        if (!name || state.tags.concat(pendingTags).some((tag) => !tag.archived_at && fold(tag.name) === fold(name))) return;
         const tag = { id: uid(), name, archived_at: null };
         pendingTags.push(tag);
         selectedTags.push(tag.id);
@@ -2006,7 +2020,7 @@
           update(draft.to || "");
           for (const key of ["amount", "note", "date", "time"]) if (typeof draft[key] === "string") form.elements[key].value = draft[key];
           pendingTags.push(...(Array.isArray(draft.pendingTags) ? draft.pendingTags : []).filter(tag => typeof tag?.id === "string" && typeof tag.name === "string" && !state.tags.some(e => e.id === tag.id)));
-          selectedTags = (Array.isArray(draft.tagIds) ? draft.tagIds : []).filter(id => state.tags.concat(pendingTags).some(tag => tag.id === id));
+          selectedTags = (Array.isArray(draft.tagIds) ? draft.tagIds : []).filter(id => state.tags.concat(pendingTags).some(tag => tag.id === id && (!tag.archived_at || t?.tag_ids.includes(id))));
           renderTags();
           if (draft.note || draft.date !== clock.date || draft.time !== initialTime) {
             $(".movement-extras").open = true;
@@ -2070,6 +2084,7 @@
             !next[key].some(
               (item) =>
                 item.id !== id &&
+                (key !== "tags" || !item.archived_at) &&
                 item.name.toLocaleLowerCase("es") === n.toLocaleLowerCase("es"),
             ),
             ui("Ya existe ese nombre.", "That name already exists."),
@@ -2394,7 +2409,7 @@
               `<option value="${esc(e.id)}" ${filters.entities.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`,
           )
           .join("")}</select></label>
-        <label>${ui("Etiquetas", "Tags")}<select multiple size="1" id="f-tags">${state.tags.map((e) => `<option value="${esc(e.id)}" ${filters.tags.includes(e.id) ? "selected" : ""}>${esc(e.name)}</option>`).join("")}</select></label>
+        <label>${ui("Etiquetas", "Tags")}<select multiple size="1" id="f-tags">${state.tags.map((e) => `<option value="${esc(e.id)}" ${filters.tags.includes(e.id) ? "selected" : ""}>${esc(e.name)}${e.archived_at ? ui(" (archivada)", " (archived)") : ""}</option>`).join("")}</select></label>
         <label>${ui("Coincidencia de etiquetas", "Tag matching")}<select id="f-tagMode"><option value="any" ${filters.tagMode === "any" ? "selected" : ""}>${ui("Cualquiera", "Any")}</option><option value="all" ${filters.tagMode === "all" ? "selected" : ""}>${ui("Todas", "All")}</option></select></label>
         <label>${ui("Tipo", "Type")}<select id="f-kind"><option value="">${ui("Todos", "All")}</option>${Object.entries(
           labels,
@@ -2681,7 +2696,7 @@
           .join("") || `<p class="muted">${ui("Sin filas pendientes.", "No pending rows.")}</p>`
       }${state.review.length > historyLimit ? `<button data-action="more">${ui("Mostrar 100 más", "Show 100 more")}</button>` : ""}</section>
       <details class="panel settings-group" id="calendar-settings" ${openSettingsGroups.has("calendar-settings") ? "open" : ""}><summary>${ui("Calendario y zona horaria", "Calendar and time zone")}</summary><label>${ui("Zona horaria", "Time zone")}<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">${ui("Guardar zona horaria", "Save time zone")}</button><p class="muted">${ui("Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.", "Base currency: BOB. Accounting dates stay the same when you change time zones.")}</p></details>
-      <section class="panel"><h2>${ui("Organizar entidades", "Manage entities")}</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: ui("Fuentes", "Sources"), accounts: ui("Cuentas", "Accounts"), categories: ui("Categorías", "Categories"), tags: ui("Etiquetas", "Tags") }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">${ui("+ Crear", "+ Create")}</button>${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? ui(" · archivado", " · archived") : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Restaurar", "Restore")} ${esc(e.name)}${key === "tags" ? "" : ui(" en Inicio", " to Home")}">${key === "tags" ? ui("Restaurar", "Restore") : ui("Restaurar en Inicio", "Restore to Home")}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">${ui("Editar", "Edit")}</button></div></div>`).join("")}</details>`).join("")}</section>
+      <section class="panel"><h2>${ui("Organizar entidades", "Manage entities")}</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: ui("Fuentes", "Sources"), accounts: ui("Cuentas", "Accounts"), categories: ui("Categorías", "Categories"), tags: ui("Etiquetas", "Tags") }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">${ui("+ Crear", "+ Create")}</button>${key === "tags" ? `<button data-action="archive-tags" ${state.tags.some(tag => !tag.archived_at) ? "" : "disabled"}>${ui("Archivar todas las etiquetas", "Archive all tags")}</button>` : ""}${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? ui(" · archivado", " · archived") : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Restaurar", "Restore")} ${esc(e.name)}${key === "tags" ? "" : ui(" en Inicio", " to Home")}">${key === "tags" ? ui("Restaurar", "Restore") : ui("Restaurar en Inicio", "Restore to Home")}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">${ui("Editar", "Edit")}</button></div></div>`).join("")}</details>`).join("")}</section>
       <section class="panel"><details class="gesture-help"><summary>${ui("Ayuda de gestos", "Gesture help")}</summary>${gestureGuide()}</details>${demoMode ? `<p>${ui("Demo en este navegador · Datos de ejemplo · Sincronización desactivada.", "Demo in this browser · Sample data · Sync disabled.")}</p>` : '<h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p>'}<p id="storage-state" class="muted"></p><button data-action="persist">${ui("Solicitar almacenamiento persistente", "Request persistent storage")}</button></section>
       ${demoMode ? `<section class="panel reset-panel"><h2>${ui("Datos de ejemplo", "Sample data")}</h2><p>${ui("Descarta tus cambios en la demo y vuelve a cargar los ejemplos.", "Discard your demo changes and reload the sample data.")}</p><button data-action="reset-demo">Reset demo</button></section>` : '<section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>'}`;
     }
@@ -2928,6 +2943,7 @@
         $("#app-menu").open = false;
         return movement();
       }
+      if (action === "archive-tags") return archiveTags();
       if (action === "reset-app") return resetApp();
       if (action === "add") return editEntity(button.dataset.key);
       if (action === "edit-entity") return editEntity(button.dataset.key, id);

@@ -1,0 +1,23 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const A = require('../app.js');
+test('archiving active tags preserves transactions, labels, filters and backup persistence', () => {
+  const state = A.demoState(new Date().toISOString().slice(0, 10));
+  state.tags.push({ id: 'older', name: 'Older', archived_at: '2025-01-01' });
+  const before = structuredClone(state);
+  const next = A.archiveActiveTags(state, '2026-11-01T00:00:00Z');
+  assert.deepEqual(state, before);
+  assert.deepEqual(next.transactions, before.transactions);
+  assert.deepEqual(next.tags.map(t => [t.id, t.name]), before.tags.map(t => [t.id, t.name]));
+  assert.equal(next.tags.at(-1).archived_at, '2025-01-01');
+  assert.deepEqual(A.movementTagSuggestions(next), []);
+  assert.deepEqual(A.filterTransactions(next, { tags: ['demo-sample'] }), before.transactions);
+  const restored = A.restore(A.backup(next));
+  assert.deepEqual(A.movementTagSuggestions(restored), []);
+  assert.deepEqual(restored.transactions, before.transactions);
+  assert.deepEqual(A.archiveActiveTags(next), next);
+  restored.tags.push({ id: 'new-sample', name: 'Sample data', archived_at: null });
+  A.validateState(restored);
+  assert.deepEqual(A.movementTagSuggestions(restored).map(t => t.id), ['new-sample']);
+  assert.deepEqual(A.movementTagSuggestions(restored, ['demo-sample']).map(t => t.id), ['new-sample', 'demo-sample']);
+});
