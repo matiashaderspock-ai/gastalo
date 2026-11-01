@@ -16,7 +16,7 @@ The established compact layout is retained because the repository already contai
 
 Cancel and other modal actions could advance the observed month without rendering, leaving October visible while the next editor used November. Month synchronization now retains a pending refresh until rendering consumes it. Dialog close refreshes before resolving the replacement focus target, so Escape/native dismissal cannot detach the restored target. Existing form-period snapshots, historical selections and draft/gesture refresh guards are retained.
 
-The Node harness now dispatches dialog close callbacks. Cancel and an intervening action followed by native close fail against the previous PR head (`40db256`) and pass with the correction. Browser regressions cover Cancel, Escape, native close and an intervening dispatcher action, checking November on screen and in the next editor, discarded edits, and focus on the connected replacement button. The existing October save-period regression remains in place.
+The Node harness now dispatches dialog close callbacks. Cancel and an intervening action followed by native close fail against the previous PR head (`40db256`) and pass with the correction. Browser regressions cover Cancel, Escape, native close and an intervening dispatcher action, checking November on screen and in the next editor, discarded edits, and focus on the connected replacement button. The existing October save-period regression remains in place. CI run 41267641292 exposed an existing timing assumption in the save-focus assertion: hiding a dialog does not await its queued close event. Browser save-focus checks now wait for the expected focused trigger before asserting; they retain the same focus requirement.
 
 ## Verification
 

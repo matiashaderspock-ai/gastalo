@@ -63,6 +63,8 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await page.locator('[name="limit"]').fill('777');
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
     await page.locator('#dialog').waitFor({ state: 'hidden' });
+    // close() hides immediately; its close event restores focus in a later task.
+    await page.waitForFunction(id => document.activeElement?.dataset.action === 'budget' && document.activeElement?.dataset.id === id, category.id);
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.action), 'budget', 'Saving restores focus to the re-rendered budget button');
     assert.equal(await page.evaluate(() => document.activeElement?.dataset.id), category.id);
     assert.equal(A.budgetLimit(await readState(), category.id, '2026-03'), 77700);
@@ -254,6 +256,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     await rollover.getByRole('button', { name: 'Save', exact: true }).click();
     await rollover.locator('#dialog').waitFor({ state: 'hidden' });
     assert.equal(await rollover.locator('#month').inputValue(), '2026-11');
+    await rollover.waitForFunction(() => document.activeElement === document.querySelector('[data-action=budget]'));
     assert.ok(await limitButton.evaluate(e => e === document.activeElement));
     const stored = await rollover.evaluate(() => new Promise(resolve => {
       const q = indexedDB.open('gastalo-demo'); q.onsuccess = () => {
