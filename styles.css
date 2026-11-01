@@ -1927,13 +1927,12 @@ dialog::backdrop {
   padding: 2px;
 }
 .titleless-dialog:not(.choosing-tags) .dialog-heading {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  margin: 0;
+  position: static;
+  justify-content: flex-end;
+  margin: 0 0 6px;
 }
 .titleless-dialog:not(.choosing-tags) .movement-tags {
-  margin-right: 38px;
+  margin-right: 0;
 }
 .compact-dialog label {
   font-size: 12px;
@@ -2711,7 +2710,7 @@ dialog.back-swipe-clipping {
 .entity-planned { font-size: 12px; line-height: 14px; }
 .stat strong small { opacity: 1; font-size: 12px; }
 .compact-dialog .dialog-heading button { min-height: 44px; min-width: 44px; width: 44px; }
-.titleless-dialog:not(.choosing-tags) .movement-tags { margin-right: 50px; }
+.titleless-dialog:not(.choosing-tags) .movement-tags { margin-right: 0; }
 
 .compact-page .budget-spent span { font-size: 12px; }
 
