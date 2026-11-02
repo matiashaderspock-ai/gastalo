@@ -500,13 +500,35 @@
     const elapsed = end.time - start.time;
     return elapsed > 0 ? (end.x - start.x) / elapsed : 0;
   }
-  function backSwipeOutcome({ dx, dy, width, samples }) {
+  function backSwipeMotion(previous, dx) {
+    let { peak = 0, trough = 0, direction = 0 } = previous || {};
+    // Track meaningful direction independently of the short velocity window.
+    // Small lift-off noise does not reverse intent; a real reversal survives a
+    // pause, and moving forward again establishes a fresh forward peak.
+    if (direction >= 0) {
+      peak = Math.max(peak, dx);
+      if (peak - dx >= 10) { direction = -1; trough = dx; }
+      else if (peak - trough >= 10) direction = 1;
+    } else {
+      trough = Math.min(trough, dx);
+      if (dx - trough >= 10) { direction = 1; peak = dx; }
+    }
+    return { peak, trough, direction };
+  }
+  function backSwipeOutcome({ dx, dy, width, samples = [], motion }) {
     const velocity = backSwipeVelocity(samples);
-    // A short flick projects forward; holding still removes momentum, and a
-    // deliberate reversal cancels even after passing the distance threshold.
-    if (dx < 36 || Math.abs(dy) > 64 || dx <= Math.abs(dy) * 1.7 || velocity < -.15) return "cancel";
-    const threshold = Math.min(110, Math.max(64, width * .22));
-    return dx + Math.max(0, velocity) * 180 >= threshold ? "back" : "cancel";
+    if (dx < 36 || Math.abs(dy) > 64 || dx <= Math.abs(dy) * 1.7) return "cancel";
+    const origin = samples.length ? samples.at(-1).x - dx : 0;
+    motion ||= samples.reduce((previous, sample) => backSwipeMotion(previous, sample.x - origin), undefined)
+      || backSwipeMotion(null, dx);
+    const reversal = Math.min(24, Math.max(18, width * .05));
+    if (motion.direction < 0 && motion.peak - motion.trough >= reversal) return "cancel";
+    // A slow, deliberate short drag is sufficient even after a pause. Preserve
+    // a crossed threshold through a small lift retreat; deliberate reversal
+    // remains available instead of treating any negative velocity as a veto.
+    const distance = motion.direction >= 0 && motion.peak - dx <= 10 ? Math.max(dx, motion.peak) : dx;
+    const threshold = Math.min(64, Math.max(48, width * .14));
+    return distance + Math.max(0, velocity) * 180 >= threshold ? "back" : "cancel";
   }
   function backSwipeTransition({ offset, end, width, velocity = 0 }) {
     const distance = Math.abs(end - offset);
@@ -1242,6 +1264,7 @@
     transactionSwipeOutcome,
     backSwipeOutcome,
     backSwipeVelocity,
+    backSwipeMotion,
     backSwipeTransition,
     entityStripEdge,
     scrollEntityStrip,
@@ -3511,7 +3534,8 @@
       }
       const touch = event.touches[0];
       backSwipe = { id: touch.identifier, x: touch.clientX, y: touch.clientY,
-        layer: backLayer(), dragging: false, samples: [{ x: touch.clientX, time: event.timeStamp }] };
+        layer: backLayer(), dragging: false, motion: backSwipeMotion(null, 0),
+        samples: [{ x: touch.clientX, time: event.timeStamp }] };
       const returning = backSwipeAnimation;
       if (returning?.visual && returning.layer === backSwipe.layer) {
         const visual = returning.visual;
@@ -3524,6 +3548,7 @@
         backSwipe.dragging = true;
         backSwipe.x -= offset;
         backSwipe.dx = offset;
+        backSwipe.motion = backSwipeMotion(null, offset);
         paintBackVisual(backSwipe, offset);
         document.documentElement.classList.remove("back-swipe-settling");
       }
@@ -3534,6 +3559,7 @@
       const touch = [...event.touches].find(touch => touch.identifier === p.id);
       if (!touch || event.touches.length !== 1 || p.layer !== backLayer() || busy) { cancelBackSwipe(); return; }
       const dx = touch.clientX - p.x, dy = touch.clientY - p.y;
+      p.motion = backSwipeMotion(p.motion, dx);
       p.samples = p.samples.filter(sample => sample.time >= event.timeStamp - 120);
       p.samples.push({ x: touch.clientX, time: event.timeStamp });
       if (!p.dragging) {
@@ -3566,8 +3592,9 @@
       const dx = touch.clientX - p.x, dy = Math.abs(touch.clientY - p.y);
       p.samples.push({ x: touch.clientX, time: event.timeStamp });
       p.releaseVelocity = backSwipeVelocity(p.samples);
+      p.motion = backSwipeMotion(p.motion, dx);
       p.dx = dx;
-      void finishBackSwipe(p, backSwipeOutcome({ dx, dy, width: innerWidth, samples: p.samples }) === "back");
+      void finishBackSwipe(p, backSwipeOutcome({ dx, dy, width: innerWidth, samples: p.samples, motion: p.motion }) === "back");
     }, { passive: true });
     document.addEventListener("touchcancel", cancelBackSwipe, { passive: true });
     window.addEventListener("blur", abortBackAnimation);

@@ -1,6 +1,6 @@
 # Gesture responsiveness validation
 
-The initial v59 change was based on `2a4667bdba0a3f589c516eae1c3a08401c919bca` and published as `81d9ae99d0d6fec2b37c82bf30e9dd31ffdf986a`. The v60 follow-up described below is local work based on that main commit. All measurements and screenshots use synthetic fixtures in isolated browser contexts.
+The initial v59 change was based on `2a4667bdba0a3f589c516eae1c3a08401c919bca` and published as `81d9ae99d0d6fec2b37c82bf30e9dd31ffdf986a`. The v60 follow-up was published as `e8df0c2a456bbc410f6425062b521b8bbf55f4b4`. The v61 recognition follow-up below is based on that main commit. All measurements and screenshots use synthetic fixtures in isolated browser contexts.
 
 ## Confirmed causes and changes
 
@@ -37,16 +37,17 @@ GASTALO_ANIMATE_BACK=1 node tests/browser-back-navigation.cjs
 node tests/browser-gesture-performance.cjs
 node tests/browser-drag-tracking.cjs
 node tests/browser-back-settle-edge.cjs
+node tests/browser-short-back.cjs
 ```
 
-The animated back-navigation journey invokes both new regression modules, so the existing required CI browser command covers them without a workflow change. To compare an unchanged checkout served on another port, use the same current scripts in measurement-only mode:
+The animated back-navigation journey invokes all four gesture regression modules, so the existing required CI browser command covers them without a workflow change. To compare an unchanged checkout served on another port, use the same current scripts in measurement-only mode:
 
 ```sh
 GASTALO_PROFILE_ONLY=1 GASTALO_URL=http://127.0.0.1:4174/ node tests/browser-gesture-performance.cjs
 GASTALO_PROFILE_ONLY=1 GASTALO_URL=http://127.0.0.1:4174/ node tests/browser-drag-tracking.cjs
 ```
 
-## Local v60 follow-up: release, preview and edge continuity
+## v60 follow-up: release, preview and edge continuity
 
 The release curve in v59 ignored the incoming finger velocity. Its fixed easing starts at a slope of approximately 3.18, giving a held 120 px drag an immediate speed of approximately 5.17 px/ms toward the edge. A synthetic reproduction first advanced from 120 to approximately 207 px after release. `backSwipeTransition()` now derives duration from remaining distance and incoming velocity, uses a Hermite curve with the measured initial tangent and a zero final tangent, and bounds the tangent to avoid overshooting on fast near-edge flicks. The held reproduction first advanced to approximately 122 px instead. Unit tests check release and arrival velocities, including held, fast, reversed and near-edge cases; this is not a physical iPhone timing measurement.
 
@@ -60,10 +61,30 @@ Rightward drag scrolling previously rejected points beyond the row's right edge,
 
 `browser-back-settle-edge.cjs` exercises 36 horizontal account-edge locations across 320/390/430 px, boundary jitter and stopping in the center, source/account reorder scrolling at the physical edge, and category reorder scrolling near the bottom at multiple horizontal positions. Categories retain their four-column grid and vertical continuation; no horizontal category layout is introduced. All edge gestures are cancelled and the complete saved synthetic state is compared with its starting value. The existing smoke and reorder journeys also cover category row/column movement, native scrolling, keyboard input and cancelled drops. The new journey runs through the existing animated navigation CI command.
 
+## v61 follow-up: short back recognition
+
+v60 did not explicitly require a full-width swipe. It required at least 36 px, no more than 64 px vertical movement, horizontal dominance above 1.7, and distance plus 180 ms of projected positive velocity reaching `min(110, max(64, 0.22 * width))`. It also cancelled whenever the final 120 ms velocity was below -0.15 px/ms, regardless of total progress. That rejected slow short releases after a pause and could reject an otherwise complete gesture after a small lift retreat. Conversely, a deliberate reversal followed by a pause could be forgotten when the velocity window expired. These are code and synthetic-trace findings; they do not establish the exact path of a particular iPhone gesture.
+
+The distance gate is now `min(64, max(48, 0.14 * width))`. Positive flick projection, the minimum 36 px movement, vertical safeguards and early gesture arbitration are retained. Meaningful direction is tracked separately from the velocity window, so a deliberate reversal still cancels after a pause and forward movement can explicitly resume. A small retreat can retain a crossed threshold. Motion tracking is constant-space, and the v60 velocity-continuous settle, preview colors/layout and edge-scroll code are unchanged.
+
+| Phone width | v60 slow/held distance gate | v61 slow/held distance gate |
+| --- | ---: | ---: |
+| 320 px | 70.4 px | 48 px |
+| 360 px | 79.2 px | 50.4 px |
+| 375 px | 82.5 px | 52.5 px |
+| 390 px | 85.8 px | 54.6 px |
+| 393 px | 86.46 px | 55.02 px |
+| 414 px | 91.08 px | 57.96 px |
+| 430 px | 94.6 px | 60.2 px |
+
+`browser-short-back.cjs` exercises slow short drags followed by a pause, actual fast input traces with explicit CDP input timestamps, small movements, lift retreat, deliberate reversal with a pause, rapid reversal, resumed forward intention, repeated/system-cancelled/interrupted gestures, vertical motion, reduced motion, nested selectors, recovered expense drafts, browser Back/Forward and complete synthetic financial integrity. Fast traces assert that the observed DOM-event velocity is genuinely forward and at least 0.3 px/ms; they do not rely on wall-clock tool dispatch overhead to simulate a flick. The module runs inside the existing animated navigation CI command. Set `GASTALO_SHORT_BACK_PROFILE=1` and point `GASTALO_URL` at a baseline checkout to record outcomes without asserting the new recognition contract.
+
+Back still commits on release. Crossing a threshold while the finger remains down does not navigate, so holding, cancellation and reversal remain available. New v61 code has not been verified on a physical iPhone or in WebKit.
+
 ## Functional coverage and limitations
 
 The new synthetic back regression checks four-pixel activation, preserved live DOM, burst coalescing, repeated cancellation, cold preparation, blur/resize/page-hide cleanup, the entrance-animation conflict, catching a returning card (including trusted touch hit-testing), draft recovery without transaction writes, and native browser Back/Forward entries. The existing navigation journey checks slow, held, reversed, cancelled and interrupted swipes; menu and nested selector behavior; focus restoration; reduced motion; native vertical scrolling; and preservation of months, horizontal rows and financial state at 320/390 px.
 
 The new transaction regression uses 17 trusted-touch drags covering source → account, account → category, and account → another account, in both motion modes, before and after horizontal/vertical scrolling. It checks first-pixel activation, centered and off-center contact points, subsequent movement, correct prefilled forms, cancelled forms/drops, repeated gestures, stationary work and stationary edge scrolling. It compares the complete saved synthetic state with the starting state. Existing smoke and reorder checks cover native name/amount scrolling, pointer and mouse input, invalid directions, reorder groups, horizontal/vertical edge scrolling, keyboard reordering, persistence and financial invariants. Existing movement checks cover full-width tags, compact forms, keyboard viewport changes, backdrop dismissal, accessibility/focus, and recovery of staged tags and drafts.
 
-WebKit was not available. `PLAYWRIGHT_BROWSERS_PATH=/tmp/gastalo-browsers playwright install webkit` failed because the download destinations returned HTTP 403 `Domain forbidden` under this environment's network policy. This is a denied browser-download action, not a failed WebKit test or an automatic approval-review denial. No physical iPhone or installed iOS PWA was tested. Safari-specific compositing, blur cost, browser edge gestures, the real keyboard, and sustained 60/120 Hz performance still require device validation. The local v60 follow-up has not been pushed, opened as a PR, merged or deployed. The v59 publication history is separate from this follow-up.
+WebKit was not available. `PLAYWRIGHT_BROWSERS_PATH=/tmp/gastalo-browsers playwright install webkit` failed because the download destinations returned HTTP 403 `Domain forbidden` under this environment's network policy. This is a denied browser-download action, not a failed WebKit test or an automatic approval-review denial. This cloud workflow did not test a physical iPhone or installed iOS PWA. Safari-specific compositing, blur cost, browser edge gestures, the real keyboard, and sustained 60/120 Hz performance still require device validation. Publication is verified separately through exact-head PR checks, post-merge checks and the GitHub Pages workflow.
