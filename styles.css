@@ -19,6 +19,11 @@
 body {
   margin: 0;
 }
+#app-page {
+  position: relative;
+  min-height: 100dvh;
+  background: var(--paper);
+}
 .demo-banner:not([hidden]) {
   display: flex;
   align-items: center;
@@ -1890,11 +1895,11 @@ dialog::backdrop {
   }
   @keyframes appear {
     from {
-      transform: translateY(8px);
+      translate: 0 8px;
       opacity: 0;
     }
     to {
-      transform: translateY(0);
+      translate: 0 0;
       opacity: 1;
     }
   }
@@ -2590,12 +2595,11 @@ dialog::backdrop {
 .back-swipe-stage {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 0;
   overflow: hidden;
   pointer-events: none;
   background: var(--paper);
 }
-.back-swipe-front,
 .back-swipe-underlay,
 .back-swipe-shade {
   position: absolute;
@@ -2606,6 +2610,8 @@ dialog::backdrop {
   will-change: transform;
 }
 .back-swipe-front {
+  z-index: 1;
+  will-change: transform;
   box-shadow: -5px 0 22px #173f3626;
 }
 .back-swipe-shade {
@@ -2615,7 +2621,7 @@ dialog::backdrop {
 .back-swipe-active {
   overflow-x: clip;
 }
-.back-swipe-settling body {
+.back-swipe-committing body {
   pointer-events: none;
 }
 dialog.back-swipe-clipping {

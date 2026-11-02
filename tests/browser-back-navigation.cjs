@@ -274,6 +274,10 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     for (const text of await page.locator('.transaction-info > span').allTextContents()) assert.match(text, /^(?:\d{2}:\d{2} · )?(Ingreso|Gasto|Transferencia)$/);
     assert.deepEqual(await saved(), state, 'Navigation never saves staged forms, deletes data or changes financial state');
     assert.deepEqual(errors, []);
+    if (animate) {
+      await require("./browser-gesture-performance.cjs").verifyGesturePerformance(browser);
+      await require("./browser-drag-tracking.cjs").verifyDragTracking(browser);
+    }
     console.log(`PASS: all-entity hours/types without duplicate dates; ${animate ? 'interactive slide/parallax' : 'direct tracking with reduced motion'}; slow starts, held gestures and cancellation; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
   } catch (error) {
     if (page) await page.screenshot({ path: '/tmp/gastalo-back-navigation-error.png', fullPage: true });
