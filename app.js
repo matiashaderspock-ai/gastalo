@@ -493,29 +493,55 @@
     if (offset >= -32) return "closed";
     return -offset >= Math.max(140, width * 0.65) ? "delete" : "revealed";
   }
-  function backSwipeOutcome({ dx, dy, width, samples }) {
+  function backSwipeVelocity(samples = []) {
     const end = samples.at(-1);
+    if (!end) return 0;
     const start = samples.find(sample => sample.time >= end.time - 120);
     const elapsed = end.time - start.time;
-    const velocity = elapsed > 0 ? (end.x - start.x) / elapsed : 0;
+    return elapsed > 0 ? (end.x - start.x) / elapsed : 0;
+  }
+  function backSwipeOutcome({ dx, dy, width, samples }) {
+    const velocity = backSwipeVelocity(samples);
     // A short flick projects forward; holding still removes momentum, and a
     // deliberate reversal cancels even after passing the distance threshold.
     if (dx < 36 || Math.abs(dy) > 64 || dx <= Math.abs(dy) * 1.7 || velocity < -.15) return "cancel";
     const threshold = Math.min(110, Math.max(64, width * .22));
     return dx + Math.max(0, velocity) * 180 >= threshold ? "back" : "cancel";
   }
-  function scrollEntityStrip({ x, y, left, right, top, bottom,
-    scrollLeft, scrollWidth, clientWidth }, elapsedMs) {
-    const max = Math.max(0, scrollWidth - clientWidth);
-    const current = Math.max(0, Math.min(max, scrollLeft));
-    if (!max || right <= left || x < left || x > right || y < top || y > bottom)
-      return current;
-    const edge = Math.min(48, (right - left) / 3);
-    let strength = 0;
-    if (x < left + edge) strength = -Math.pow(1 - (x - left) / edge, 2);
-    else if (x > right - edge) strength = Math.pow(1 - (right - x) / edge, 2);
-    // Bound elapsed time so a delayed frame cannot jump past several entities.
-    const distance = strength * 0.7 * Math.max(0, Math.min(32, elapsedMs));
+  function backSwipeTransition({ offset, end, width, velocity = 0 }) {
+    const distance = Math.abs(end - offset);
+    if (distance < .01) return { duration: 0, easing: "linear" };
+    const speed = Math.sign(end - offset) * velocity;
+    // Hermite motion: start at the measured release velocity and arrive at rest.
+    // Distance and incoming speed determine duration; bound the tangent so a
+    // fast flick near the edge cannot overshoot its destination.
+    let duration = Math.min(420, Math.max(140, 2 * distance / (Math.max(0, speed) + width / 240)));
+    if (speed > 0) duration = Math.min(duration, 2.75 * distance / speed);
+    else if (speed < 0) duration = Math.min(duration, distance / -speed);
+    const tangent = speed * duration / distance;
+    return { duration, easing: `cubic-bezier(${1 / 3}, ${tangent / 3}, ${2 / 3}, 1)` };
+  }
+  function entityStripEdge({ x, y, left, right, top, bottom,
+    viewportLeft = left, viewportRight = right, activeDirection = 0 }) {
+    const slop = activeDirection ? 32 : 24;
+    if (right <= left || x < viewportLeft || x > viewportRight || y < top - slop || y > bottom + slop)
+      return { direction: 0, strength: 0 };
+    const edge = Math.min(72, (right - left) / 3), hysteresis = 16;
+    let direction = 0;
+    if (x > right - edge - (activeDirection === 1 ? hysteresis : 0)) direction = 1;
+    else if (x < left + edge + (activeDirection === -1 ? hysteresis : 0)) direction = -1;
+    const proximity = direction === 1 ? (x - right + edge) / edge : (left + edge - x) / edge;
+    return { direction, strength: Math.max(0, Math.min(1, proximity)) };
+  }
+  function scrollEntityStrip(bounds, elapsedMs) {
+    const max = Math.max(0, bounds.scrollWidth - bounds.clientWidth);
+    const current = Math.max(0, Math.min(max, bounds.scrollLeft));
+    if (!max) return current;
+    const edge = entityStripEdge(bounds);
+    // A minimum speed makes the whole activation band usable at 60/120 Hz,
+    // rather than losing fractional steps to the browser's scroll rounding.
+    const speed = .12 + .58 * edge.strength ** 2;
+    const distance = edge.direction * speed * Math.max(0, Math.min(32, elapsedMs));
     return Math.max(0, Math.min(max, current + distance));
   }
   function direction(state, fromId, toId, index = null) {
@@ -1215,6 +1241,9 @@
     gestureIntent,
     transactionSwipeOutcome,
     backSwipeOutcome,
+    backSwipeVelocity,
+    backSwipeTransition,
+    entityStripEdge,
     scrollEntityStrip,
     balances,
     filterTransactions,
@@ -2762,7 +2791,7 @@
         preview: captureBackPreview() });
       if (navigationStack.length > 24) navigationStack.shift();
     }
-    function goBack() {
+    function goBack({ preserveBackVisual = false } = {}) {
       const dialog = $("#dialog"), menu = $("#app-menu");
       if (busy || $('#modal-form button[type="submit"]')?.disabled || settling || pointer) return false;
       if (dialog.open) {
@@ -2794,7 +2823,7 @@
         detailId = null;
         navigationStack.length = 0;
       }
-      render();
+      render({ preserveBackVisual });
       if (view === "home") document.querySelectorAll(".entity-strip").forEach((strip, i) => {
         strip.scrollLeft = previous.strips[i] || 0;
       });
@@ -2805,10 +2834,10 @@
       focus?.focus({ preventScroll: true });
       return true;
     }
-    function render() {
+    function render({ preserveBackVisual = false } = {}) {
       syncCurrentMonth();
       monthRefreshPending = false;
-      abortBackAnimation();
+      if (!preserveBackVisual) abortBackAnimation();
       const strips = [...document.querySelectorAll(".entity-strip")], scrollY = window.scrollY;
       if (strips.length) homeStripScroll = strips.map((strip) => strip.scrollLeft);
       resetTransactionSwipe();
@@ -3353,7 +3382,8 @@
         const saved = { transform: element.style.transform, willChange: element.style.willChange };
         element.classList.add("back-swipe-front");
         p.visual = { element, saved, underlay: prepared?.underlay.host, shade: prepared?.shade,
-          stage, width: innerWidth, end: innerWidth, offset: 0 };
+          stage, hasPreview: !!prepared.previous?.preview,
+          width: innerWidth, end: innerWidth, offset: 0 };
       } else {
         const element = dialog.open ? dialog.classList.contains("choosing-tags") ? $("#tag-picker")
           : $("#icon-picker") && !$("#icon-picker").hidden ? $("#icon-picker") : dialog
@@ -3419,9 +3449,10 @@
       document.documentElement.classList.add("back-swipe-settling");
       document.documentElement.classList.toggle("back-swipe-committing", navigate);
       const end = navigate ? visual.end : 0;
-      const duration = visual.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches ? 0
-        : Math.min(240, Math.max(100, Math.abs(end - visual.offset) / visual.width * 240));
-      const options = { duration, easing: "cubic-bezier(.22,.7,.25,1)", fill: "forwards" };
+      const transition = backSwipeTransition({ offset: visual.offset, end, width: visual.width,
+        velocity: p.releaseVelocity ?? 0 });
+      const duration = visual.reducedMotion || matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : transition.duration;
+      const options = { duration, easing: transition.easing, fill: "forwards" };
       p.animations = [visual.element.animate([
         { transform: `translate3d(${visual.offset}px, 0, 0)` }, { transform: `translate3d(${end}px, 0, 0)` },
       ], options)];
@@ -3435,7 +3466,15 @@
       }
       try {
         await Promise.allSettled(p.animations.map(animation => animation.finished));
-        if (navigate && !p.cancelled && p.layer === backLayer()) goBack();
+        if (navigate && !p.cancelled && p.layer === backLayer()) {
+          const preserveBackVisual = !!visual.stage && visual.hasPreview;
+          goBack({ preserveBackVisual });
+          if (preserveBackVisual) {
+            // Keep the settled destination visible while the real page renders
+            // offscreen and restores scroll/focus. Swap only at a paint boundary.
+            await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+          }
+        }
       } finally {
         p.animations.forEach(animation => animation.cancel());
         cleanBackVisual(p);
@@ -3445,7 +3484,10 @@
     function cancelBackSwipe() {
       const p = backSwipe;
       backSwipe = null;
-      if (p?.dragging) void finishBackSwipe(p, false);
+      if (p?.dragging) {
+        p.releaseVelocity = 0;
+        void finishBackSwipe(p, false);
+      }
     }
     const backLayer = () => {
       const dialog = $("#dialog"), icons = $("#icon-picker");
@@ -3523,6 +3565,7 @@
       }
       const dx = touch.clientX - p.x, dy = Math.abs(touch.clientY - p.y);
       p.samples.push({ x: touch.clientX, time: event.timeStamp });
+      p.releaseVelocity = backSwipeVelocity(p.samples);
       p.dx = dx;
       void finishBackSwipe(p, backSwipeOutcome({ dx, dy, width: innerWidth, samples: p.samples }) === "back");
     }, { passive: true });
@@ -3554,6 +3597,18 @@
       const y = p.y - p.origin.height / 2 - (p.grabY - p.origin.height / 2) * scale;
       p.clone.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${scale})`;
     }
+    function scrollDragStrip(p, strip, box, elapsedMs) {
+      const bounds = { x: p.x, y: p.y, left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+        viewportLeft: 0, viewportRight: innerWidth, activeDirection: p.edgeDirection || 0,
+        scrollLeft: strip.scrollLeft, scrollWidth: strip.scrollWidth, clientWidth: strip.clientWidth };
+      const edge = entityStripEdge(bounds);
+      p.edgeDirection = edge.direction;
+      const next = scrollEntityStrip(bounds, elapsedMs);
+      if (next !== strip.scrollLeft) strip.scrollLeft = next;
+      // Continue for active intent even if a fractional first step rounded away.
+      return edge.direction < 0 ? strip.scrollLeft > .5
+        : edge.direction > 0 && strip.scrollLeft < strip.scrollWidth - strip.clientWidth - .5;
+    }
     function paintPointer(p) {
       p.frame = null;
       let autoScrolling = false;
@@ -3563,12 +3618,7 @@
         const distance = Math.min(32, elapsedMs) * 0.4;
         if (p.strip) {
           const box = p.strip.getBoundingClientRect();
-          if (p.y >= box.top - 20 && p.y <= box.bottom + 20) {
-            const direction = p.x < box.left + 32 ? -1 : p.x > box.right - 32 ? 1 : 0;
-            const before = p.strip.scrollLeft;
-            if (direction) p.strip.scrollLeft += direction * distance;
-            autoScrolling ||= p.strip.scrollLeft !== before;
-          }
+          autoScrolling ||= scrollDragStrip(p, p.strip, box, elapsedMs);
         }
         const top = $(".app-header").getBoundingClientRect().bottom + 32;
         const direction = p.y < top ? -1 : p.y > innerHeight - 48 ? 1 : 0;
@@ -3582,13 +3632,7 @@
         const strip = $(".row-1 .entity-strip");
         if (strip) {
           const box = strip.getBoundingClientRect();
-          const before = strip.scrollLeft;
-          const next = scrollEntityStrip({ x: p.x, y: p.y,
-            left: box.left, right: box.right, top: box.top, bottom: box.bottom,
-            scrollLeft: strip.scrollLeft, scrollWidth: strip.scrollWidth,
-            clientWidth: strip.clientWidth }, elapsedMs);
-          if (next !== before) strip.scrollLeft = next;
-          autoScrolling ||= strip.scrollLeft !== before;
+          autoScrolling ||= scrollDragStrip(p, strip, box, elapsedMs);
         }
       }
       // Hit-test after scrolling so newly revealed entities receive the highlight.

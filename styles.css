@@ -278,6 +278,8 @@ p {
   border-bottom: 1px solid var(--line);
 }
 main {
+  /* Preserve child margin geometry when a navigation preview is positioned absolutely. */
+  display: flow-root;
   max-width: 1160px;
   margin: auto;
   padding: 0 28px 12px;
@@ -723,7 +725,7 @@ main:focus {
 }
 .budget-mark {
   --budget-color: #aeb5b0;
-  background: linear-gradient(
+  background-image: linear-gradient(
     to top,
     var(--budget-color) 0%,
     var(--budget-color) var(--budget-fill),

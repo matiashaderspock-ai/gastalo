@@ -277,6 +277,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     if (animate) {
       await require("./browser-gesture-performance.cjs").verifyGesturePerformance(browser);
       await require("./browser-drag-tracking.cjs").verifyDragTracking(browser);
+      await require("./browser-back-settle-edge.cjs").verifyBackSettleAndEdge(browser);
     }
     console.log(`PASS: all-entity hours/types without duplicate dates; ${animate ? 'interactive slide/parallax' : 'direct tracking with reduced motion'}; slow starts, held gestures and cancellation; swipe navigation, menus/forms, gesture isolation, restoration and unchanged financial data at 320/390px.`);
   } catch (error) {
