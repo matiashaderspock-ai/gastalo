@@ -83,12 +83,18 @@ async function app(local, remote, savedConfig = config, demo = false, demoVersio
     visibilityState: "visible",
     documentElement: { lang: "es" },
     createTreeWalker: () => ({ nextNode: () => false }),
+    styleSheets: [],
+    createElement: () => ({
+      dataset: {},
+      setAttribute() {}, append() {},
+      attachShadow: () => ({ innerHTML: "", querySelectorAll: () => [] }),
+    }),
     querySelector: selector => selector.startsWith("script[") ? { src: "https://app.test/gastalo/app.js?v=1" } : node(selector),
     querySelectorAll: () => [],
     addEventListener(type, listener) { if (!listeners.has(type)) listeners.set(type, []); listeners.get(type).push(listener); },
   };
   const context = vm.createContext({
-    document, Date: Clock, NodeFilter: { SHOW_TEXT: 4 }, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
+    document, innerWidth: 390, innerHeight: 844, Date: Clock, NodeFilter: { SHOW_TEXT: 4 }, window: { addEventListener() {}, scrollTo() {} }, navigator: { onLine: false },
     URL, location: { href: "https://app.test/gastalo/" + (demo ? "?demo=1" : "") },
     DOMParser: class { parseFromString() { return { querySelector: () => ({ getAttribute: () => "./app.js?v=1" }) }; } },
     indexedDB: { open(name) { opens.push(name); const request = { result: db }; setImmediate(() => request.onsuccess()); return request; } },
