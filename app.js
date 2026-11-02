@@ -2537,7 +2537,7 @@
     function transactionRow(t, contextId = null) {
       const time = t.occurred_time ? esc(t.occurred_time.slice(0, 5)) : "";
       const metadata = `${time ? time + " · " : ""}${labels[t.kind]}`;
-      const counterpart = contextId ? `${t.from_id === contextId ? ui("A", "To") : ui("Desde", "From")} ${name(t.from_id === contextId ? t.to_id : t.from_id)}`
+      const counterpart = contextId ? (t.from_id === contextId ? `${ui("A", "To")} ${name(t.to_id)}` : name(t.from_id))
         : `${name(t.from_id)} → ${name(t.to_id)}`;
       const value = contextId ? entityMovementAmount(t, contextId)
         : t.kind === "expense" ? -t.amount_cents : t.kind === "income" ? t.amount_cents : null;
@@ -3186,7 +3186,7 @@
       rememberNavigation();
       homeScroll = window.scrollY;
       detailId = id;
-      detailScope = "month";
+      detailScope = "all";
       historyLimit = 100;
       view = "detail";
       render();

@@ -59,6 +59,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     for (const width of [320, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await page.locator(`[data-entity="${category.id}"]`).click();
+      await page.getByRole('button', { name: 'Este mes', exact: true }).click();
       assert.equal(await page.getByText('Ver datos del gráfico', { exact: true }).count(), 0);
       assert.equal(await page.locator('.chart-data tbody tr').count(), 12, 'Screen readers retain the full data table');
       assert.deepEqual(await page.locator('.history-day h3').allTextContents(), ['08/10/26']);
@@ -132,6 +133,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
     assert.match(await page.locator('.transaction-info > span').first().innerText(), /^13:20 · Gasto$/, 'General history retains hour/type while the day heading owns its date');
     assert.deepEqual(await saved(), state, 'Exploring the chart never writes financial data');
     assert.deepEqual(errors, []);
+    await require('./browser-entity-history.cjs').verifyEntityHistory(browser);
     console.log('PASS: category metadata, touch scrubbing of 12 months, mouse hover, keyboard, bounds, cancellation, month changes, zero/negative series, accessible table and unchanged financial data at 320/390/1280px.');
   } catch (error) {
     if (page) await page.screenshot({ path: '/tmp/gastalo-entity-chart-error.png', fullPage: true });

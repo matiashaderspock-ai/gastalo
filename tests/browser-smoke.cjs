@@ -467,6 +467,8 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
     await card("Comida").waitFor();
     // Entity detail has its own scope, month switching and signed account history.
     await card("Comida").tap();
+    assert.equal(await page.locator(".entity-history .transaction").count(), 2);
+    await page.getByRole("button", { name: "Este mes", exact: true }).click();
     assert.equal(await page.locator(".entity-history .transaction").count(), 1);
     await page
       .getByRole("button", { name: "Todo el historial", exact: true })
@@ -484,6 +486,7 @@ const base = process.env.GASTALO_URL || "http://127.0.0.1:4173/";
       .getByRole("button", { name: "Volver a Inicio", exact: true })
       .click();
     await card("Banco").tap();
+    await page.getByRole("button", { name: "Este mes", exact: true }).click();
     const incomeRow = page
       .locator(".transaction")
       .filter({ has: page.locator(".transaction-symbol.income") });

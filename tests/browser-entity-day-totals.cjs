@@ -46,6 +46,7 @@ const base = process.env.GASTALO_URL || 'http://127.0.0.1:4173/';
       await page.setViewportSize({ width, height: 844 });
       for (const [item, expected, tone] of [[bank, 'Bs 70,00', 'positive'], [cash, 'Bs 15,00', 'positive'], [source, 'Bs 120,00', 'positive'], [category, 'Bs 35,00', 'negative']]) {
         await page.locator(`[data-entity="${item.id}"]`).click();
+        await page.getByRole('button', { name: 'Este mes', exact: true }).click();
         assert.equal(await total('2026-02-10').innerText(), expected);
         assert.equal(await total('2026-02-10').getAttribute('aria-label'), `Total neto del día: ${tone === "positive" ? "positivo" : "negativo"}, ${expected}`);
         assert.equal(await total('2026-02-10').evaluate(element => getComputedStyle(element).color), tone === 'positive' ? 'rgb(35, 99, 82)' : 'rgb(163, 49, 49)');
