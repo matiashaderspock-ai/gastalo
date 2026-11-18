@@ -1604,7 +1604,7 @@
     let budgetMonth = month;
     let observedMonth = month;
     let monthRefreshPending = false;
-    let archivedBudgetsOpen = false;
+    let archivedBudgetsOpen = false, archivedTagsOpen = false;
     const openManageGroups = new Set(), openSettingsGroups = new Set();
     const defaultFilters = () => ({
       start: "",
@@ -2779,6 +2779,23 @@
       }</div><details class="report-table"><summary>${ui("Ver tabla por categoría", "Show category table")}</summary><div class="table-scroll"><table><thead><tr><th>${ui("Categoría", "Category")}</th><th>${ui("Gasto · BOB", "Expense · BOB")}</th><th>${ui("Participación", "Share")}</th></tr></thead><tbody>${r.categories.map((c) => `<tr><td>${esc(c.name)}</td><td>${money(c.spent)}</td><td>${r.expense ? ((c.spent / r.expense) * 100).toFixed(1) : "0"}%</td></tr>`).join("")}</tbody></table></div></details></details></section>
       <section class="panel"><h2>${ui("Doce meses de perspectiva", "Twelve months of perspective")}</h2><p class="legend"><span class="income-key">${ui("Ingresos", "Income")}</span><span class="expense-key">${ui("Gastos", "Expenses")}</span></p><div class="timeline" role="img" aria-label="${ui("Evolución mensual de ingresos y gastos; datos en la tabla siguiente", "Monthly income and expense trends; data in the following table")}">${series.map((m) => `<div class="timeline-month"><div class="columns"><i class="income-bar" style="height:${(m.income / max) * 100}%"></i><i class="expense-bar" style="height:${(m.expense / max) * 100}%"></i></div><span>${m.month.slice(5)}<small>/${m.month.slice(2, 4)}</small></span></div>`).join("")}</div><details class="report-table"><summary>${ui("Ver tabla mensual", "Show monthly table")}</summary><div class="table-scroll"><table><thead><tr><th>${ui("Mes", "Month")}</th><th>${ui("Ingresos", "Income")}</th><th>${ui("Gastos", "Expenses")}</th><th>${ui("Neto", "Net")}</th></tr></thead><tbody>${series.map((m) => `<tr><td>${monthLabel(m.month)}</td><td>${money(m.income)}</td><td>${money(m.expense)}</td><td>${money(m.net)}</td></tr>`).join("")}</tbody></table></div></details></section><p class="footnote">${ui("Cada movimiento cuenta una vez, aunque tenga varias etiquetas. Transferencias excluidas.", "Each transaction counts once, even with multiple tags. Transfers excluded.")}</p>`;
     }
+    function manageEntityRow(key, e) {
+      return `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? ui(" · archivado", " · archived") : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Restaurar", "Restore")} ${esc(e.name)}${key === "tags" ? "" : ui(" en Inicio", " to Home")}">${key === "tags" ? ui("Restaurar", "Restore") : ui("Restaurar en Inicio", "Restore to Home")}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">${ui("Editar", "Edit")}</button></div></div>`;
+    }
+    function manageEntities(key) {
+      const current = key === "tags" ? active(key) : state[key];
+      const archived = key === "tags" ? state.tags.filter(tag => tag.archived_at) : [];
+      const names = { sources: ui("Fuentes", "Sources"), accounts: ui("Cuentas", "Accounts"), categories: ui("Categorías", "Categories"), tags: ui("Etiquetas", "Tags") };
+      return `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}>
+        <summary>${names[key]} (${current.length})</summary>
+        <button data-action="add" data-key="${key}">${ui("+ Crear", "+ Create")}</button>
+        ${key === "tags" ? `<button data-action="archive-tags" ${current.length ? "" : "disabled"}>${ui("Archivar todas las etiquetas", "Archive all tags")}</button>
+        <details id="archived-tags" ${archivedTagsOpen ? "open" : ""}><summary>${ui("Archivadas", "Archived")} (${archived.length})</summary>
+          ${archived.map(e => manageEntityRow(key, e)).join("") || `<p class="empty">${ui("No hay etiquetas archivadas.", "No archived tags.")}</p>`}
+        </details>` : ""}
+        <div>${current.map(e => manageEntityRow(key, e)).join("") || (key === "tags" ? `<p class="empty">${ui("No hay etiquetas activas. Crea una o restaura una desde Archivadas.", "No active tags. Create one or restore one from Archived.")}</p>` : "")}</div>
+      </details>`;
+    }
     function settings() {
       return `<div class="page-heading"><p>${ui("Respalda, restaura y organiza tus datos.", "Back up, restore and organize your data.")}</p></div>
       <section class="panel"><h2>${ui("Respaldo completo", "Full backup")}</h2><p>${ui("Descarga un JSON con movimientos, saldos iniciales, límites por mes, etiquetas y revisión pendiente.", "Download a JSON file with transactions, opening balances, monthly limits, tags and pending reviews.")}</p><button class="primary" data-action="export">${ui("Descargar respaldo JSON", "Download JSON backup")}</button><label class="file-label">${ui("Restaurar respaldo JSON", "Restore JSON backup")}<input type="file" id="json-file" accept=".json,application/json"></label></section>
@@ -2801,7 +2818,7 @@
           .join("") || `<p class="muted">${ui("Sin filas pendientes.", "No pending rows.")}</p>`
       }${state.review.length > historyLimit ? `<button data-action="more">${ui("Mostrar 100 más", "Show 100 more")}</button>` : ""}</section>
       <details class="panel settings-group" id="calendar-settings" ${openSettingsGroups.has("calendar-settings") ? "open" : ""}><summary>${ui("Calendario y zona horaria", "Calendar and time zone")}</summary><label>${ui("Zona horaria", "Time zone")}<input id="timezone" value="${esc(state.profile.timezone)}" placeholder="America/La_Paz"></label><button data-action="timezone">${ui("Guardar zona horaria", "Save time zone")}</button><p class="muted">${ui("Moneda base: BOB. Las fechas contables no cambian al cambiar de zona horaria.", "Base currency: BOB. Accounting dates stay the same when you change time zones.")}</p></details>
-      <section class="panel"><h2>${ui("Organizar entidades", "Manage entities")}</h2>${[...TYPES, "tags"].map((key) => `<details data-manage-key="${key}" ${openManageGroups.has(key) ? "open" : ""}><summary>${{ sources: ui("Fuentes", "Sources"), accounts: ui("Cuentas", "Accounts"), categories: ui("Categorías", "Categories"), tags: ui("Etiquetas", "Tags") }[key]} (${state[key].length})</summary><button data-action="add" data-key="${key}">${ui("+ Crear", "+ Create")}</button>${key === "tags" ? `<button data-action="archive-tags" ${state.tags.some(tag => !tag.archived_at) ? "" : "disabled"}>${ui("Archivar todas las etiquetas", "Archive all tags")}</button>` : ""}${state[key].map((e) => `<div class="manage-row"><span>${esc(e.name)}${e.archived_at ? ui(" · archivado", " · archived") : ""}</span><div class="manage-actions">${e.archived_at ? `<button data-action="restore-entity" data-key="${key}" data-id="${esc(e.id)}" aria-label="${ui("Restaurar", "Restore")} ${esc(e.name)}${key === "tags" ? "" : ui(" en Inicio", " to Home")}">${key === "tags" ? ui("Restaurar", "Restore") : ui("Restaurar en Inicio", "Restore to Home")}</button>` : ""}<button data-action="edit-entity" data-key="${key}" data-id="${esc(e.id)}">${ui("Editar", "Edit")}</button></div></div>`).join("")}</details>`).join("")}</section>
+      <section class="panel"><h2>${ui("Organizar entidades", "Manage entities")}</h2>${[...TYPES, "tags"].map(manageEntities).join("")}</section>
       <section class="panel"><details class="gesture-help"><summary>${ui("Ayuda de gestos", "Gesture help")}</summary>${gestureGuide()}</details>${demoMode ? `<p>${ui("Demo en este navegador · Datos de ejemplo · Sincronización desactivada.", "Demo in this browser · Sample data · Sync disabled.")}</p>` : '<h2>En tu iPhone</h2><p>En Safari, abre Compartir y elige «Agregar a inicio». Después de la primera carga podrás usar gástalo sin conexión.</p><p class="muted">Borrar los datos de Safari o perder el dispositivo puede borrar el historial. Conserva un respaldo JSON o activa la sincronización.</p>'}<p id="storage-state" class="muted"></p><button data-action="persist">${ui("Solicitar almacenamiento persistente", "Request persistent storage")}</button></section>
       ${demoMode ? `<section class="panel reset-panel"><h2>${ui("Datos de ejemplo", "Sample data")}</h2><p>${ui("Descarta tus cambios en la demo y vuelve a cargar los ejemplos.", "Discard your demo changes and reload the sample data.")}</p><button data-action="reset-demo">Reset demo</button></section>` : '<section class="panel reset-panel"><h2>Empezar desde cero</h2><p>Borra todos los datos y ajustes de este dispositivo. Puedes descargar un respaldo antes de confirmar.</p><button class="danger" data-action="reset-app">Restablecer todo</button></section>'}`;
     }
@@ -2980,6 +2997,7 @@
         else if (button.dataset.view !== view) rememberNavigation();
         view = button.dataset.view;
         if (view === "budgets") archivedBudgetsOpen = false;
+        if (view === "settings") archivedTagsOpen = false;
         editingEntities = false;
         $("#app-menu").open = false;
         historyLimit = 100;
@@ -3131,6 +3149,7 @@
     });
     document.addEventListener("toggle", (e) => {
       if (e.target.id === "archived-categories") archivedBudgetsOpen = e.target.open;
+      if (e.target.id === "archived-tags" && e.target.isConnected) archivedTagsOpen = e.target.open;
       if (["backup-settings", "calendar-settings"].includes(e.target.id) && e.target.isConnected) {
         if (e.target.open) openSettingsGroups.add(e.target.id);
         else openSettingsGroups.delete(e.target.id);
